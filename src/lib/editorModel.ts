@@ -107,14 +107,16 @@ export function createCutFragments(
   },
 ): CutFragment[] {
   const pieces = Math.min(12, Math.max(2, Math.round(options.pieces)))
-  const totalGap = options.gap * (pieces - 1)
   const isHorizontal = options.direction === 'horizontal'
   const sourceSize = isHorizontal ? source.height : source.width
+  const maxGap = sourceSize > pieces ? (sourceSize - pieces) / (pieces - 1) : 0
+  const gap = Math.max(0, Math.min(options.gap, maxGap))
+  const totalGap = gap * (pieces - 1)
   const fragmentSize = (sourceSize - totalGap) / pieces
 
   return Array.from({ length: pieces }, (_, index) => {
-    const offset = index * (fragmentSize + options.gap)
-    const drift = index * options.gap
+    const offset = index * (fragmentSize + gap)
+    const drift = index * gap
 
     if (isHorizontal) {
       return {

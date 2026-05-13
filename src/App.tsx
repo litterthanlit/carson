@@ -891,6 +891,14 @@ function App() {
                   onCommit={() => finalizeActive('Stretched layer')}
                 />
                 <Slider
+                  label="Stretch Y"
+                  value={Math.round(selected.scaleY * 100)}
+                  min={20}
+                  max={320}
+                  onChange={(value) => updateActive({ scaleY: value / 100 })}
+                  onCommit={() => finalizeActive('Stretched layer')}
+                />
+                <Slider
                   label="Skew X"
                   value={selected.skewX ?? 0}
                   min={-45}

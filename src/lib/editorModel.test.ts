@@ -82,4 +82,14 @@ describe('layer transforms', () => {
       },
     ])
   })
+
+  it('keeps fragments usable when the requested gaps are larger than the source', () => {
+    const fragments = createCutFragments(
+      { id: 'thin-layer', left: 0, top: 0, width: 200, height: 20 },
+      { pieces: 5, gap: 9, direction: 'horizontal' },
+    )
+
+    expect(fragments).toHaveLength(5)
+    expect(fragments.every((fragment) => fragment.height > 0)).toBe(true)
+  })
 })
