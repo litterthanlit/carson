@@ -2,15 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlignLeft,
   BringToFront,
+  Crop,
   Download,
   FlipHorizontal,
   ImagePlus,
   Layers,
+  ScanLine,
   Redo2,
   Save,
   Scissors,
   SendToBack,
   Shuffle,
+  Sparkles,
   Square,
   Trash2,
   Type,
@@ -20,6 +23,10 @@ import { Canvas, FabricObject, Image as FabricImage, Rect, Textbox, filters } fr
 import {
   applyPosterPreset,
   createCutFragments,
+  createCropGuides,
+  createPhotocopyNoise,
+  createTearFragments,
+  createTypeStrips,
   type PosterPreset,
   type PosterPresetId,
   scatterLayers,
@@ -68,6 +75,7 @@ const FONT_STACKS = [
   'Verdana',
 ]
 const BLEND_MODES = ['source-over', 'multiply', 'screen', 'overlay', 'difference', 'exclusion']
+const ACCENTS = ['#05b6d4', '#e11d48', '#a3e635']
 
 function App() {
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
@@ -178,7 +186,66 @@ function App() {
     })
     tagObject(deck, 'text', 'Small mono deck')
 
-    canvas.add(headline, bar, deck)
+    const labelBand = new Rect({
+      left: currentPoster.width * 0.07,
+      top: currentPoster.height * 0.78,
+      width: currentPoster.width * 0.78,
+      height: Math.max(22, currentPoster.height * 0.025),
+      fill: '#111111',
+      angle: -1,
+    })
+    tagObject(labelBand, 'shape', 'Black label band')
+
+    const label = new Textbox('CONNWAX MANIAC / LOW VELOCITY SOUNDSYSTEM / CONNWAX MANIAC', {
+      left: currentPoster.width * 0.08,
+      top: currentPoster.height * 0.785,
+      width: currentPoster.width * 0.76,
+      fontFamily: 'Arial Black',
+      fontSize: Math.round(currentPoster.width * 0.018),
+      fontWeight: 900,
+      charSpacing: -25,
+      fill: '#f8f6ef',
+      angle: -1,
+    })
+    tagObject(label, 'text', 'Repeated label')
+
+    const cyanScrap = new Rect({
+      left: currentPoster.width * 0.58,
+      top: currentPoster.height * 0.34,
+      width: currentPoster.width * 0.16,
+      height: currentPoster.height * 0.24,
+      fill: ACCENTS[0],
+      opacity: 0.42,
+      angle: 4,
+      globalCompositeOperation: 'multiply',
+    })
+    tagObject(cyanScrap, 'shape', 'Cyan scan scrap')
+
+    const limeRule = new Rect({
+      left: currentPoster.width * 0.06,
+      top: currentPoster.height * 0.31,
+      width: currentPoster.width * 0.74,
+      height: 2,
+      fill: ACCENTS[2],
+      opacity: 0.65,
+      angle: -11,
+    })
+    tagObject(limeRule, 'shape', 'Acid rule')
+
+    const sideType = new Textbox('legibility\nis not\nneutral', {
+      left: currentPoster.width * 0.79,
+      top: currentPoster.height * 0.4,
+      width: currentPoster.width * 0.16,
+      fontFamily: 'Arial Black',
+      fontSize: Math.round(currentPoster.width * 0.035),
+      fontWeight: 900,
+      lineHeight: 0.82,
+      fill: '#111111',
+      angle: 90,
+    })
+    tagObject(sideType, 'text', 'Rotated side type')
+
+    canvas.add(headline, cyanScrap, bar, deck, limeRule, labelBand, label, sideType)
     canvas.setActiveObject(headline)
     syncSelected()
     syncLayers()
@@ -498,6 +565,194 @@ function App() {
     commitHistory(direction === 'horizontal' ? 'Sliced into strips' : 'Sliced into columns')
   }
 
+  function addTypeStrip() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type !== 'textbox') return
+    const text = String(readObjectProp(object, 'text') ?? 'TYPE STRIP')
+    const bounds = object.getBoundingRect()
+    const strips = createTypeStrips(
+      {
+        id: String(readObjectProp(object, 'id') ?? 'type'),
+        text,
+        left: bounds.left,
+        top: bounds.top + bounds.height + 18,
+        width: Math.max(bounds.width, poster.width * 0.52),
+      },
+      { rows: 5, height: Math.max(18, poster.height * 0.018), gap: 4, jitter: 12 },
+    )
+
+    strips.forEach((strip, index) => {
+      const block = new Rect({
+        left: strip.left,
+        top: strip.top,
+        width: strip.width,
+        height: strip.height,
+        fill: strip.inverted ? '#111111' : '#f8f6ef',
+        angle: strip.angle,
+        opacity: 0.96,
+      })
+      tagObject(block, 'shape', `Strip block ${index + 1}`)
+
+      const label = new Textbox(strip.text, {
+        left: strip.left + 6,
+        top: strip.top + 3,
+        width: strip.width - 12,
+        height: strip.height,
+        fontFamily: 'Arial Black',
+        fontSize: Math.max(10, strip.height * 0.58),
+        fontWeight: 900,
+        charSpacing: -20,
+        fill: strip.inverted ? '#f8f6ef' : '#111111',
+        angle: strip.angle,
+      })
+      tagObject(label, 'text', `Repeated type ${index + 1}`)
+      canvas.add(block, label)
+    })
+
+    commitHistory('Added type strips')
+  }
+
+  async function distressSelected() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+
+    const bounds = object.getBoundingRect()
+    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1.6 })
+    const image = await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+    image.filters = [new filters.Grayscale(), new filters.Contrast({ contrast: 0.75 }), new filters.BlackWhite(), new filters.Noise({ noise: 180 })]
+    image.applyFilters()
+    image.set({
+      left: bounds.left,
+      top: bounds.top,
+      angle: object.angle ?? 0,
+      opacity: object.opacity ?? 1,
+      globalCompositeOperation: 'multiply',
+    })
+    tagObject(image, 'image', 'Distressed layer')
+    canvas.remove(object)
+    canvas.add(image)
+    canvas.setActiveObject(image)
+    commitHistory('Distressed selection')
+  }
+
+  function addPhotocopyNoise() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const marks = createPhotocopyNoise(poster, { specks: 90, scratches: 18, scanlines: 9 })
+
+    marks.forEach((mark) => {
+      const object =
+        mark.kind === 'speck'
+          ? new Rect({
+              left: mark.left,
+              top: mark.top,
+              width: mark.size,
+              height: mark.size,
+              fill: '#111111',
+              opacity: mark.opacity,
+              angle: Math.random() * 45,
+            })
+          : new Rect({
+              left: mark.left,
+              top: mark.top,
+              width: mark.width,
+              height: mark.height,
+              fill: mark.kind === 'scanline' ? '#05b6d4' : '#111111',
+              opacity: mark.opacity,
+              angle: mark.angle,
+              globalCompositeOperation: mark.kind === 'scanline' ? 'multiply' : 'source-over',
+            })
+      tagObject(object, 'shape', mark.kind)
+      canvas.add(object)
+    })
+
+    commitHistory('Added photocopy noise')
+  }
+
+  async function tearCollageSelected() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+
+    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
+    const bounds = object.getBoundingRect()
+    const fragments = createTearFragments(
+      {
+        id: String(readObjectProp(object, 'id') ?? 'layer'),
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      },
+      { pieces: 7, gap: 32 },
+    )
+
+    const cropped = await cropFragments(imageUrl, fragments)
+    canvas.remove(object)
+    for (const [index, url] of cropped.entries()) {
+      const fragment = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
+      const frame = fragments[index]
+      fragment.set({
+        left: frame.left,
+        top: frame.top,
+        angle: frame.angle,
+        opacity: object.opacity ?? 1,
+        globalCompositeOperation: index % 3 === 0 ? 'multiply' : 'source-over',
+      })
+      tagObject(fragment, 'fragment', `Torn scrap ${index + 1}`)
+      canvas.add(fragment)
+    }
+    canvas.discardActiveObject()
+    commitHistory('Made tear collage')
+  }
+
+  function addCropMarks() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const guides = createCropGuides(poster, Math.round(Math.min(poster.width, poster.height) * 0.075))
+
+    guides.forEach((guide) => {
+      if (guide.kind === 'cross') {
+        const horizontal = new Rect({
+          left: guide.left - guide.size / 2,
+          top: guide.top,
+          width: guide.size,
+          height: 1,
+          fill: '#111111',
+          opacity: 0.62,
+        })
+        const vertical = new Rect({
+          left: guide.left,
+          top: guide.top - guide.size / 2,
+          width: 1,
+          height: guide.size,
+          fill: '#111111',
+          opacity: 0.62,
+        })
+        tagObject(horizontal, 'shape', 'Registration mark')
+        tagObject(vertical, 'shape', 'Registration mark')
+        canvas.add(horizontal, vertical)
+        return
+      }
+
+      const line = new Rect({
+        left: guide.left,
+        top: guide.top,
+        width: guide.width,
+        height: guide.height,
+        fill: guide.id.startsWith('grid') ? ACCENTS[0] : '#111111',
+        opacity: guide.id.startsWith('grid') ? 0.18 : 0.58,
+        globalCompositeOperation: 'multiply',
+      })
+      tagObject(line, 'shape', guide.id.startsWith('grid') ? 'Faint grid' : 'Crop mark')
+      canvas.add(line)
+    })
+
+    commitHistory('Added crop marks and grid')
+  }
+
   function applyPosterStyle(style: 'magazine' | 'type' | 'image' | 'minimal') {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -704,6 +959,32 @@ function App() {
               </button>
               <button type="button" onClick={() => applyPosterStyle('minimal')}>
                 B/W red
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <h2>Manual Effects</h2>
+            <div className="preset-row">
+              <button type="button" onClick={addTypeStrip} disabled={!selectedIsText}>
+                <Type size={17} />
+                Type strip
+              </button>
+              <button type="button" onClick={() => void distressSelected()} disabled={!selected}>
+                <Sparkles size={17} />
+                Distress
+              </button>
+              <button type="button" onClick={addPhotocopyNoise}>
+                <ScanLine size={17} />
+                Photocopy noise
+              </button>
+              <button type="button" onClick={() => void tearCollageSelected()} disabled={!selected}>
+                <Scissors size={17} />
+                Tear collage
+              </button>
+              <button type="button" onClick={addCropMarks}>
+                <Crop size={17} />
+                Crop marks/grid
               </button>
             </div>
           </div>

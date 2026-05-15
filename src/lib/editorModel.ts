@@ -34,6 +34,60 @@ export type CutFragment = {
   clipLeft: number
 }
 
+export type TypeStrip = {
+  id: string
+  text: string
+  left: number
+  top: number
+  width: number
+  height: number
+  angle: number
+  inverted: boolean
+}
+
+export type TearFragment = CutFragment & {
+  angle: number
+  offsetX: number
+  offsetY: number
+}
+
+export type NoiseMark =
+  | {
+      id: string
+      kind: 'speck'
+      left: number
+      top: number
+      size: number
+      opacity: number
+    }
+  | {
+      id: string
+      kind: 'scratch' | 'scanline'
+      left: number
+      top: number
+      width: number
+      height: number
+      angle: number
+      opacity: number
+    }
+
+export type CropGuide =
+  | {
+      id: string
+      kind: 'line'
+      left: number
+      top: number
+      width: number
+      height: number
+    }
+  | {
+      id: string
+      kind: 'cross'
+      left: number
+      top: number
+      size: number
+    }
+
 const POSTER_PRESETS: Record<Exclude<PosterPresetId, 'custom'>, PosterPreset> = {
   a3: { id: 'a3', name: 'A3 portrait', width: 1240, height: 1754 },
   a2: { id: 'a2', name: 'A2 portrait', width: 1754, height: 2480 },
@@ -140,6 +194,177 @@ export function createCutFragments(
       clipLeft: offset,
     }
   })
+}
+
+export function createTypeStrips(
+  source: Pick<SliceSource, 'id' | 'left' | 'top' | 'width'> & { text: string },
+  options: {
+    rows: number
+    height: number
+    gap: number
+    jitter: number
+    random?: () => number
+  },
+): TypeStrip[] {
+  const random = options.random ?? Math.random
+  const rows = Math.min(16, Math.max(2, Math.round(options.rows)))
+  const height = Math.max(12, options.height)
+  const gap = Math.max(0, options.gap)
+  const cleanText = source.text.trim() || 'TYPE STRIP'
+
+  return Array.from({ length: rows }, (_, index) => {
+    const jitterX = (random() - 0.5) * options.jitter * 2
+    const jitterY = (random() - 0.5) * options.jitter
+    const angle = (random() - 0.5) * 3
+
+    return {
+      id: `${source.id}-strip-${index + 1}`,
+      text: repeatText(cleanText, 8),
+      left: round(source.left + jitterX),
+      top: round(source.top + index * (height + gap) + jitterY),
+      width: source.width,
+      height,
+      angle: round(angle),
+      inverted: index % 2 === 1,
+    }
+  })
+}
+
+export function createTearFragments(
+  source: SliceSource,
+  options: {
+    pieces: number
+    gap: number
+    random?: () => number
+  },
+): TearFragment[] {
+  const random = options.random ?? Math.random
+  const pieces = Math.min(10, Math.max(3, Math.round(options.pieces)))
+  const gap = Math.max(0, options.gap)
+  const baseWidth = Math.max(1, source.width / pieces)
+
+  return Array.from({ length: pieces }, (_, index) => {
+    const widthJitter = 0.72 + random() * 0.44
+    const width = index === pieces - 1 ? source.width - baseWidth * index : Math.min(source.width - baseWidth * index, baseWidth * widthJitter)
+    const clipLeft = Math.min(source.width - 1, baseWidth * index)
+    const offsetX = (random() - 0.5) * gap * 2
+    const offsetY = (random() - 0.5) * gap * 2
+
+    return {
+      id: `${source.id}-tear-${index + 1}`,
+      left: round(source.left + clipLeft + offsetX),
+      top: round(source.top + offsetY),
+      width: round(Math.max(1, width)),
+      height: source.height,
+      clipTop: 0,
+      clipLeft: round(clipLeft),
+      angle: round((random() - 0.5) * 14),
+      offsetX: round(offsetX),
+      offsetY: round(offsetY),
+    }
+  })
+}
+
+export function createPhotocopyNoise(
+  area: Pick<PosterPreset, 'width' | 'height'>,
+  options: {
+    specks: number
+    scratches: number
+    scanlines: number
+    random?: () => number
+  },
+): NoiseMark[] {
+  const random = options.random ?? Math.random
+  const speckCount = Math.max(0, Math.round(options.specks))
+  const scratchCount = Math.max(0, Math.round(options.scratches))
+  const scanlineCount = Math.max(0, Math.round(options.scanlines))
+  const marks: NoiseMark[] = []
+
+  for (let index = 0; index < speckCount; index += 1) {
+    marks.push({
+      id: `speck-${index + 1}`,
+      kind: 'speck',
+      left: round(random() * area.width),
+      top: round(random() * area.height),
+      size: round(1 + random() * 6),
+      opacity: round(0.18 + random() * 0.34),
+    })
+  }
+
+  for (let index = 0; index < scratchCount; index += 1) {
+    marks.push({
+      id: `scratch-${index + 1}`,
+      kind: 'scratch',
+      left: round(random() * area.width),
+      top: round(random() * area.height),
+      width: round(area.width * (0.04 + random() * 0.18)),
+      height: round(1 + random() * 2),
+      angle: round((random() - 0.5) * 26),
+      opacity: round(0.16 + random() * 0.24),
+    })
+  }
+
+  for (let index = 0; index < scanlineCount; index += 1) {
+    marks.push({
+      id: `scanline-${index + 1}`,
+      kind: 'scanline',
+      left: 0,
+      top: round((index + 1) * (area.height / (scanlineCount + 1))),
+      width: area.width,
+      height: 1,
+      angle: 0,
+      opacity: round(0.08 + random() * 0.12),
+    })
+  }
+
+  return marks
+}
+
+export function createCropGuides(area: Pick<PosterPreset, 'width' | 'height'>, margin: number): CropGuide[] {
+  const safeMargin = Math.max(24, Math.min(margin, Math.min(area.width, area.height) / 3))
+  const guideLength = Math.max(32, safeMargin * 0.72)
+  const centerX = area.width / 2
+  const centerY = area.height / 2
+
+  const guides: CropGuide[] = [
+    { id: 'crop-top-left-h', kind: 'line', left: safeMargin, top: safeMargin, width: guideLength, height: 1 },
+    { id: 'crop-top-left-v', kind: 'line', left: safeMargin, top: safeMargin, width: 1, height: guideLength },
+    { id: 'crop-top-right-h', kind: 'line', left: area.width - safeMargin - guideLength, top: safeMargin, width: guideLength, height: 1 },
+    { id: 'crop-top-right-v', kind: 'line', left: area.width - safeMargin, top: safeMargin, width: 1, height: guideLength },
+    { id: 'crop-bottom-left-h', kind: 'line', left: safeMargin, top: area.height - safeMargin, width: guideLength, height: 1 },
+    { id: 'crop-bottom-left-v', kind: 'line', left: safeMargin, top: area.height - safeMargin - guideLength, width: 1, height: guideLength },
+    {
+      id: 'crop-bottom-right-h',
+      kind: 'line',
+      left: area.width - safeMargin - guideLength,
+      top: area.height - safeMargin,
+      width: guideLength,
+      height: 1,
+    },
+    { id: 'crop-bottom-right-v', kind: 'line', left: area.width - safeMargin, top: area.height - safeMargin - guideLength, width: 1, height: guideLength },
+    { id: 'grid-third-v-1', kind: 'line', left: area.width / 3, top: safeMargin, width: 1, height: area.height - safeMargin * 2 },
+    { id: 'grid-third-v-2', kind: 'line', left: (area.width / 3) * 2, top: safeMargin, width: 1, height: area.height - safeMargin * 2 },
+    { id: 'grid-third-h-1', kind: 'line', left: safeMargin, top: area.height / 3, width: area.width - safeMargin * 2, height: 1 },
+    { id: 'grid-third-h-2', kind: 'line', left: safeMargin, top: (area.height / 3) * 2, width: area.width - safeMargin * 2, height: 1 },
+    { id: 'registration-center', kind: 'cross', left: centerX, top: centerY, size: Math.max(18, safeMargin * 0.35) },
+  ]
+
+  return guides.map((guide) => {
+    if (guide.kind === 'cross') {
+      return { ...guide, left: round(guide.left), top: round(guide.top), size: round(guide.size) }
+    }
+    return {
+      ...guide,
+      left: round(guide.left),
+      top: round(guide.top),
+      width: round(guide.width),
+      height: round(guide.height),
+    }
+  })
+}
+
+function repeatText(text: string, count: number) {
+  return Array.from({ length: count }, () => text).join('  /  ')
 }
 
 function round(value: number) {

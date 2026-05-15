@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   applyPosterPreset,
   createCutFragments,
+  createCropGuides,
+  createPhotocopyNoise,
+  createTearFragments,
+  createTypeStrips,
   getPosterPreset,
   scatterLayers,
 } from './editorModel'
@@ -23,6 +27,139 @@ describe('poster presets', () => {
       width: 320,
       height: 3000,
     })
+  })
+})
+
+describe('manual effect helpers', () => {
+  it('creates repeated type strips from selected text', () => {
+    const strips = createTypeStrips(
+      { id: 'type-1', text: 'CONNWAX', left: 40, top: 80, width: 360 },
+      { rows: 3, height: 22, gap: 5, jitter: 10, random: () => 0.75 },
+    )
+
+    expect(strips).toEqual([
+      {
+        id: 'type-1-strip-1',
+        text: 'CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX',
+        left: 45,
+        top: 82.5,
+        width: 360,
+        height: 22,
+        angle: 0.75,
+        inverted: false,
+      },
+      {
+        id: 'type-1-strip-2',
+        text: 'CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX',
+        left: 45,
+        top: 109.5,
+        width: 360,
+        height: 22,
+        angle: 0.75,
+        inverted: true,
+      },
+      {
+        id: 'type-1-strip-3',
+        text: 'CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX  /  CONNWAX',
+        left: 45,
+        top: 136.5,
+        width: 360,
+        height: 22,
+        angle: 0.75,
+        inverted: false,
+      },
+    ])
+  })
+
+  it('creates irregular tear fragments inside the selected layer bounds', () => {
+    const fragments = createTearFragments(
+      { id: 'image-1', left: 100, top: 120, width: 500, height: 300 },
+      { pieces: 4, gap: 20, random: () => 0.25 },
+    )
+
+    expect(fragments).toEqual([
+      {
+        id: 'image-1-tear-1',
+        left: 90,
+        top: 110,
+        width: 103.75,
+        height: 300,
+        clipTop: 0,
+        clipLeft: 0,
+        angle: -3.5,
+        offsetX: -10,
+        offsetY: -10,
+      },
+      {
+        id: 'image-1-tear-2',
+        left: 215,
+        top: 110,
+        width: 103.75,
+        height: 300,
+        clipTop: 0,
+        clipLeft: 125,
+        angle: -3.5,
+        offsetX: -10,
+        offsetY: -10,
+      },
+      {
+        id: 'image-1-tear-3',
+        left: 340,
+        top: 110,
+        width: 103.75,
+        height: 300,
+        clipTop: 0,
+        clipLeft: 250,
+        angle: -3.5,
+        offsetX: -10,
+        offsetY: -10,
+      },
+      {
+        id: 'image-1-tear-4',
+        left: 465,
+        top: 110,
+        width: 125,
+        height: 300,
+        clipTop: 0,
+        clipLeft: 375,
+        angle: -3.5,
+        offsetX: -10,
+        offsetY: -10,
+      },
+    ])
+  })
+
+  it('creates deterministic photocopy marks with a seeded random function', () => {
+    const marks = createPhotocopyNoise(
+      { width: 400, height: 600 },
+      { specks: 2, scratches: 1, scanlines: 2, random: () => 0.5 },
+    )
+
+    expect(marks).toEqual([
+      { id: 'speck-1', kind: 'speck', left: 200, top: 300, size: 4, opacity: 0.35 },
+      { id: 'speck-2', kind: 'speck', left: 200, top: 300, size: 4, opacity: 0.35 },
+      {
+        id: 'scratch-1',
+        kind: 'scratch',
+        left: 200,
+        top: 300,
+        width: 52,
+        height: 2,
+        angle: 0,
+        opacity: 0.28,
+      },
+      { id: 'scanline-1', kind: 'scanline', left: 0, top: 200, width: 400, height: 1, angle: 0, opacity: 0.14 },
+      { id: 'scanline-2', kind: 'scanline', left: 0, top: 400, width: 400, height: 1, angle: 0, opacity: 0.14 },
+    ])
+  })
+
+  it('creates crop marks, thirds grid, and a registration cross', () => {
+    const guides = createCropGuides({ width: 900, height: 1200 }, 90)
+
+    expect(guides).toHaveLength(13)
+    expect(guides[0]).toEqual({ id: 'crop-top-left-h', kind: 'line', left: 90, top: 90, width: 64.8, height: 1 })
+    expect(guides[8]).toEqual({ id: 'grid-third-v-1', kind: 'line', left: 300, top: 90, width: 1, height: 1020 })
+    expect(guides[12]).toEqual({ id: 'registration-center', kind: 'cross', left: 450, top: 600, size: 31.5 })
   })
 })
 
