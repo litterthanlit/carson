@@ -34,6 +34,8 @@ import {
 import './App.css'
 
 type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
+type ExportFormat = 'png' | 'jpeg'
+type ExportBackground = 'paper' | 'white' | 'transparent'
 type SavedProject = {
   name: string
   savedAt: string
@@ -93,6 +95,10 @@ function App() {
   const [layers, setLayers] = useState<SelectedState[]>([])
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>(() => readProjects())
   const [projectName, setProjectName] = useState('Untitled poster')
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('png')
+  const [exportScale, setExportScale] = useState(2)
+  const [exportBackground, setExportBackground] = useState<ExportBackground>('paper')
+  const [exportQuality, setExportQuality] = useState(92)
   const [assets, setAssets] = useState<string[]>([])
   const [status, setStatus] = useState('Ready')
 
@@ -815,18 +821,35 @@ function App() {
     setStatus(`Loaded ${project.name}`)
   }
 
-  function exportPng() {
+  function exportPoster() {
     const canvas = canvasRef.current
     if (!canvas) return
+    const previousBackground = canvas.backgroundColor
+    const format = exportFormat
+    const background =
+      exportBackground === 'white' || (format === 'jpeg' && exportBackground === 'transparent')
+        ? '#ffffff'
+        : exportBackground === 'transparent'
+          ? ''
+          : '#f6f1e6'
+
     canvas.discardActiveObject()
+    canvas.backgroundColor = background
     canvas.requestRenderAll()
-    const dataUrl = canvas.toDataURL({ format: 'png', multiplier: 2 })
+    const dataUrl = canvas.toDataURL({
+      format,
+      multiplier: exportScale,
+      quality: exportQuality / 100,
+    })
+    canvas.backgroundColor = previousBackground
+    canvas.requestRenderAll()
+
     const link = document.createElement('a')
     link.href = dataUrl
-    link.download = `${projectName.trim() || 'poster'}.png`
+    link.download = `${safeFileName(projectName)}@${exportScale}x.${format === 'jpeg' ? 'jpg' : 'png'}`
     link.click()
     syncSelected()
-    setStatus('Exported PNG')
+    setStatus(`Exported ${format.toUpperCase()} ${poster.width * exportScale} x ${poster.height * exportScale}`)
   }
 
   const selectedIsImage = selected?.kind === 'image' || selected?.kind === 'fragment'
@@ -853,9 +876,9 @@ function App() {
             <Save size={17} />
             Save
           </button>
-          <button type="button" className="primary-button" onClick={exportPng}>
+          <button type="button" className="primary-button" onClick={exportPoster}>
             <Download size={17} />
-            Export PNG
+            Export
           </button>
         </div>
       </header>
@@ -1042,6 +1065,51 @@ function App() {
               Name
               <input value={projectName} onChange={(event) => setProjectName(event.target.value)} />
             </label>
+            <div className="export-box">
+              <h3>Export</h3>
+              <div className="split-inputs">
+                <label>
+                  Format
+                  <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}>
+                    <option value="png">PNG</option>
+                    <option value="jpeg">JPG</option>
+                  </select>
+                </label>
+                <label>
+                  Size
+                  <select value={exportScale} onChange={(event) => setExportScale(Number(event.target.value))}>
+                    <option value={1}>1x</option>
+                    <option value={2}>2x</option>
+                    <option value={3}>3x</option>
+                    <option value={4}>4x</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                Background
+                <select value={exportBackground} onChange={(event) => setExportBackground(event.target.value as ExportBackground)}>
+                  <option value="paper">Paper</option>
+                  <option value="white">White</option>
+                  <option value="transparent" disabled={exportFormat === 'jpeg'}>
+                    Transparent
+                  </option>
+                </select>
+              </label>
+              {exportFormat === 'jpeg' ? (
+                <Slider
+                  label="JPG quality"
+                  value={exportQuality}
+                  min={40}
+                  max={100}
+                  onChange={setExportQuality}
+                  onCommit={() => setStatus('Updated export quality')}
+                />
+              ) : null}
+              <button type="button" className="primary-button export-button" onClick={exportPoster}>
+                <Download size={17} />
+                Export {poster.width * exportScale} x {poster.height * exportScale}
+              </button>
+            </div>
             <div className="saved-list">
               {savedProjects.length === 0 ? (
                 <p className="empty">No local saves yet.</p>
@@ -1305,6 +1373,16 @@ function readObjectProp(object: FabricObject | null, key: string) {
 
 function round(value: number) {
   return Math.round(value * 100) / 100
+}
+
+function safeFileName(projectName: string) {
+  return (
+    projectName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'poster'
+  )
 }
 
 function readFileAsDataUrl(file: File) {

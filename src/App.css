@@ -328,6 +328,25 @@ input[type='range'] {
   background: #fbfaf6;
 }
 
+.export-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #1f1f1f;
+}
+
+.export-box h3 {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.export-button {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
