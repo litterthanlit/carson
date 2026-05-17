@@ -3,6 +3,7 @@ import {
   applyPosterPreset,
   createCutFragments,
   createCropGuides,
+  createExpressiveGlyphs,
   createPhotocopyNoise,
   createTearFragments,
   createTypeStrips,
@@ -160,6 +161,84 @@ describe('manual effect helpers', () => {
     expect(guides[0]).toEqual({ id: 'crop-top-left-h', kind: 'line', left: 90, top: 90, width: 64.8, height: 1 })
     expect(guides[8]).toEqual({ id: 'grid-third-v-1', kind: 'line', left: 300, top: 90, width: 1, height: 1020 })
     expect(guides[12]).toEqual({ id: 'registration-center', kind: 'cross', left: 450, top: 600, size: 31.5 })
+  })
+
+  it('breaks text into expressive glyph placements with controlled legibility', () => {
+    const glyphs = createExpressiveGlyphs(
+      {
+        id: 'headline',
+        text: 'RAY',
+        left: 100,
+        top: 200,
+        fontSize: 80,
+        charSpacing: 10,
+      },
+      {
+        intensity: 60,
+        legibility: 'medium',
+        random: () => 0.75,
+      },
+    )
+
+    expect(glyphs).toEqual([
+      {
+        id: 'headline-glyph-1',
+        text: 'R',
+        left: 103.6,
+        top: 201.8,
+        angle: 3.6,
+        fontSize: 83.6,
+        opacity: 0.955,
+        scaleX: 1.023,
+        scaleY: 1.023,
+      },
+      {
+        id: 'headline-glyph-2',
+        text: 'A',
+        left: 137.56,
+        top: 201.8,
+        angle: 3.6,
+        fontSize: 83.6,
+        opacity: 0.955,
+        scaleX: 1.023,
+        scaleY: 1.023,
+      },
+      {
+        id: 'headline-glyph-3',
+        text: 'Y',
+        left: 171.52,
+        top: 201.8,
+        angle: 3.6,
+        fontSize: 83.6,
+        opacity: 0.955,
+        scaleX: 1.023,
+        scaleY: 1.023,
+      },
+    ])
+  })
+
+  it('keeps high-legibility glyphs tighter than extreme glyphs', () => {
+    const readable = createExpressiveGlyphs(
+      { id: 'type', text: 'AB', left: 0, top: 0, fontSize: 100, charSpacing: 0 },
+      { intensity: 100, legibility: 'high', random: () => 1 },
+    )
+    const extreme = createExpressiveGlyphs(
+      { id: 'type', text: 'AB', left: 0, top: 0, fontSize: 100, charSpacing: 0 },
+      { intensity: 100, legibility: 'low', random: () => 1 },
+    )
+
+    expect(readable[0].angle).toBeLessThan(extreme[0].angle)
+    expect(readable[0].top).toBeLessThan(extreme[0].top)
+    const readableSpacing = createExpressiveGlyphs(
+      { id: 'type', text: 'AB', left: 0, top: 0, fontSize: 100, charSpacing: 0 },
+      { intensity: 100, legibility: 'high', random: () => 0.5 },
+    )
+    const extremeSpacing = createExpressiveGlyphs(
+      { id: 'type', text: 'AB', left: 0, top: 0, fontSize: 100, charSpacing: 0 },
+      { intensity: 100, legibility: 'low', random: () => 0.5 },
+    )
+
+    expect(readableSpacing[1].left).toBeGreaterThan(extremeSpacing[1].left)
   })
 })
 

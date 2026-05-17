@@ -24,9 +24,11 @@ import {
   applyPosterPreset,
   createCutFragments,
   createCropGuides,
+  createExpressiveGlyphs,
   createPhotocopyNoise,
   createTearFragments,
   createTypeStrips,
+  type ExpressiveLegibility,
   type PosterPreset,
   type PosterPresetId,
   scatterLayers,
@@ -99,6 +101,8 @@ function App() {
   const [exportScale, setExportScale] = useState(2)
   const [exportBackground, setExportBackground] = useState<ExportBackground>('paper')
   const [exportQuality, setExportQuality] = useState(92)
+  const [typeIntensity, setTypeIntensity] = useState(60)
+  const [typeLegibility, setTypeLegibility] = useState<ExpressiveLegibility>('medium')
   const [assets, setAssets] = useState<string[]>([])
   const [status, setStatus] = useState('Ready')
 
@@ -619,6 +623,75 @@ function App() {
     commitHistory('Added type strips')
   }
 
+  function breakSelectedType() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type !== 'textbox') return
+
+    const text = String(readObjectProp(object, 'text') ?? '')
+    const glyphs = createExpressiveGlyphs(
+      {
+        id: String(readObjectProp(object, 'id') ?? 'type'),
+        text,
+        left: object.left ?? 0,
+        top: object.top ?? 0,
+        fontSize: Number(readObjectProp(object, 'fontSize') ?? 80),
+        charSpacing: Number(readObjectProp(object, 'charSpacing') ?? 0),
+      },
+      { intensity: typeIntensity, legibility: typeLegibility },
+    )
+    const fill = String(readObjectProp(object, 'fill') ?? '#111111')
+    const fontFamily = String(readObjectProp(object, 'fontFamily') ?? 'Impact')
+    const fontWeight = readObjectProp(object, 'fontWeight') as string | number | undefined
+    const baseAngle = object.angle ?? 0
+
+    canvas.remove(object)
+    glyphs.forEach((glyph, index) => {
+      const letter = new Textbox(glyph.text, {
+        left: glyph.left,
+        top: glyph.top,
+        width: Math.max(16, glyph.fontSize * 0.9),
+        fontFamily,
+        fontSize: glyph.fontSize,
+        fontWeight,
+        fill: index % 7 === 0 && typeLegibility === 'low' ? ACCENTS[index % ACCENTS.length] : fill,
+        opacity: glyph.opacity,
+        angle: baseAngle + glyph.angle,
+        scaleX: glyph.scaleX,
+        scaleY: glyph.scaleY,
+        charSpacing: -20,
+      })
+      tagObject(letter, 'text', `Glyph ${glyph.text}`)
+      canvas.add(letter)
+    })
+
+    canvas.discardActiveObject()
+    commitHistory('Broke type into expressive glyphs')
+  }
+
+  async function cloneTypeAsTexture() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type !== 'textbox') return
+
+    const clone = await object.clone()
+    clone.set({
+      left: (object.left ?? 0) - 18,
+      top: (object.top ?? 0) + 22,
+      angle: (object.angle ?? 0) - 9,
+      opacity: 0.22,
+      scaleX: (object.scaleX ?? 1) * 1.12,
+      scaleY: (object.scaleY ?? 1) * 0.82,
+      globalCompositeOperation: 'multiply',
+      fill: '#111111',
+    })
+    tagObject(clone, 'text', 'Buried type texture')
+    canvas.add(clone)
+    canvas.sendObjectToBack(clone)
+    canvas.setActiveObject(object)
+    commitHistory('Added buried type texture')
+  }
+
   async function distressSelected() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -1008,6 +1081,36 @@ function App() {
               <button type="button" onClick={addCropMarks}>
                 <Crop size={17} />
                 Crop marks/grid
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <h2>Expressive Type Lab</h2>
+            <label>
+              Legibility
+              <select value={typeLegibility} onChange={(event) => setTypeLegibility(event.target.value as ExpressiveLegibility)}>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <Slider
+              label="Intensity"
+              value={typeIntensity}
+              min={0}
+              max={100}
+              onChange={setTypeIntensity}
+              onCommit={() => setStatus('Updated type intensity')}
+            />
+            <div className="preset-row">
+              <button type="button" onClick={breakSelectedType} disabled={!selectedIsText}>
+                <Type size={17} />
+                Break letters
+              </button>
+              <button type="button" onClick={() => void cloneTypeAsTexture()} disabled={!selectedIsText}>
+                <Layers size={17} />
+                Bury type
               </button>
             </div>
           </div>

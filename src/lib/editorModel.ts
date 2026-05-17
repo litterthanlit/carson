@@ -88,6 +88,20 @@ export type CropGuide =
       size: number
     }
 
+export type ExpressiveLegibility = 'high' | 'medium' | 'low'
+
+export type ExpressiveGlyph = {
+  id: string
+  text: string
+  left: number
+  top: number
+  angle: number
+  fontSize: number
+  opacity: number
+  scaleX: number
+  scaleY: number
+}
+
 const POSTER_PRESETS: Record<Exclude<PosterPresetId, 'custom'>, PosterPreset> = {
   a3: { id: 'a3', name: 'A3 portrait', width: 1240, height: 1754 },
   a2: { id: 'a2', name: 'A2 portrait', width: 1754, height: 2480 },
@@ -226,6 +240,46 @@ export function createTypeStrips(
       height,
       angle: round(angle),
       inverted: index % 2 === 1,
+    }
+  })
+}
+
+export function createExpressiveGlyphs(
+  source: Pick<SliceSource, 'id' | 'left' | 'top'> & {
+    text: string
+    fontSize: number
+    charSpacing: number
+  },
+  options: {
+    intensity: number
+    legibility: ExpressiveLegibility
+    random?: () => number
+  },
+): ExpressiveGlyph[] {
+  const random = options.random ?? Math.random
+  const intensity = Math.max(0, Math.min(100, options.intensity)) / 100
+  const legibilityFactor = options.legibility === 'high' ? 0.45 : options.legibility === 'medium' ? 1 : 1.65
+  const characters = Array.from(source.text.replace(/\s+/g, ' ').trim() || 'TYPE')
+  const advance = Math.max(8, source.fontSize * (0.46 - intensity * legibilityFactor * 0.08) + source.charSpacing * 0.1)
+  const jitterX = source.fontSize * 0.3 * intensity * legibilityFactor
+  const jitterY = source.fontSize * 0.15 * intensity * legibilityFactor
+  const maxAngle = 24 * intensity * legibilityFactor
+  const sizeSwing = 0.3 * intensity * legibilityFactor
+  const opacityLoss = 0.1 * intensity * legibilityFactor
+
+  return characters.map((character, index) => {
+    const scale = 1 + (random() - 0.5) * sizeSwing
+
+    return {
+      id: `${source.id}-glyph-${index + 1}`,
+      text: character,
+      left: round(source.left + index * advance + (random() - 0.5) * jitterX),
+      top: round(source.top + (random() - 0.5) * jitterY),
+      angle: round((random() - 0.5) * maxAngle),
+      fontSize: round(Math.max(8, source.fontSize * scale)),
+      opacity: round(Math.max(0.18, 1 - random() * opacityLoss)),
+      scaleX: round(1 + (random() - 0.5) * sizeSwing * 0.5),
+      scaleY: round(1 + (random() - 0.5) * sizeSwing * 0.5),
     }
   })
 }
