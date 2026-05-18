@@ -5,6 +5,8 @@ import {
   createCropGuides,
   createExpressiveGlyphs,
   createPhotocopyNoise,
+  createPrintScanArtifacts,
+  getPrintScanProfile,
   createTearFragments,
   createTypeStrips,
   getPosterPreset,
@@ -239,6 +241,82 @@ describe('manual effect helpers', () => {
     )
 
     expect(readableSpacing[1].left).toBeGreaterThan(extremeSpacing[1].left)
+  })
+
+  it('returns stronger xerox settings for later copy generations', () => {
+    expect(getPrintScanProfile(1)).toEqual({
+      generation: 1,
+      contrast: 0.28,
+      noise: 80,
+      blur: 0.04,
+      opacity: 0.96,
+      misregistration: 3,
+    })
+
+    expect(getPrintScanProfile(10)).toEqual({
+      generation: 10,
+      contrast: 0.78,
+      noise: 260,
+      blur: 0.16,
+      opacity: 0.9,
+      misregistration: 18,
+    })
+  })
+
+  it('creates deterministic print-scan artifacts for the poster surface', () => {
+    const artifacts = createPrintScanArtifacts(
+      { width: 400, height: 600 },
+      { generation: 5, random: () => 0.5 },
+    )
+
+    expect(artifacts.slice(0, 4)).toEqual([
+      {
+        id: 'xerox-band-1',
+        kind: 'band',
+        left: 0,
+        top: 85.714,
+        width: 400,
+        height: 5,
+        opacity: 0.095,
+      },
+      {
+        id: 'xerox-band-2',
+        kind: 'band',
+        left: 0,
+        top: 171.429,
+        width: 400,
+        height: 5,
+        opacity: 0.095,
+      },
+      {
+        id: 'xerox-band-3',
+        kind: 'band',
+        left: 0,
+        top: 257.143,
+        width: 400,
+        height: 5,
+        opacity: 0.095,
+      },
+      {
+        id: 'xerox-band-4',
+        kind: 'band',
+        left: 0,
+        top: 342.857,
+        width: 400,
+        height: 5,
+        opacity: 0.095,
+      },
+    ])
+    expect(artifacts.at(-1)).toEqual({
+      id: 'xerox-drift-3',
+      kind: 'drift',
+      left: 200,
+      top: 300,
+      width: 64,
+      height: 2,
+      angle: 0,
+      opacity: 0.15,
+    })
   })
 })
 

@@ -26,8 +26,10 @@ import {
   createCropGuides,
   createExpressiveGlyphs,
   createPhotocopyNoise,
+  createPrintScanArtifacts,
   createTearFragments,
   createTypeStrips,
+  getPrintScanProfile,
   type ExpressiveLegibility,
   type PosterPreset,
   type PosterPresetId,
@@ -103,6 +105,7 @@ function App() {
   const [exportQuality, setExportQuality] = useState(92)
   const [typeIntensity, setTypeIntensity] = useState(60)
   const [typeLegibility, setTypeLegibility] = useState<ExpressiveLegibility>('medium')
+  const [xeroxGeneration, setXeroxGeneration] = useState(5)
   const [assets, setAssets] = useState<string[]>([])
   const [status, setStatus] = useState('Ready')
 
@@ -514,6 +517,56 @@ function App() {
     commitHistory(`Applied ${effect} effect`)
   }
 
+  async function applyXeroxToSelected() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+    const profile = getPrintScanProfile(xeroxGeneration)
+    const bounds = object.getBoundingRect()
+    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1.45 })
+    const image = await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+
+    image.filters = [
+      new filters.Grayscale(),
+      new filters.Contrast({ contrast: profile.contrast }),
+      new filters.Noise({ noise: profile.noise }),
+      new filters.Blur({ blur: profile.blur }),
+    ]
+    image.applyFilters()
+    image.set({
+      left: bounds.left,
+      top: bounds.top,
+      angle: (object.angle ?? 0) + (Math.random() - 0.5) * profile.misregistration,
+      opacity: profile.opacity,
+      globalCompositeOperation: 'multiply',
+    })
+    tagObject(image, 'image', `Xerox gen ${profile.generation}`)
+    canvas.remove(object)
+    canvas.add(image)
+    canvas.setActiveObject(image)
+    commitHistory(`Applied xerox generation ${profile.generation}`)
+  }
+
+  async function addMisprintDuplicate() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object) return
+    const profile = getPrintScanProfile(xeroxGeneration)
+    const clone = await object.clone()
+    clone.set({
+      left: (object.left ?? 0) + profile.misregistration,
+      top: (object.top ?? 0) - profile.misregistration * 0.45,
+      opacity: 0.18 + profile.generation * 0.018,
+      angle: (object.angle ?? 0) - profile.misregistration * 0.18,
+      globalCompositeOperation: 'multiply',
+    })
+    tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'image', 'Misprint offset')
+    canvas.add(clone)
+    canvas.sendObjectToBack(clone)
+    canvas.setActiveObject(object)
+    commitHistory('Added misprint offset')
+  }
+
   function scatterSelected() {
     const canvas = canvasRef.current
     const active = activeObject()
@@ -748,6 +801,29 @@ function App() {
     })
 
     commitHistory('Added photocopy noise')
+  }
+
+  function addPrintScanSurface() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const artifacts = createPrintScanArtifacts(poster, { generation: xeroxGeneration })
+
+    artifacts.forEach((artifact) => {
+      const object = new Rect({
+        left: artifact.left,
+        top: artifact.top,
+        width: artifact.width,
+        height: artifact.height,
+        fill: artifact.kind === 'band' ? '#111111' : ACCENTS[0],
+        opacity: artifact.opacity,
+        angle: artifact.kind === 'drift' ? artifact.angle : 0,
+        globalCompositeOperation: 'multiply',
+      })
+      tagObject(object, 'shape', artifact.kind === 'band' ? 'Xerox band' : 'Scanner drift')
+      canvas.add(object)
+    })
+
+    commitHistory('Added print-scan surface')
   }
 
   async function tearCollageSelected() {
@@ -1111,6 +1187,32 @@ function App() {
               <button type="button" onClick={() => void cloneTypeAsTexture()} disabled={!selectedIsText}>
                 <Layers size={17} />
                 Bury type
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <h2>Xerox / Print-Scan</h2>
+            <Slider
+              label="Generation"
+              value={xeroxGeneration}
+              min={1}
+              max={10}
+              onChange={setXeroxGeneration}
+              onCommit={() => setStatus('Updated xerox generation')}
+            />
+            <div className="preset-row">
+              <button type="button" onClick={() => void applyXeroxToSelected()} disabled={!selected}>
+                <ScanLine size={17} />
+                Copy selected
+              </button>
+              <button type="button" onClick={() => void addMisprintDuplicate()} disabled={!selected}>
+                <Layers size={17} />
+                Misprint offset
+              </button>
+              <button type="button" onClick={addPrintScanSurface}>
+                <Sparkles size={17} />
+                Surface wear
               </button>
             </div>
           </div>

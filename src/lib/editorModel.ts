@@ -102,6 +102,36 @@ export type ExpressiveGlyph = {
   scaleY: number
 }
 
+export type PrintScanProfile = {
+  generation: number
+  contrast: number
+  noise: number
+  blur: number
+  opacity: number
+  misregistration: number
+}
+
+export type PrintScanArtifact =
+  | {
+      id: string
+      kind: 'band'
+      left: number
+      top: number
+      width: number
+      height: number
+      opacity: number
+    }
+  | {
+      id: string
+      kind: 'drift'
+      left: number
+      top: number
+      width: number
+      height: number
+      angle: number
+      opacity: number
+    }
+
 const POSTER_PRESETS: Record<Exclude<PosterPresetId, 'custom'>, PosterPreset> = {
   a3: { id: 'a3', name: 'A3 portrait', width: 1240, height: 1754 },
   a2: { id: 'a2', name: 'A2 portrait', width: 1754, height: 2480 },
@@ -372,6 +402,61 @@ export function createPhotocopyNoise(
   }
 
   return marks
+}
+
+export function getPrintScanProfile(generation: number): PrintScanProfile {
+  const safeGeneration = Math.max(1, Math.min(10, Math.round(generation)))
+  const progress = (safeGeneration - 1) / 9
+
+  return {
+    generation: safeGeneration,
+    contrast: round(0.28 + progress * 0.5),
+    noise: Math.round(80 + progress * 180),
+    blur: round(0.04 + progress * 0.12),
+    opacity: round(0.96 - progress * 0.06),
+    misregistration: round(3 + progress * 15),
+  }
+}
+
+export function createPrintScanArtifacts(
+  area: Pick<PosterPreset, 'width' | 'height'>,
+  options: {
+    generation: number
+    random?: () => number
+  },
+): PrintScanArtifact[] {
+  const random = options.random ?? Math.random
+  const profile = getPrintScanProfile(options.generation)
+  const bandCount = Math.max(3, Math.round(3 + profile.generation * 0.6))
+  const driftCount = Math.max(2, Math.round(1 + profile.generation * 0.4))
+  const artifacts: PrintScanArtifact[] = []
+
+  for (let index = 0; index < bandCount; index += 1) {
+    artifacts.push({
+      id: `xerox-band-${index + 1}`,
+      kind: 'band',
+      left: 0,
+      top: round(((index + 1) * area.height) / (bandCount + 1)),
+      width: area.width,
+      height: round(2 + random() * profile.generation * 1.2),
+      opacity: round(0.045 + profile.generation * 0.01),
+    })
+  }
+
+  for (let index = 0; index < driftCount; index += 1) {
+    artifacts.push({
+      id: `xerox-drift-${index + 1}`,
+      kind: 'drift',
+      left: round(random() * area.width),
+      top: round(random() * area.height),
+      width: round(area.width * (0.08 + random() * 0.16)),
+      height: round(1 + random() * 2),
+      angle: round((random() - 0.5) * 8),
+      opacity: round(0.1 + profile.generation * 0.01),
+    })
+  }
+
+  return artifacts
 }
 
 export function createCropGuides(area: Pick<PosterPreset, 'width' | 'height'>, margin: number): CropGuide[] {
