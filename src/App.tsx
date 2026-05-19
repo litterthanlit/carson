@@ -22,6 +22,7 @@ import {
 import { Canvas, FabricObject, Image as FabricImage, Rect, Textbox, filters } from 'fabric'
 import {
   applyPosterPreset,
+  createAccidentTransforms,
   createCutFragments,
   createCropGuides,
   createExpressiveGlyphs,
@@ -106,6 +107,7 @@ function App() {
   const [typeIntensity, setTypeIntensity] = useState(60)
   const [typeLegibility, setTypeLegibility] = useState<ExpressiveLegibility>('medium')
   const [xeroxGeneration, setXeroxGeneration] = useState(5)
+  const [accidentIntensity, setAccidentIntensity] = useState(60)
   const [assets, setAssets] = useState<string[]>([])
   const [status, setStatus] = useState('Ready')
 
@@ -565,6 +567,138 @@ function App() {
     canvas.sendObjectToBack(clone)
     canvas.setActiveObject(object)
     commitHistory('Added misprint offset')
+  }
+
+  function accidentTargets() {
+    const canvas = canvasRef.current
+    const active = activeObject()
+    if (!canvas || !active) return null
+    return active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
+  }
+
+  function accidentTransforms(targets: FabricObject[]) {
+    return createAccidentTransforms(
+      targets.map((object) => ({
+        id: String(readObjectProp(object, 'id') ?? ''),
+        left: object.left ?? 0,
+        top: object.top ?? 0,
+        angle: object.angle ?? 0,
+        scaleX: object.scaleX ?? 1,
+        scaleY: object.scaleY ?? 1,
+      })),
+      { intensity: accidentIntensity },
+    )
+  }
+
+  async function duplicateDriftAccident() {
+    const canvas = canvasRef.current
+    const targets = accidentTargets()
+    if (!canvas || !targets) return
+    const transforms = accidentTransforms(targets)
+
+    for (const [index, object] of targets.entries()) {
+      const clone = await object.clone()
+      clone.set({
+        ...transforms[index],
+        globalCompositeOperation: 'multiply',
+      })
+      tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'shape', 'Accident duplicate')
+      canvas.add(clone)
+    }
+    canvas.requestRenderAll()
+    commitHistory('Added duplicate drift accident')
+  }
+
+  function nudgeLayoutAccident() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const targets = canvas.getObjects()
+    const transforms = accidentTransforms(targets)
+
+    targets.forEach((object, index) => {
+      object.set(transforms[index])
+      object.setCoords()
+    })
+    canvas.requestRenderAll()
+    commitHistory('Nudged layout accident')
+  }
+
+  async function badCropAccident() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+    const bounds = object.getBoundingRect()
+    const cropDirection = bounds.width > bounds.height ? 'vertical' : 'horizontal'
+    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
+    const fragments = createCutFragments(
+      {
+        id: String(readObjectProp(object, 'id') ?? 'layer'),
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      },
+      { pieces: 3, gap: Math.max(16, accidentIntensity * 0.4), direction: cropDirection },
+    )
+    const cropped = await cropFragments(imageUrl, fragments)
+    canvas.remove(object)
+
+    for (const [index, url] of cropped.entries()) {
+      if (index === 1) continue
+      const fragment = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
+      const frame = fragments[index]
+      fragment.set({
+        left: frame.left + (index === 0 ? -accidentIntensity * 0.35 : accidentIntensity * 0.35),
+        top: frame.top + (index === 0 ? accidentIntensity * 0.15 : -accidentIntensity * 0.15),
+        angle: index === 0 ? -4 : 5,
+        opacity: object.opacity ?? 1,
+        globalCompositeOperation: 'multiply',
+      })
+      tagObject(fragment, 'fragment', `Bad crop ${index + 1}`)
+      canvas.add(fragment)
+    }
+    canvas.discardActiveObject()
+    commitHistory('Applied bad crop accident')
+  }
+
+  async function flipMistakeAccident() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object) return
+    const clone = await object.clone()
+    clone.set({
+      left: (object.left ?? 0) + accidentIntensity * 0.24,
+      top: (object.top ?? 0) + accidentIntensity * 0.12,
+      scaleX: -(object.scaleX ?? 1),
+      opacity: 0.24,
+      angle: (object.angle ?? 0) + accidentIntensity * 0.08,
+      globalCompositeOperation: 'difference',
+    })
+    tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'shape', 'Flipped mistake')
+    canvas.add(clone)
+    canvas.setActiveObject(object)
+    commitHistory('Added flipped mistake')
+  }
+
+  function collideSelectionAccident() {
+    const canvas = canvasRef.current
+    const targets = accidentTargets()
+    if (!canvas || !targets || targets.length < 2) return
+    const lead = targets[0]
+    const leadLeft = lead.left ?? 0
+    const leadTop = lead.top ?? 0
+
+    targets.slice(1).forEach((object, index) => {
+      object.set({
+        left: leadLeft + (index + 1) * 10,
+        top: leadTop + (index + 1) * 8,
+        angle: (object.angle ?? 0) + (index % 2 === 0 ? -12 : 12),
+        globalCompositeOperation: index % 2 === 0 ? 'difference' : 'multiply',
+      })
+      object.setCoords()
+    })
+    canvas.requestRenderAll()
+    commitHistory('Collided selected layers')
   }
 
   function scatterSelected() {
@@ -1213,6 +1347,40 @@ function App() {
               <button type="button" onClick={addPrintScanSurface}>
                 <Sparkles size={17} />
                 Surface wear
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <h2>Accident Engine</h2>
+            <Slider
+              label="Intensity"
+              value={accidentIntensity}
+              min={0}
+              max={100}
+              onChange={setAccidentIntensity}
+              onCommit={() => setStatus('Updated accident intensity')}
+            />
+            <div className="preset-row">
+              <button type="button" onClick={() => void duplicateDriftAccident()} disabled={!selected}>
+                <Shuffle size={17} />
+                Duplicate drift
+              </button>
+              <button type="button" onClick={() => void badCropAccident()} disabled={!selected}>
+                <Crop size={17} />
+                Bad crop
+              </button>
+              <button type="button" onClick={() => void flipMistakeAccident()} disabled={!selected}>
+                <FlipHorizontal size={17} />
+                Flip mistake
+              </button>
+              <button type="button" onClick={collideSelectionAccident} disabled={!selected}>
+                <Layers size={17} />
+                Collide selection
+              </button>
+              <button type="button" onClick={nudgeLayoutAccident}>
+                <Sparkles size={17} />
+                Nudge layout
               </button>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyPosterPreset,
+  createAccidentTransforms,
   createCutFragments,
   createCropGuides,
   createExpressiveGlyphs,
@@ -317,6 +318,48 @@ describe('manual effect helpers', () => {
       angle: 0,
       opacity: 0.15,
     })
+  })
+
+  it('creates controlled accident transforms for duplicate drift and bad crops', () => {
+    const accidents = createAccidentTransforms(
+      [
+        { id: 'a', left: 100, top: 100, angle: 0, scaleX: 1, scaleY: 1 },
+        { id: 'b', left: 200, top: 150, angle: 8, scaleX: 1.2, scaleY: 0.9 },
+      ],
+      { intensity: 60, random: () => 0.75 },
+    )
+
+    expect(accidents).toEqual([
+      {
+        id: 'a',
+        left: 115,
+        top: 115,
+        angle: 7.5,
+        scaleX: 1.045,
+        scaleY: 0.955,
+        opacity: 0.82,
+      },
+      {
+        id: 'b',
+        left: 215,
+        top: 165,
+        angle: 15.5,
+        scaleX: 1.254,
+        scaleY: 0.859,
+        opacity: 0.82,
+      },
+    ])
+  })
+
+  it('keeps accident intensity bounded and usable', () => {
+    const [accident] = createAccidentTransforms([{ id: 'a', left: 0, top: 0, angle: 0, scaleX: 1, scaleY: 1 }], {
+      intensity: 999,
+      random: () => 1,
+    })
+
+    expect(accident.left).toBe(50)
+    expect(accident.angle).toBe(25)
+    expect(accident.opacity).toBe(0.7)
   })
 })
 

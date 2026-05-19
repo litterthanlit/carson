@@ -16,6 +16,10 @@ export type LayerTransform = {
   scaleY: number
 }
 
+export type AccidentTransform = LayerTransform & {
+  opacity: number
+}
+
 export type SliceSource = {
   id: string
   left: number
@@ -192,6 +196,38 @@ export function scatterLayers(
       angle: round(layer.angle + da),
       scaleX: round(layer.scaleX * ds),
       scaleY: round(layer.scaleY * ds),
+    }
+  })
+}
+
+export function createAccidentTransforms(
+  layers: LayerTransform[],
+  options: {
+    intensity: number
+    random?: () => number
+  },
+): AccidentTransform[] {
+  const random = options.random ?? Math.random
+  const intensity = Math.max(0, Math.min(100, options.intensity)) / 100
+  const distance = 50 * intensity
+  const rotation = 25 * intensity
+  const stretch = 0.3 * intensity
+
+  return layers.map((layer) => {
+    const dx = (random() - 0.5) * distance * 2
+    const dy = (random() - 0.5) * distance * 2
+    const da = (random() - 0.5) * rotation * 2
+    const sx = 1 + (random() - 0.5) * stretch
+    const sy = 1 - (random() - 0.5) * stretch
+
+    return {
+      id: layer.id,
+      left: round(layer.left + dx),
+      top: round(layer.top + dy),
+      angle: round(layer.angle + da),
+      scaleX: round(layer.scaleX * sx),
+      scaleY: round(layer.scaleY * sy),
+      opacity: round(Math.max(0.24, 1 - intensity * 0.3)),
     }
   })
 }
