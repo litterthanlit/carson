@@ -25,9 +25,11 @@ import {
   createAccidentTransforms,
   createCutFragments,
   createCropGuides,
+  createDiagonalTextureLines,
   createExpressiveGlyphs,
   createPhotocopyNoise,
   createPrintScanArtifacts,
+  createScrapeMasks,
   createTearFragments,
   createTypeStrips,
   getPrintScanProfile,
@@ -519,6 +521,27 @@ function App() {
     commitHistory(`Applied ${effect} effect`)
   }
 
+  function applyColdDiveImage() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type !== 'image') return
+    const image = object as FabricImage
+
+    image.filters = [
+      new filters.Grayscale(),
+      new filters.Contrast({ contrast: 0.42 }),
+      new filters.BlendColor({ color: '#2f6f8f', mode: 'tint', alpha: 0.22 }),
+      new filters.Noise({ noise: 85 }),
+    ]
+    image.applyFilters()
+    image.set({
+      opacity: 0.92,
+      globalCompositeOperation: 'multiply',
+    })
+    canvas.requestRenderAll()
+    commitHistory('Applied cold dive image treatment')
+  }
+
   async function applyXeroxToSelected() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -960,6 +983,97 @@ function App() {
     commitHistory('Added print-scan surface')
   }
 
+  function addDiveTexture() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const lines = createDiagonalTextureLines(poster, { spacing: 18, angle: -18, opacity: 0.12 })
+
+    lines.forEach((line) => {
+      const object = new Rect({
+        left: line.left,
+        top: line.top,
+        width: line.width,
+        height: line.height,
+        fill: '#24485a',
+        opacity: line.opacity,
+        angle: line.angle,
+        globalCompositeOperation: 'multiply',
+      })
+      tagObject(object, 'shape', 'Diagonal print texture')
+      canvas.add(object)
+    })
+
+    commitHistory('Added diagonal dive texture')
+  }
+
+  function addWhiteScrapes() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const masks = createScrapeMasks(poster, { count: 7 })
+
+    masks.forEach((mask, index) => {
+      const scrape = new Rect({
+        left: mask.left,
+        top: mask.top,
+        width: mask.width,
+        height: mask.height,
+        fill: '#f8f6ef',
+        opacity: mask.opacity,
+        angle: mask.angle,
+      })
+      tagObject(scrape, 'shape', `White scrape ${index + 1}`)
+      canvas.add(scrape)
+
+      const chips = createPhotocopyNoise({ width: mask.width, height: mask.height }, { specks: 9, scratches: 2, scanlines: 0 })
+      chips.forEach((chip) => {
+        const chipObject = new Rect({
+          left: mask.left + chip.left,
+          top: mask.top + chip.top,
+          width: chip.kind === 'speck' ? chip.size : chip.width,
+          height: chip.kind === 'speck' ? chip.size : chip.height,
+          fill: '#111111',
+          opacity: chip.opacity * 0.42,
+          angle: chip.kind === 'speck' ? mask.angle : chip.angle,
+          globalCompositeOperation: 'multiply',
+        })
+        tagObject(chipObject, 'shape', 'Scrape grit')
+        canvas.add(chipObject)
+      })
+    })
+
+    commitHistory('Added white scrape masks')
+  }
+
+  function addDiveRedType() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const entries = [
+      { text: 'dive', left: poster.width * 0.06, top: poster.height * 0.08, width: poster.width * 0.58, size: poster.width * 0.17, angle: 0 },
+      { text: 'dive', left: poster.width * 0.16, top: poster.height * 0.72, width: poster.width * 0.72, size: poster.width * 0.19, angle: -4 },
+      { text: 'dive', left: poster.width * 0.72, top: poster.height * 0.36, width: poster.width * 0.64, size: poster.width * 0.18, angle: 90 },
+    ]
+
+    entries.forEach((entry, index) => {
+      const text = new Textbox(entry.text, {
+        left: entry.left,
+        top: entry.top,
+        width: entry.width,
+        fontFamily: 'Arial Black',
+        fontSize: entry.size,
+        fontWeight: 900,
+        charSpacing: -70,
+        fill: '#ef241d',
+        opacity: 0.9,
+        angle: entry.angle,
+        globalCompositeOperation: 'multiply',
+      })
+      tagObject(text, 'text', `Dive red type ${index + 1}`)
+      canvas.add(text)
+    })
+
+    commitHistory('Added dive red type')
+  }
+
   async function tearCollageSelected() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -1381,6 +1495,28 @@ function App() {
               <button type="button" onClick={nudgeLayoutAccident}>
                 <Sparkles size={17} />
                 Nudge layout
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <h2>Dive Poster Tools</h2>
+            <div className="preset-row">
+              <button type="button" onClick={applyColdDiveImage} disabled={!selectedIsImage}>
+                <ImagePlus size={17} />
+                Cold image
+              </button>
+              <button type="button" onClick={addDiveTexture}>
+                <ScanLine size={17} />
+                Diagonal texture
+              </button>
+              <button type="button" onClick={addWhiteScrapes}>
+                <Scissors size={17} />
+                White scrapes
+              </button>
+              <button type="button" onClick={addDiveRedType}>
+                <Type size={17} />
+                Red dive type
               </button>
             </div>
           </div>

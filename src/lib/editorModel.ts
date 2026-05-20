@@ -136,6 +136,26 @@ export type PrintScanArtifact =
       opacity: number
     }
 
+export type DiagonalTextureLine = {
+  id: string
+  left: number
+  top: number
+  width: number
+  height: number
+  angle: number
+  opacity: number
+}
+
+export type ScrapeMask = {
+  id: string
+  left: number
+  top: number
+  width: number
+  height: number
+  angle: number
+  opacity: number
+}
+
 const POSTER_PRESETS: Record<Exclude<PosterPresetId, 'custom'>, PosterPreset> = {
   a3: { id: 'a3', name: 'A3 portrait', width: 1240, height: 1754 },
   a2: { id: 'a2', name: 'A2 portrait', width: 1754, height: 2480 },
@@ -228,6 +248,55 @@ export function createAccidentTransforms(
       scaleX: round(layer.scaleX * sx),
       scaleY: round(layer.scaleY * sy),
       opacity: round(Math.max(0.24, 1 - intensity * 0.3)),
+    }
+  })
+}
+
+export function createDiagonalTextureLines(
+  area: Pick<PosterPreset, 'width' | 'height'>,
+  options: {
+    spacing: number
+    angle: number
+    opacity: number
+  },
+): DiagonalTextureLine[] {
+  const spacing = Math.max(12, options.spacing)
+  const span = area.width + area.height
+  const count = Math.ceil((area.width + span) / spacing)
+
+  return Array.from({ length: count }, (_, index) => ({
+    id: `diagonal-texture-${index + 1}`,
+    left: round(-area.height + index * spacing),
+    top: round(-area.width),
+    width: span,
+    height: 2,
+    angle: options.angle,
+    opacity: options.opacity,
+  }))
+}
+
+export function createScrapeMasks(
+  area: Pick<PosterPreset, 'width' | 'height'>,
+  options: {
+    count: number
+    random?: () => number
+  },
+): ScrapeMask[] {
+  const random = options.random ?? Math.random
+  const count = Math.max(1, Math.min(10, Math.round(options.count)))
+
+  return Array.from({ length: count }, (_, index) => {
+    const top = ((index + 1) * area.height) / (count + 1)
+    const drift = (random() - 0.5) * area.width * 0.18
+
+    return {
+      id: `scrape-mask-${index + 1}`,
+      left: round(area.width * 0.05 + drift),
+      top: round(top - area.height * 0.044),
+      width: round(area.width * (0.55 + random() * 0.2)),
+      height: round(area.height * (0.032 + random() * 0.024)),
+      angle: round(-7 + random() * 8),
+      opacity: round(0.72 + random() * 0.28),
     }
   })
 }

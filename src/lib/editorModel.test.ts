@@ -4,9 +4,11 @@ import {
   createAccidentTransforms,
   createCutFragments,
   createCropGuides,
+  createDiagonalTextureLines,
   createExpressiveGlyphs,
   createPhotocopyNoise,
   createPrintScanArtifacts,
+  createScrapeMasks,
   getPrintScanProfile,
   createTearFragments,
   createTypeStrips,
@@ -360,6 +362,27 @@ describe('manual effect helpers', () => {
     expect(accident.left).toBe(50)
     expect(accident.angle).toBe(25)
     expect(accident.opacity).toBe(0.7)
+  })
+
+  it('creates diagonal print texture lines across the poster', () => {
+    const lines = createDiagonalTextureLines({ width: 400, height: 600 }, { spacing: 80, angle: -18, opacity: 0.14 })
+
+    expect(lines.slice(0, 3)).toEqual([
+      { id: 'diagonal-texture-1', left: -600, top: -400, width: 1000, height: 2, angle: -18, opacity: 0.14 },
+      { id: 'diagonal-texture-2', left: -520, top: -400, width: 1000, height: 2, angle: -18, opacity: 0.14 },
+      { id: 'diagonal-texture-3', left: -440, top: -400, width: 1000, height: 2, angle: -18, opacity: 0.14 },
+    ])
+    expect(lines).toHaveLength(18)
+  })
+
+  it('creates rough white scrape masks with deterministic drift', () => {
+    const masks = createScrapeMasks({ width: 800, height: 1000 }, { count: 3, random: () => 0.5 })
+
+    expect(masks).toEqual([
+      { id: 'scrape-mask-1', left: 40, top: 206, width: 520, height: 44, angle: -3, opacity: 0.86 },
+      { id: 'scrape-mask-2', left: 40, top: 456, width: 520, height: 44, angle: -3, opacity: 0.86 },
+      { id: 'scrape-mask-3', left: 40, top: 706, width: 520, height: 44, angle: -3, opacity: 0.86 },
+    ])
   })
 })
 
