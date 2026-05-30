@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   applyPosterPreset,
   createAccidentTransforms,
+  createAggressiveCropFrame,
   createCutFragments,
   createCropGuides,
   createDiagonalTextureLines,
   createExpressiveGlyphs,
+  createLayerDecayMarks,
   createPhotocopyNoise,
   createPrintScanArtifacts,
   createScrapeMasks,
+  getLayerDecayProfile,
   getPrintScanProfile,
   createTearFragments,
   createTypeStrips,
@@ -383,6 +386,94 @@ describe('manual effect helpers', () => {
       { id: 'scrape-mask-2', left: 40, top: 456, width: 520, height: 44, angle: -3, opacity: 0.86 },
       { id: 'scrape-mask-3', left: 40, top: 706, width: 520, height: 44, angle: -3, opacity: 0.86 },
     ])
+  })
+
+  it('creates aggressive crop frames for close and edge crops', () => {
+    expect(createAggressiveCropFrame({ id: 'image', left: 100, top: 80, width: 500, height: 300 }, { mode: 'close' })).toEqual({
+      id: 'image-close-crop',
+      left: 175,
+      top: 125,
+      width: 350,
+      height: 210,
+      clipLeft: 75,
+      clipTop: 45,
+    })
+
+    expect(createAggressiveCropFrame({ id: 'image', left: 100, top: 80, width: 500, height: 300 }, { mode: 'edge' })).toEqual({
+      id: 'image-edge-crop',
+      left: -25,
+      top: 5,
+      width: 500,
+      height: 270,
+      clipLeft: 0,
+      clipTop: 0,
+    })
+  })
+
+  it('creates deterministic off-center crop frames', () => {
+    const frame = createAggressiveCropFrame(
+      { id: 'image', left: 100, top: 80, width: 500, height: 300 },
+      { mode: 'off-center', random: () => 0.75 },
+    )
+
+    expect(frame).toEqual({
+      id: 'image-off-center-crop',
+      left: 231.25,
+      top: 158.75,
+      width: 325,
+      height: 195,
+      clipLeft: 131.25,
+      clipTop: 78.75,
+    })
+  })
+
+  it('returns bounded layer decay profiles for clean and destroyed layers', () => {
+    expect(getLayerDecayProfile(0)).toEqual({
+      amount: 0,
+      contrast: 0.1,
+      blur: 0.02,
+      noise: 30,
+      opacity: 0.98,
+      misregistration: 1,
+    })
+
+    expect(getLayerDecayProfile(100)).toEqual({
+      amount: 100,
+      contrast: 0.62,
+      blur: 0.14,
+      noise: 220,
+      opacity: 0.82,
+      misregistration: 16,
+    })
+  })
+
+  it('creates deterministic ink loss and fold marks for a decayed layer', () => {
+    const marks = createLayerDecayMarks(
+      { id: 'photo', left: 100, top: 80, width: 500, height: 300 },
+      { amount: 50, random: () => 0.5 },
+    )
+
+    expect(marks).toHaveLength(12)
+    expect(marks[0]).toEqual({
+      id: 'photo-ink-loss-1',
+      kind: 'ink-loss',
+      left: 350,
+      top: 230,
+      width: 50,
+      height: 9.6,
+      angle: 0,
+      opacity: 0.675,
+    })
+    expect(marks.at(-1)).toEqual({
+      id: 'photo-fold-3',
+      kind: 'fold',
+      left: 100,
+      top: 305,
+      width: 500,
+      height: 2,
+      angle: 0,
+      opacity: 0.23,
+    })
   })
 })
 

@@ -23,15 +23,18 @@ import { Canvas, FabricObject, Image as FabricImage, Rect, Textbox, filters } fr
 import {
   applyPosterPreset,
   createAccidentTransforms,
+  createAggressiveCropFrame,
   createCutFragments,
   createCropGuides,
   createDiagonalTextureLines,
   createExpressiveGlyphs,
+  createLayerDecayMarks,
   createPhotocopyNoise,
   createPrintScanArtifacts,
   createScrapeMasks,
   createTearFragments,
   createTypeStrips,
+  getLayerDecayProfile,
   getPrintScanProfile,
   type ExpressiveLegibility,
   type PosterPreset,
@@ -110,6 +113,7 @@ function App() {
   const [typeLegibility, setTypeLegibility] = useState<ExpressiveLegibility>('medium')
   const [xeroxGeneration, setXeroxGeneration] = useState(5)
   const [accidentIntensity, setAccidentIntensity] = useState(60)
+  const [decayAmount, setDecayAmount] = useState(55)
   const [assets, setAssets] = useState<string[]>([])
   const [status, setStatus] = useState('Ready')
 
@@ -521,6 +525,89 @@ function App() {
     commitHistory(`Applied ${effect} effect`)
   }
 
+  async function applyLayerDecayToSelected() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+    const profile = getLayerDecayProfile(decayAmount)
+    const bounds = object.getBoundingRect()
+    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1.35 })
+    const image = await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+
+    image.filters = [
+      new filters.Contrast({ contrast: profile.contrast }),
+      new filters.Noise({ noise: profile.noise }),
+      new filters.Blur({ blur: profile.blur }),
+    ]
+    image.applyFilters()
+    image.set({
+      left: bounds.left,
+      top: bounds.top,
+      angle: (object.angle ?? 0) + (Math.random() - 0.5) * profile.misregistration,
+      opacity: profile.opacity,
+      globalCompositeOperation: 'multiply',
+    })
+    tagObject(image, 'image', `Layer decay ${profile.amount}`)
+    canvas.remove(object)
+    canvas.add(image)
+    canvas.setActiveObject(image)
+    commitHistory('Applied layer decay')
+  }
+
+  function addLayerDecayMarks(kind: 'ink-loss' | 'fold' | 'all') {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object) return
+    const bounds = object.getBoundingRect()
+    const marks = createLayerDecayMarks(
+      {
+        id: String(readObjectProp(object, 'id') ?? 'layer'),
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      },
+      { amount: decayAmount },
+    ).filter((mark) => kind === 'all' || mark.kind === kind)
+
+    marks.forEach((mark) => {
+      const decayMark = new Rect({
+        left: mark.left,
+        top: mark.top,
+        width: mark.width,
+        height: mark.height,
+        fill: mark.kind === 'ink-loss' ? '#f8f6ef' : '#111111',
+        opacity: mark.opacity,
+        angle: mark.angle,
+        globalCompositeOperation: mark.kind === 'ink-loss' ? 'source-over' : 'multiply',
+      })
+      tagObject(decayMark, 'shape', mark.kind === 'ink-loss' ? 'Ink loss' : 'Fold mark')
+      canvas.add(decayMark)
+    })
+
+    commitHistory(kind === 'all' ? 'Added layer decay marks' : `Added ${kind} marks`)
+  }
+
+  async function addLayerDecayOffset() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object) return
+    const profile = getLayerDecayProfile(decayAmount)
+    const clone = await object.clone()
+    clone.set({
+      left: (object.left ?? 0) + profile.misregistration,
+      top: (object.top ?? 0) - profile.misregistration * 0.55,
+      angle: (object.angle ?? 0) - profile.misregistration * 0.2,
+      opacity: 0.14 + profile.amount * 0.002,
+      globalCompositeOperation: 'multiply',
+    })
+    tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'shape', 'Decay offset')
+    canvas.add(clone)
+    canvas.sendObjectToBack(clone)
+    canvas.setActiveObject(object)
+    commitHistory('Added layer decay offset')
+  }
+
   function applyColdDiveImage() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -783,6 +870,55 @@ function App() {
     }
     canvas.discardActiveObject()
     commitHistory(direction === 'horizontal' ? 'Sliced into strips' : 'Sliced into columns')
+  }
+
+  async function aggressiveCropSelected(mode: 'close' | 'edge' | 'off-center') {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+
+    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
+    const bounds = object.getBoundingRect()
+    const frame = createAggressiveCropFrame(
+      {
+        id: String(readObjectProp(object, 'id') ?? 'layer'),
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      },
+      { mode },
+    )
+    const [url] = await cropFragments(imageUrl, [frame])
+    const crop = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
+    crop.set({
+      left: frame.left,
+      top: frame.top,
+      angle: (object.angle ?? 0) + (mode === 'edge' ? -2 : mode === 'off-center' ? 3 : 0),
+      opacity: object.opacity ?? 1,
+      globalCompositeOperation: mode === 'close' ? 'source-over' : 'multiply',
+    })
+    tagObject(crop, 'fragment', `${mode} crop`)
+    canvas.remove(object)
+    canvas.add(crop)
+    canvas.setActiveObject(crop)
+    commitHistory(`Applied ${mode} crop`)
+  }
+
+  async function cropToPosterEdge() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object) return
+    await aggressiveCropSelected('edge')
+    const cropped = activeObject()
+    if (!cropped) return
+    cropped.set({
+      left: Math.random() > 0.5 ? -poster.width * 0.08 : poster.width * 0.72,
+      top: Math.random() > 0.5 ? -poster.height * 0.04 : poster.height * 0.78,
+    })
+    cropped.setCoords()
+    canvas.requestRenderAll()
+    commitHistory('Cropped layer to poster edge')
   }
 
   function addTypeStrip() {
@@ -1466,6 +1602,40 @@ function App() {
           </div>
 
           <div className="panel-section">
+            <h2>Layer Decay</h2>
+            <Slider
+              label="Amount"
+              value={decayAmount}
+              min={0}
+              max={100}
+              onChange={setDecayAmount}
+              onCommit={() => setStatus('Updated layer decay amount')}
+            />
+            <div className="preset-row">
+              <button type="button" onClick={() => void applyLayerDecayToSelected()} disabled={!selected}>
+                <Sparkles size={17} />
+                Age selected
+              </button>
+              <button type="button" onClick={() => addLayerDecayMarks('ink-loss')} disabled={!selected}>
+                <Scissors size={17} />
+                Ink loss
+              </button>
+              <button type="button" onClick={() => addLayerDecayMarks('fold')} disabled={!selected}>
+                <ScanLine size={17} />
+                Fold marks
+              </button>
+              <button type="button" onClick={() => addLayerDecayMarks('all')} disabled={!selected}>
+                <Layers size={17} />
+                Wear overlay
+              </button>
+              <button type="button" onClick={() => void addLayerDecayOffset()} disabled={!selected}>
+                <Shuffle size={17} />
+                Decay offset
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-section">
             <h2>Accident Engine</h2>
             <Slider
               label="Intensity"
@@ -1517,6 +1687,32 @@ function App() {
               <button type="button" onClick={addDiveRedType}>
                 <Type size={17} />
                 Red dive type
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <h2>Aggressive Crop Tools</h2>
+            <div className="preset-row">
+              <button type="button" onClick={() => void aggressiveCropSelected('close')} disabled={!selected}>
+                <Crop size={17} />
+                Close crop
+              </button>
+              <button type="button" onClick={() => void aggressiveCropSelected('off-center')} disabled={!selected}>
+                <Crop size={17} />
+                Off-center crop
+              </button>
+              <button type="button" onClick={() => void aggressiveCropSelected('edge')} disabled={!selected}>
+                <Crop size={17} />
+                Edge crop
+              </button>
+              <button type="button" onClick={() => void cropToPosterEdge()} disabled={!selected}>
+                <Scissors size={17} />
+                Throw to edge
+              </button>
+              <button type="button" onClick={() => sliceSelected('vertical')} disabled={!selected}>
+                <Scissors size={17} />
+                Crop strips
               </button>
             </div>
           </div>

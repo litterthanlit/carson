@@ -38,6 +38,18 @@ export type CutFragment = {
   clipLeft: number
 }
 
+export type AggressiveCropMode = 'close' | 'edge' | 'off-center'
+
+export type AggressiveCropFrame = {
+  id: string
+  left: number
+  top: number
+  width: number
+  height: number
+  clipLeft: number
+  clipTop: number
+}
+
 export type TypeStrip = {
   id: string
   text: string
@@ -114,6 +126,37 @@ export type PrintScanProfile = {
   opacity: number
   misregistration: number
 }
+
+export type LayerDecayProfile = {
+  amount: number
+  contrast: number
+  blur: number
+  noise: number
+  opacity: number
+  misregistration: number
+}
+
+export type LayerDecayMark =
+  | {
+      id: string
+      kind: 'ink-loss'
+      left: number
+      top: number
+      width: number
+      height: number
+      angle: number
+      opacity: number
+    }
+  | {
+      id: string
+      kind: 'fold'
+      left: number
+      top: number
+      width: number
+      height: number
+      angle: number
+      opacity: number
+    }
 
 export type PrintScanArtifact =
   | {
@@ -345,6 +388,34 @@ export function createCutFragments(
   })
 }
 
+export function createAggressiveCropFrame(
+  source: SliceSource,
+  options: {
+    mode: AggressiveCropMode
+    random?: () => number
+  },
+): AggressiveCropFrame {
+  const random = options.random ?? Math.random
+  const cropRatio = options.mode === 'close' ? 0.7 : options.mode === 'off-center' ? 0.65 : 0.9
+  const width = round(source.width * (options.mode === 'edge' ? 1 : cropRatio))
+  const height = round(source.height * cropRatio)
+  const maxClipLeft = Math.max(0, source.width - width)
+  const maxClipTop = Math.max(0, source.height - height)
+  const clipLeft = options.mode === 'off-center' ? maxClipLeft * random() : options.mode === 'edge' ? 0 : maxClipLeft / 2
+  const clipTop = options.mode === 'off-center' ? maxClipTop * random() : options.mode === 'edge' ? 0 : maxClipTop / 2
+  const edgeShift = options.mode === 'edge' ? source.width * 0.25 : 0
+
+  return {
+    id: `${source.id}-${options.mode}-crop`,
+    left: round(source.left + clipLeft - edgeShift),
+    top: round(source.top + clipTop - (options.mode === 'edge' ? source.height * 0.25 : 0)),
+    width,
+    height,
+    clipLeft: round(clipLeft),
+    clipTop: round(clipTop),
+  }
+}
+
 export function createTypeStrips(
   source: Pick<SliceSource, 'id' | 'left' | 'top' | 'width'> & { text: string },
   options: {
@@ -521,6 +592,63 @@ export function getPrintScanProfile(generation: number): PrintScanProfile {
     opacity: round(0.96 - progress * 0.06),
     misregistration: round(3 + progress * 15),
   }
+}
+
+export function getLayerDecayProfile(amount: number): LayerDecayProfile {
+  const safeAmount = Math.max(0, Math.min(100, Math.round(amount)))
+  const progress = safeAmount / 100
+
+  return {
+    amount: safeAmount,
+    contrast: round(0.1 + progress * 0.52),
+    blur: round(0.02 + progress * 0.12),
+    noise: Math.round(30 + progress * 190),
+    opacity: round(0.98 - progress * 0.16),
+    misregistration: round(1 + progress * 15),
+  }
+}
+
+export function createLayerDecayMarks(
+  source: SliceSource,
+  options: {
+    amount: number
+    random?: () => number
+  },
+): LayerDecayMark[] {
+  const random = options.random ?? Math.random
+  const profile = getLayerDecayProfile(options.amount)
+  const progress = profile.amount / 100
+  const chipCount = Math.max(3, Math.round(4 + progress * 10))
+  const foldCount = Math.max(1, Math.round(1 + progress * 3))
+  const marks: LayerDecayMark[] = []
+
+  for (let index = 0; index < chipCount; index += 1) {
+    marks.push({
+      id: `${source.id}-ink-loss-${index + 1}`,
+      kind: 'ink-loss',
+      left: round(source.left + random() * source.width),
+      top: round(source.top + random() * source.height),
+      width: round(source.width * (0.04 + random() * 0.12)),
+      height: round(source.height * (0.012 + random() * 0.04)),
+      angle: round((random() - 0.5) * 18),
+      opacity: round(0.5 + progress * 0.35),
+    })
+  }
+
+  for (let index = 0; index < foldCount; index += 1) {
+    marks.push({
+      id: `${source.id}-fold-${index + 1}`,
+      kind: 'fold',
+      left: source.left,
+      top: round(source.top + ((index + 1) * source.height) / (foldCount + 1)),
+      width: source.width,
+      height: 2,
+      angle: round((random() - 0.5) * 8),
+      opacity: round(0.12 + progress * 0.22),
+    })
+  }
+
+  return marks
 }
 
 export function createPrintScanArtifacts(
