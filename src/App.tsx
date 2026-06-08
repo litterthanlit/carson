@@ -129,8 +129,8 @@ function App() {
       height: poster.height,
       backgroundColor: '#f6f1e6',
       preserveObjectStacking: true,
-      selectionColor: 'rgba(225, 29, 72, 0.12)',
-      selectionBorderColor: '#e11d48',
+      selectionColor: 'rgba(0, 112, 243, 0.08)',
+      selectionBorderColor: '#0070f3',
       selectionLineWidth: 1,
     })
 
@@ -282,9 +282,9 @@ function App() {
       id: nextId(kind),
       name,
       kind,
-      cornerColor: '#e11d48',
-      cornerStrokeColor: '#111827',
-      borderColor: '#e11d48',
+      cornerColor: '#0070f3',
+      cornerStrokeColor: '#ffffff',
+      borderColor: '#0070f3',
       transparentCorners: false,
       cornerStyle: 'rect',
     } as Partial<FabricObject>)
@@ -1394,8 +1394,8 @@ function App() {
         <div className="brand">
           <span className="brand-mark">C</span>
           <div>
-            <h1>Carson Lab</h1>
-            <p>Manual poster editor</p>
+            <h1>Carson</h1>
+            <p>Poster editor</p>
           </div>
         </div>
         <div className="top-actions" aria-label="Poster actions">

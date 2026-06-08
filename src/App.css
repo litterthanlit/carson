@@ -1,17 +1,17 @@
 .editor-shell {
   min-height: 100dvh;
-  background: #e7e0d2;
-  color: #171717;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .topbar {
-  height: 72px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px;
-  border-bottom: 1px solid #141414;
-  background: #f8f6ef;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
 }
 
 .brand,
@@ -24,18 +24,19 @@
 }
 
 .brand {
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  background: #111111;
-  color: #f8f6ef;
-  font: 900 24px/1 Impact, sans-serif;
+  width: 28px;
+  height: 28px;
+  background: var(--text);
+  color: var(--bg);
+  font: 600 14px/1 var(--font);
+  border-radius: var(--radius);
 }
 
 .brand h1,
@@ -46,8 +47,8 @@
 }
 
 .brand h1 {
-  font: 900 20px/1 Impact, sans-serif;
-  text-transform: uppercase;
+  font: 600 14px/1.2 var(--font);
+  letter-spacing: -0.01em;
 }
 
 .brand p,
@@ -57,7 +58,7 @@ button,
 input,
 select,
 textarea {
-  font: 12px/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+  font: 13px/1.4 var(--font);
 }
 
 .brand p,
@@ -65,108 +66,126 @@ textarea {
 .empty,
 .layer-row small,
 .saved-list small {
-  color: #69645d;
+  color: var(--text-muted);
 }
 
 .top-actions {
-  gap: 8px;
+  gap: 6px;
 }
 
 button,
 input,
 select,
 textarea {
-  border: 1px solid #1f1f1f;
-  background: #fbfaf6;
-  color: #111111;
-  border-radius: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius);
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 button {
-  min-height: 34px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 6px;
   padding: 0 10px;
   cursor: pointer;
+  font-weight: 500;
 }
 
 button:hover:not(:disabled) {
-  background: #111111;
-  color: #f8f6ef;
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.42;
+  opacity: 0.45;
 }
 
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #e11d48;
-  outline-offset: 2px;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .icon-button {
-  width: 34px;
+  width: 32px;
   padding: 0;
+  color: var(--text-muted);
+}
+
+.icon-button:hover:not(:disabled) {
+  color: var(--text);
 }
 
 .primary-button {
-  background: #e11d48;
-  color: #ffffff;
-  border-color: #e11d48;
-  font-weight: 800;
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+  font-weight: 500;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #333333;
+  border-color: #333333;
+  color: var(--bg);
 }
 
 .toolbar-button {
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .workspace {
-  min-height: calc(100dvh - 73px);
+  min-height: calc(100dvh - 57px);
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 312px;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
 }
 
 .rail {
-  min-height: calc(100dvh - 73px);
+  min-height: calc(100dvh - 57px);
   overflow: auto;
-  background: #f8f6ef;
+  background: var(--bg);
 }
 
 .left-rail {
-  border-right: 1px solid #141414;
+  border-right: 1px solid var(--border);
 }
 
 .inspector {
-  border-left: 1px solid #141414;
+  border-left: 1px solid var(--border);
 }
 
 .panel-section {
   padding: 16px;
-  border-bottom: 1px solid #141414;
+  border-bottom: 1px solid var(--border);
 }
 
 .rail h2 {
   font-size: 12px;
-  line-height: 1;
-  font-weight: 900;
-  text-transform: uppercase;
+  line-height: 1.2;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .panel-title {
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+}
+
+.panel-title h2 {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .tool-grid,
 .preset-row {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .tool-grid {
@@ -175,20 +194,20 @@ textarea:focus-visible {
 
 .preset-row {
   grid-template-columns: 1fr;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 label,
 .control-stack {
   display: grid;
-  gap: 7px;
+  gap: 6px;
 }
 
 label {
-  margin-top: 12px;
-  color: #4b4740;
-  font-weight: 800;
-  text-transform: uppercase;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 12px;
 }
 
 input,
@@ -196,19 +215,19 @@ select,
 textarea {
   width: 100%;
   box-sizing: border-box;
-  padding: 9px 10px;
-  text-transform: none;
+  padding: 7px 10px;
+  font-size: 13px;
   resize: vertical;
 }
 
 input[type='color'] {
-  height: 40px;
+  height: 36px;
   padding: 4px;
 }
 
 input[type='range'] {
   padding: 0;
-  accent-color: #e11d48;
+  accent-color: var(--text);
 }
 
 .split-inputs {
@@ -225,16 +244,17 @@ input[type='range'] {
 .saved-list,
 .asset-list {
   display: grid;
-  gap: 7px;
-  margin-top: 10px;
+  gap: 4px;
+  margin-top: 8px;
 }
 
 .layer-row,
 .saved-list button {
   width: 100%;
-  min-height: 42px;
+  min-height: 36px;
   justify-content: space-between;
   text-align: left;
+  font-weight: 400;
 }
 
 .layer-row span,
@@ -246,41 +266,51 @@ input[type='range'] {
 }
 
 .layer-row.active {
-  background: #111111;
-  color: #ffffff;
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .layer-row.active small {
-  color: #f3d7df;
+  color: var(--text-muted);
 }
 
 .canvas-stage {
   min-width: 0;
   display: grid;
-  grid-template-rows: 42px minmax(0, 1fr);
-  background: #d8d0c1;
+  grid-template-rows: 40px minmax(0, 1fr);
+  background: var(--bg-subtle);
 }
 
 .stage-toolbar {
   justify-content: space-between;
   gap: 16px;
-  padding: 0 14px;
-  border-bottom: 1px solid #141414;
-  background: #eee9df;
-  font-weight: 800;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.stage-toolbar span:last-child {
+  color: var(--text-faint);
 }
 
 .canvas-scroll {
   overflow: auto;
   display: grid;
   place-items: center;
-  padding: 28px;
+  padding: 32px;
 }
 
 .canvas-shell {
   width: var(--poster-display-width);
   height: var(--poster-display-height);
-  box-shadow: 0 18px 36px rgb(0 0 0 / 0.22);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
   background: #f6f1e6;
 }
 
@@ -295,7 +325,8 @@ input[type='range'] {
 }
 
 .empty {
-  margin-top: 10px;
+  margin-top: 8px;
+  font-size: 13px;
 }
 
 .slider-label {
@@ -305,12 +336,13 @@ input[type='range'] {
 }
 
 .slider-label strong {
-  color: #111111;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
 
 .button-row {
-  gap: 8px;
+  gap: 6px;
 }
 
 .button-row button {
@@ -323,28 +355,31 @@ input[type='range'] {
 }
 
 .asset-list li {
-  padding: 8px 10px;
-  border: 1px solid #1f1f1f;
-  background: #fbfaf6;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .export-box {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid #1f1f1f;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .export-box h3 {
   margin: 0;
   font-size: 12px;
-  line-height: 1;
-  font-weight: 900;
-  text-transform: uppercase;
+  line-height: 1.2;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .export-button {
   width: 100%;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .visually-hidden {
@@ -368,11 +403,11 @@ input[type='range'] {
 @media (max-width: 920px) {
   .topbar {
     height: auto;
-    min-height: 72px;
+    min-height: 56px;
     align-items: flex-start;
     flex-direction: column;
     gap: 12px;
-    padding: 14px;
+    padding: 14px 16px;
   }
 
   .top-actions {
@@ -396,15 +431,15 @@ input[type='range'] {
   }
 
   .left-rail {
-    border-bottom: 1px solid #141414;
+    border-bottom: 1px solid var(--border);
   }
 
   .inspector {
-    border-top: 1px solid #141414;
+    border-top: 1px solid var(--border);
   }
 
   .canvas-scroll {
     min-height: 560px;
-    padding: 18px;
+    padding: 20px;
   }
 }
