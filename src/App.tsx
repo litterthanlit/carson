@@ -89,6 +89,10 @@ const FONT_STACKS = [
 const BLEND_MODES = ['source-over', 'multiply', 'screen', 'overlay', 'difference', 'exclusion']
 const ACCENTS = ['#05b6d4', '#e11d48', '#a3e635']
 
+const formatPercent = (value: number) => `${Math.round(value)}%`
+const formatDegrees = (value: number) => `${Math.round(value)}°`
+const formatLineHeight = (value: number) => (value / 100).toFixed(2)
+
 function App() {
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const canvasRef = useRef<Canvas | null>(null)
@@ -129,8 +133,8 @@ function App() {
       height: poster.height,
       backgroundColor: '#f6f1e6',
       preserveObjectStacking: true,
-      selectionColor: 'rgba(0, 112, 243, 0.08)',
-      selectionBorderColor: '#0070f3',
+      selectionColor: 'rgba(24, 24, 27, 0.06)',
+      selectionBorderColor: '#52525b',
       selectionLineWidth: 1,
     })
 
@@ -282,9 +286,9 @@ function App() {
       id: nextId(kind),
       name,
       kind,
-      cornerColor: '#0070f3',
+      cornerColor: '#52525b',
       cornerStrokeColor: '#ffffff',
-      borderColor: '#0070f3',
+      borderColor: '#52525b',
       transparentCorners: false,
       cornerStyle: 'rect',
     } as Partial<FabricObject>)
@@ -1390,9 +1394,9 @@ function App() {
 
   return (
     <main className="editor-shell">
-      <header className="topbar">
+      <header className="topbar glass-bar">
         <div className="brand">
-          <span className="brand-mark">C</span>
+          <span className="brand-mark" aria-hidden="true">C</span>
           <div>
             <h1>Carson</h1>
             <p>Poster editor</p>
@@ -1417,7 +1421,7 @@ function App() {
       </header>
 
       <section className="workspace">
-        <aside className="rail left-rail" aria-label="Tools and layers">
+        <aside className="rail left-rail glass-panel" aria-label="Tools and layers">
           <div className="panel-section">
             <h2>Tools</h2>
             <div className="tool-grid">
@@ -1719,8 +1723,10 @@ function App() {
 
           <div className="panel-section layer-section">
             <div className="panel-title">
-              <h2>Layers</h2>
-              <Layers size={17} />
+              <h2>
+                Layers <span className="section-count">[{layers.length}]</span>
+              </h2>
+              <Layers size={15} />
             </div>
             <div className="layer-list">
               {layers.map((layer) => (
@@ -1739,7 +1745,7 @@ function App() {
         </aside>
 
         <section className="canvas-stage" aria-label="Poster canvas">
-          <div className="stage-toolbar">
+          <div className="stage-toolbar glass-bar">
             <span>{poster.name}</span>
             <span>
               {poster.width} x {poster.height}px
@@ -1763,7 +1769,7 @@ function App() {
           </div>
         </section>
 
-        <aside className="rail inspector" aria-label="Inspector">
+        <aside className="rail inspector glass-panel" aria-label="Inspector">
           <div className="panel-section">
             <h2>Project</h2>
             <label>
@@ -1806,6 +1812,7 @@ function App() {
                   value={exportQuality}
                   min={40}
                   max={100}
+                  format={formatPercent}
                   onChange={setExportQuality}
                   onCommit={() => setStatus('Updated export quality')}
                 />
@@ -1832,12 +1839,19 @@ function App() {
           <div className="panel-section">
             <div className="panel-title">
               <h2>Selection</h2>
-              <AlignLeft size={17} />
+              <AlignLeft size={15} />
             </div>
             {!selected ? (
               <p className="empty">Select a layer to edit it.</p>
             ) : (
               <div className="control-stack">
+                <div className="property-heading">
+                  <p className="property-kicker">Properties</p>
+                  <div className="property-title-row">
+                    <h3>{selected.name}</h3>
+                    <span className="property-badge">{selected.kind}</span>
+                  </div>
+                </div>
                 <label>
                   Name
                   <input
@@ -1894,6 +1908,7 @@ function App() {
                       value={Math.round((selected.lineHeight ?? 1) * 100)}
                       min={50}
                       max={180}
+                      format={formatLineHeight}
                       onChange={(value) => updateActive({ lineHeight: value / 100 })}
                       onCommit={() => finalizeActive('Changed line height')}
                     />
@@ -1925,6 +1940,7 @@ function App() {
                   value={selected.angle}
                   min={-180}
                   max={180}
+                  format={formatDegrees}
                   onChange={(value) => updateActive({ angle: value })}
                   onCommit={() => finalizeActive('Rotated layer')}
                 />
@@ -1933,6 +1949,7 @@ function App() {
                   value={Math.round(selected.opacity * 100)}
                   min={5}
                   max={100}
+                  format={formatPercent}
                   onChange={(value) => updateActive({ opacity: value / 100 })}
                   onCommit={() => finalizeActive('Changed opacity')}
                 />
@@ -1941,6 +1958,7 @@ function App() {
                   value={Math.round(selected.scaleX * 100)}
                   min={20}
                   max={320}
+                  format={formatPercent}
                   onChange={(value) => updateActive({ scaleX: value / 100 })}
                   onCommit={() => finalizeActive('Stretched layer')}
                 />
@@ -1949,6 +1967,7 @@ function App() {
                   value={Math.round(selected.scaleY * 100)}
                   min={20}
                   max={320}
+                  format={formatPercent}
                   onChange={(value) => updateActive({ scaleY: value / 100 })}
                   onCommit={() => finalizeActive('Stretched layer')}
                 />
@@ -1957,6 +1976,7 @@ function App() {
                   value={selected.skewX ?? 0}
                   min={-45}
                   max={45}
+                  format={formatDegrees}
                   onChange={(value) => updateActive({ skewX: value })}
                   onCommit={() => finalizeActive('Skewed layer')}
                 />
@@ -2036,6 +2056,7 @@ function Slider({
   max,
   onChange,
   onCommit,
+  format,
 }: {
   label: string
   value: number
@@ -2043,14 +2064,18 @@ function Slider({
   max: number
   onChange: (value: number) => void
   onCommit: () => void
+  format?: (value: number) => string
 }) {
+  const display = format ? format(value) : String(Math.round(value))
+
   return (
-    <label>
-      <span className="slider-label">
-        {label}
-        <strong>{Math.round(value)}</strong>
-      </span>
+    <div className="dial">
+      <div className="dial-header">
+        <span className="dial-label">{label}</span>
+        <span className="dial-value">{display}</span>
+      </div>
       <input
+        className="dial-input"
         type="range"
         min={min}
         max={max}
@@ -2059,7 +2084,7 @@ function Slider({
         onMouseUp={onCommit}
         onTouchEnd={onCommit}
       />
-    </label>
+    </div>
   )
 }
 
