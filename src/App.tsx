@@ -3,10 +3,17 @@ import {
   AlignLeft,
   BringToFront,
   Crop,
+  Dices,
   Download,
+  Eye,
+  EyeOff,
   FlipHorizontal,
   ImagePlus,
   Layers,
+  Lock,
+  LockOpen,
+  Maximize,
+  Pipette,
   ScanLine,
   Redo2,
   Save,
@@ -18,8 +25,10 @@ import {
   Trash2,
   Type,
   Undo2,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
-import { Canvas, FabricObject, Image as FabricImage, Rect, Textbox, filters } from 'fabric'
+import { ActiveSelection, Canvas, FabricObject, Image as FabricImage, Rect, Textbox, filters } from 'fabric'
 import {
   applyPosterPreset,
   createAccidentTransforms,
@@ -41,17 +50,25 @@ import {
   type PosterPresetId,
   scatterLayers,
 } from './lib/editorModel'
+import { createSeededRandom, newSeed } from './lib/random'
+import { computeSnap } from './lib/snapping'
+import {
+  clearAutosave,
+  deleteProject,
+  findProjectByName,
+  listProjects,
+  loadAutosave,
+  migrateLegacyProjects,
+  newProjectId,
+  saveAutosave,
+  saveProject as persistProject,
+  type StoredProject,
+} from './lib/storage'
 import './App.css'
 
 type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
 type ExportFormat = 'png' | 'jpeg'
 type ExportBackground = 'paper' | 'white' | 'transparent'
-type SavedProject = {
-  name: string
-  savedAt: string
-  preset: PosterPreset
-  canvas: Record<string, unknown>
-}
 type SelectedState = {
   id: string
   kind: LayerKind
@@ -62,6 +79,8 @@ type SelectedState = {
   opacity: number
   scaleX: number
   scaleY: number
+  visible: boolean
+  locked: boolean
   fontFamily?: string
   fontSize?: number
   fontWeight?: string | number
@@ -73,9 +92,22 @@ type SelectedState = {
   skewY?: number
   blendMode?: string
 }
+type ChaosRun = {
+  label: string
+  seed: number
+  targetIds: string[]
+  perform: (seed: number) => void | Promise<void>
+}
+type StyleBaseline = {
+  left: number
+  top: number
+  angle: number
+  opacity: number
+  fill: string | undefined
+  globalCompositeOperation: string
+}
 
-const STORAGE_KEY = 'carson.poster.projects.v1'
-const HISTORY_PROPS = ['id', 'name', 'kind'] as const
+const HISTORY_PROPS = ['id', 'name', 'kind', 'selectable', 'evented'] as const
 const FONT_STACKS = [
   'Arial Black',
   'Impact',
@@ -86,12 +118,24 @@ const FONT_STACKS = [
   'Courier New',
   'Verdana',
 ]
-const BLEND_MODES = ['source-over', 'multiply', 'screen', 'overlay', 'difference', 'exclusion']
+const BLEND_MODES: Array<{ value: string; label: string }> = [
+  { value: 'source-over', label: 'Normal' },
+  { value: 'multiply', label: 'Multiply' },
+  { value: 'screen', label: 'Screen' },
+  { value: 'overlay', label: 'Overlay' },
+  { value: 'difference', label: 'Difference' },
+  { value: 'exclusion', label: 'Exclusion' },
+]
 const ACCENTS = ['#05b6d4', '#e11d48', '#a3e635']
+const ZOOM_LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8]
+const SNAP_SCREEN_THRESHOLD = 6
 
 const formatPercent = (value: number) => `${Math.round(value)}%`
 const formatDegrees = (value: number) => `${Math.round(value)}°`
 const formatLineHeight = (value: number) => (value / 100).toFixed(2)
+
+type EyeDropperResult = { sRGBHex: string }
+type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 
 function App() {
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
@@ -101,14 +145,25 @@ function App() {
   const restoringRef = useRef(false)
   const layerIdRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const displayScaleRef = useRef(1)
+  const guidesRef = useRef<{ v: number[]; h: number[] }>({ v: [], h: [] })
+  const lastChaosRef = useRef<ChaosRun | null>(null)
+  const autosaveTimerRef = useRef<number | null>(null)
+  const nudgeTimerRef = useRef<number | null>(null)
+  const posterInitRef = useRef(true)
+  const spaceDownRef = useRef(false)
+  const panDragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
+  const styleBaselineRef = useRef<Map<string, StyleBaseline>>(new Map())
 
   const [poster, setPoster] = useState<PosterPreset>(() => applyPosterPreset('a3'))
   const [presetId, setPresetId] = useState<PosterPresetId>('a3')
   const [customSize, setCustomSize] = useState({ width: 1200, height: 1600 })
   const [selected, setSelected] = useState<SelectedState | null>(null)
   const [layers, setLayers] = useState<SelectedState[]>([])
-  const [savedProjects, setSavedProjects] = useState<SavedProject[]>(() => readProjects())
+  const [savedProjects, setSavedProjects] = useState<StoredProject[]>([])
   const [projectName, setProjectName] = useState('Untitled poster')
+  const [projectId, setProjectId] = useState<string>(() => newProjectId())
   const [exportFormat, setExportFormat] = useState<ExportFormat>('png')
   const [exportScale, setExportScale] = useState(2)
   const [exportBackground, setExportBackground] = useState<ExportBackground>('paper')
@@ -120,10 +175,22 @@ function App() {
   const [decayAmount, setDecayAmount] = useState(55)
   const [assets, setAssets] = useState<string[]>([])
   const [status, setStatus] = useState('Ready')
+  const [zoom, setZoom] = useState<number | null>(null)
+  const [isPanMode, setIsPanMode] = useState(false)
+  const [lastChaos, setLastChaos] = useState<{ label: string; seed: number } | null>(null)
+  const [recentColors, setRecentColors] = useState<string[]>([])
+  const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null)
+  const [dragLayerId, setDragLayerId] = useState<string | null>(null)
 
-  const displayScale = useMemo(() => {
+  const fitScale = useMemo(() => {
     return Math.min(1, 660 / poster.width, 780 / poster.height)
   }, [poster.height, poster.width])
+  const displayScale = zoom ?? fitScale
+  displayScaleRef.current = displayScale
+
+  // Keep latest values reachable from stable event listeners.
+  const liveRef = useRef({ poster, projectName, projectId, displayScale, fitScale, zoom })
+  liveRef.current = { poster, projectName, projectId, displayScale, fitScale, zoom }
 
   useEffect(() => {
     if (!canvasEl.current) return
@@ -142,21 +209,45 @@ function App() {
     seedPoster(canvas, poster)
     registerCanvasEvents(canvas)
     commitHistory('Started a new poster')
+    void initializeStorage()
 
     return () => {
       canvas.dispose()
       canvasRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
+    // Fix: previously this also ran on mount, double-committing history.
+    if (posterInitRef.current) {
+      posterInitRef.current = false
+      return
+    }
     const canvas = canvasRef.current
     if (!canvas) return
     canvas.setDimensions({ width: poster.width, height: poster.height })
     canvas.backgroundColor = '#f6f1e6'
     canvas.requestRenderAll()
     commitHistory('Changed poster size')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poster])
+
+  async function initializeStorage() {
+    try {
+      const migrated = await migrateLegacyProjects()
+      const projects = await listProjects()
+      setSavedProjects(projects)
+      if (migrated > 0) setStatus(`Migrated ${migrated} saved poster${migrated === 1 ? '' : 's'} to durable storage`)
+      const autosaved = await loadAutosave()
+      if (autosaved && window.confirm(`Restore autosaved session “${autosaved.name}”?`)) {
+        await loadProject(autosaved, { keepId: false })
+        setStatus('Restored autosaved session')
+      }
+    } catch {
+      setStatus('Storage unavailable — saves are disabled in this browser context')
+    }
+  }
 
   function registerCanvasEvents(canvas: Canvas) {
     const sync = () => {
@@ -170,6 +261,274 @@ function App() {
     canvas.on('object:modified', () => commitHistory('Changed layer'))
     canvas.on('object:added', syncLayers)
     canvas.on('object:removed', syncLayers)
+
+    // Snapping v1: canvas edges, centers, and object-to-object. Hold Cmd/Ctrl to suspend.
+    canvas.on('object:moving', (event) => {
+      const target = event.target
+      guidesRef.current = { v: [], h: [] }
+      if (!target) return
+      const pointerEvent = event.e as MouseEvent | TouchEvent | undefined
+      const suspended = pointerEvent && 'metaKey' in pointerEvent && (pointerEvent.metaKey || pointerEvent.ctrlKey)
+      if (suspended) {
+        canvas.requestRenderAll()
+        return
+      }
+      const bounds = target.getBoundingRect()
+      const others = canvas
+        .getObjects()
+        .filter((object) => object !== target && object.visible !== false && !canvas.getActiveObjects().includes(object))
+        .map((object) => object.getBoundingRect())
+      const threshold = SNAP_SCREEN_THRESHOLD / displayScaleRef.current
+      const snap = computeSnap(bounds, others, { width: canvas.getWidth(), height: canvas.getHeight() }, threshold)
+      if (snap.dx !== 0 || snap.dy !== 0) {
+        target.set({ left: (target.left ?? 0) + snap.dx, top: (target.top ?? 0) + snap.dy })
+        target.setCoords()
+      }
+      guidesRef.current = { v: snap.vGuides, h: snap.hGuides }
+      canvas.requestRenderAll()
+    })
+
+    canvas.on('mouse:up', () => {
+      if (guidesRef.current.v.length > 0 || guidesRef.current.h.length > 0) {
+        guidesRef.current = { v: [], h: [] }
+        canvas.requestRenderAll()
+      }
+    })
+
+    canvas.on('after:render', () => {
+      const { v, h } = guidesRef.current
+      if (v.length === 0 && h.length === 0) return
+      const ctx = canvas.contextTop
+      if (!ctx) return
+      canvas.clearContext(ctx)
+      ctx.save()
+      ctx.strokeStyle = '#e11d48'
+      ctx.lineWidth = 1 / displayScaleRef.current
+      ctx.setLineDash([6, 4])
+      for (const x of v) {
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, canvas.getHeight())
+        ctx.stroke()
+      }
+      for (const y of h) {
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(canvas.getWidth(), y)
+        ctx.stroke()
+      }
+      ctx.restore()
+    })
+  }
+
+  // Keyboard layer: full shortcut coverage. Stable listener reads handlers via ref.
+  const keyActionsRef = useRef<Record<string, () => void>>({})
+  keyActionsRef.current = {
+    undo: () => void undoAsync(),
+    redo,
+    save: () => void saveProjectAction(),
+    export: exportPoster,
+    duplicate: () => void duplicateSelected(),
+    delete: deleteSelected,
+    deselect: () => {
+      canvasRef.current?.discardActiveObject()
+      canvasRef.current?.requestRenderAll()
+      syncSelected()
+    },
+    addText,
+    addShape,
+    zoomFit: () => setZoom(null),
+    zoom100: () => setZoom(1),
+    zoomIn: () => stepZoom(1),
+    zoomOut: () => stepZoom(-1),
+    reroll: () => void rerollLast(),
+  }
+
+  useEffect(() => {
+    const isTypingContext = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null
+      if (element?.closest?.('input, textarea, select, [contenteditable="true"]')) return true
+      const active = canvasRef.current?.getActiveObject() as (FabricObject & { isEditing?: boolean }) | null
+      return Boolean(active?.isEditing)
+    }
+
+    const nudgeSelection = (dx: number, dy: number) => {
+      const canvas = canvasRef.current
+      const object = canvas?.getActiveObject()
+      if (!canvas || !object) return false
+      object.set({ left: (object.left ?? 0) + dx, top: (object.top ?? 0) + dy })
+      object.setCoords()
+      canvas.requestRenderAll()
+      syncSelected()
+      if (nudgeTimerRef.current) window.clearTimeout(nudgeTimerRef.current)
+      nudgeTimerRef.current = window.setTimeout(() => commitHistory('Nudged layer'), 350)
+      return true
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === ' ' && !isTypingContext(event.target)) {
+        if (!spaceDownRef.current) {
+          spaceDownRef.current = true
+          setIsPanMode(true)
+          const canvas = canvasRef.current
+          if (canvas) {
+            canvas.selection = false
+            canvas.skipTargetFind = true
+          }
+        }
+        event.preventDefault()
+        return
+      }
+
+      const actions = keyActionsRef.current
+      const meta = event.metaKey || event.ctrlKey
+
+      if (meta) {
+        const key = event.key.toLowerCase()
+        if (key === 'z') {
+          event.preventDefault()
+          if (event.shiftKey) actions.redo()
+          else actions.undo()
+        } else if (key === 'y') {
+          event.preventDefault()
+          actions.redo()
+        } else if (key === 's') {
+          event.preventDefault()
+          actions.save()
+        } else if (key === 'e') {
+          event.preventDefault()
+          actions.export()
+        } else if (key === 'd' && !isTypingContext(event.target)) {
+          event.preventDefault()
+          actions.duplicate()
+        } else if (key === '0') {
+          event.preventDefault()
+          actions.zoomFit()
+        } else if (key === '1') {
+          event.preventDefault()
+          actions.zoom100()
+        } else if (key === '=' || key === '+') {
+          event.preventDefault()
+          actions.zoomIn()
+        } else if (key === '-') {
+          event.preventDefault()
+          actions.zoomOut()
+        }
+        return
+      }
+
+      if (isTypingContext(event.target)) return
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        actions.delete()
+      } else if (event.key === 'Escape') {
+        actions.deselect()
+      } else if (event.key === 'ArrowLeft') {
+        if (nudgeSelection(event.shiftKey ? -10 : -1, 0)) event.preventDefault()
+      } else if (event.key === 'ArrowRight') {
+        if (nudgeSelection(event.shiftKey ? 10 : 1, 0)) event.preventDefault()
+      } else if (event.key === 'ArrowUp') {
+        if (nudgeSelection(0, event.shiftKey ? -10 : -1)) event.preventDefault()
+      } else if (event.key === 'ArrowDown') {
+        if (nudgeSelection(0, event.shiftKey ? 10 : 1)) event.preventDefault()
+      } else if (event.key.toLowerCase() === 't') {
+        actions.addText()
+      } else if (event.key.toLowerCase() === 'b') {
+        actions.addShape()
+      } else if (event.key.toLowerCase() === 'r') {
+        actions.reroll()
+      }
+    }
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === ' ') {
+        spaceDownRef.current = false
+        panDragRef.current = null
+        setIsPanMode(false)
+        const canvas = canvasRef.current
+        if (canvas) {
+          canvas.selection = true
+          canvas.skipTargetFind = false
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Cmd/Ctrl + wheel zoom (needs a non-passive native listener).
+  useEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    const onWheel = (event: WheelEvent) => {
+      if (!event.metaKey && !event.ctrlKey) return
+      event.preventDefault()
+      const current = liveRef.current.zoom ?? liveRef.current.fitScale
+      const next = clampZoom(current * Math.exp(-event.deltaY * 0.0015))
+      setZoom(next)
+    }
+    scroller.addEventListener('wheel', onWheel, { passive: false })
+    return () => scroller.removeEventListener('wheel', onWheel)
+  }, [])
+
+  function clampZoom(value: number) {
+    return Math.min(8, Math.max(0.1, value))
+  }
+
+  function stepZoom(direction: 1 | -1) {
+    const current = liveRef.current.zoom ?? liveRef.current.fitScale
+    const next =
+      direction === 1
+        ? ZOOM_LEVELS.find((level) => level > current + 0.001)
+        : [...ZOOM_LEVELS].reverse().find((level) => level < current - 0.001)
+    setZoom(clampZoom(next ?? current))
+  }
+
+  function handlePanMouseDown(event: React.MouseEvent) {
+    if (!spaceDownRef.current || !scrollRef.current) return
+    event.preventDefault()
+    panDragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      left: scrollRef.current.scrollLeft,
+      top: scrollRef.current.scrollTop,
+    }
+  }
+
+  function handlePanMouseMove(event: React.MouseEvent) {
+    const drag = panDragRef.current
+    if (!drag || !scrollRef.current) return
+    scrollRef.current.scrollLeft = drag.left - (event.clientX - drag.x)
+    scrollRef.current.scrollTop = drag.top - (event.clientY - drag.y)
+  }
+
+  function handlePanMouseUp() {
+    panDragRef.current = null
+  }
+
+  function nextId(kind: LayerKind) {
+    layerIdRef.current += 1
+    return `${kind}-${layerIdRef.current}`
+  }
+
+  function tagObject(object: FabricObject, kind: LayerKind, name: string) {
+    object.set({
+      id: nextId(kind),
+      name,
+      kind,
+      cornerColor: '#52525b',
+      cornerStrokeColor: '#ffffff',
+      borderColor: '#52525b',
+      transparentCorners: false,
+      cornerStyle: 'rect',
+    } as Partial<FabricObject>)
   }
 
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
@@ -272,30 +631,47 @@ function App() {
 
     canvas.add(headline, cyanScrap, bar, deck, limeRule, labelBand, label, sideType)
     canvas.setActiveObject(headline)
+    captureStyleBaseline()
     syncSelected()
     syncLayers()
   }
 
-  function nextId(kind: LayerKind) {
-    layerIdRef.current += 1
-    return `${kind}-${layerIdRef.current}`
-  }
-
-  function tagObject(object: FabricObject, kind: LayerKind, name: string) {
-    object.set({
-      id: nextId(kind),
-      name,
-      kind,
-      cornerColor: '#52525b',
-      cornerStrokeColor: '#ffffff',
-      borderColor: '#52525b',
-      transparentCorners: false,
-      cornerStyle: 'rect',
-    } as Partial<FabricObject>)
-  }
-
   function activeObject() {
     return canvasRef.current?.getActiveObject() ?? null
+  }
+
+  function captureStyleBaseline() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const map = new Map<string, StyleBaseline>()
+    canvas.getObjects().forEach((object) => {
+      const id = String(readObjectProp(object, 'id') ?? '')
+      if (!id) return
+      map.set(id, {
+        left: object.left ?? 0,
+        top: object.top ?? 0,
+        angle: object.angle ?? 0,
+        opacity: object.opacity ?? 1,
+        fill: readObjectProp(object, 'fill') as string | undefined,
+        globalCompositeOperation: String(readObjectProp(object, 'globalCompositeOperation') ?? 'source-over'),
+      })
+    })
+    styleBaselineRef.current = map
+  }
+
+  function scheduleAutosave() {
+    if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = window.setTimeout(() => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const { poster: currentPoster, projectName: currentName } = liveRef.current
+      void saveAutosave({
+        name: currentName.trim() || 'Untitled poster',
+        savedAt: new Date().toISOString(),
+        preset: currentPoster,
+        canvas: canvas.toObject(HISTORY_PROPS as unknown as string[]),
+      }).catch(() => setStatus('Autosave failed — storage may be full'))
+    }, 2500)
   }
 
   function commitHistory(message: string) {
@@ -306,6 +682,8 @@ function App() {
     if (history.at(-1) !== snapshot) {
       historyRef.current = [...history.slice(-39), snapshot]
       redoRef.current = []
+      scheduleAutosave()
+      if (!message.endsWith(' preset')) captureStyleBaseline()
     }
     syncSelected()
     syncLayers()
@@ -319,20 +697,21 @@ function App() {
     await canvas.loadFromJSON(JSON.parse(snapshot))
     restoringRef.current = false
     canvas.requestRenderAll()
+    captureStyleBaseline()
     syncSelected()
     syncLayers()
     setStatus(message)
   }
 
-  function undo() {
+  function undoAsync() {
     const history = historyRef.current
-    if (history.length < 2) return
+    if (history.length < 2) return Promise.resolve()
     const current = history.at(-1)
     const previous = history.at(-2)
-    if (!current || !previous) return
+    if (!current || !previous) return Promise.resolve()
     redoRef.current = [current, ...redoRef.current]
     historyRef.current = history.slice(0, -1)
-    void restoreSnapshot(previous, 'Undo')
+    return restoreSnapshot(previous, 'Undo')
   }
 
   function redo() {
@@ -365,6 +744,8 @@ function App() {
       opacity: round(object.opacity ?? 1),
       scaleX: round(object.scaleX ?? 1),
       scaleY: round(object.scaleY ?? 1),
+      visible: object.visible !== false,
+      locked: object.selectable === false,
       fontFamily: readObjectProp(object, 'fontFamily') as string | undefined,
       fontSize: readObjectProp(object, 'fontSize') as number | undefined,
       fontWeight: readObjectProp(object, 'fontWeight') as string | number | undefined,
@@ -393,6 +774,43 @@ function App() {
     activeObject()?.setCoords()
     canvasRef.current?.requestRenderAll()
     commitHistory(message)
+  }
+
+  function findObjectById(id: string) {
+    return canvasRef.current?.getObjects().find((item) => readObjectProp(item, 'id') === id) ?? null
+  }
+
+  function trackChaos(label: string, seed: number, targetIds: string[], perform: (seed: number) => void | Promise<void>) {
+    lastChaosRef.current = { label, seed, targetIds, perform }
+    setLastChaos({ label, seed })
+  }
+
+  async function rerollLast() {
+    const last = lastChaosRef.current
+    const canvas = canvasRef.current
+    if (!last || !canvas) return
+    await undoAsync()
+    if (last.targetIds.length > 0) {
+      const objects = canvas
+        .getObjects()
+        .filter((object) => last.targetIds.includes(String(readObjectProp(object, 'id') ?? '')))
+      if (objects.length === 0) {
+        setStatus('Could not re-roll — the original layer is gone')
+        return
+      }
+      if (objects.length === 1) canvas.setActiveObject(objects[0])
+      else canvas.setActiveObject(new ActiveSelection(objects, { canvas }))
+      canvas.requestRenderAll()
+    }
+    await last.perform(newSeed())
+  }
+
+  function selectedTargetIds() {
+    const canvas = canvasRef.current
+    const active = activeObject()
+    if (!canvas || !active) return []
+    const objects = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
+    return objects.map((object) => String(readObjectProp(object, 'id') ?? ''))
   }
 
   function addText() {
@@ -452,9 +870,10 @@ function App() {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object) return
-    canvas.remove(object)
+    const objects = object.type === 'activeselection' ? canvas.getActiveObjects() : [object]
+    objects.forEach((item) => canvas.remove(item))
     canvas.discardActiveObject()
-    commitHistory('Deleted layer')
+    commitHistory(objects.length > 1 ? `Deleted ${objects.length} layers` : 'Deleted layer')
   }
 
   function moveLayer(direction: 'front' | 'back') {
@@ -468,17 +887,55 @@ function App() {
 
   function selectLayer(id: string) {
     const canvas = canvasRef.current
-    if (!canvas) return
-    const object = canvas.getObjects().find((item) => readObjectProp(item, 'id') === id)
-    if (!object) return
+    const object = findObjectById(id)
+    if (!canvas || !object) return
     canvas.setActiveObject(object)
     canvas.requestRenderAll()
     syncSelected()
   }
 
-  function handlePresetChange(nextId: PosterPresetId) {
-    setPresetId(nextId)
-    setPoster(applyPosterPreset(nextId, customSize))
+  function toggleLayerVisibility(id: string) {
+    const object = findObjectById(id)
+    if (!object) return
+    object.set({ visible: object.visible === false })
+    canvasRef.current?.requestRenderAll()
+    commitHistory(object.visible === false ? 'Hid layer' : 'Showed layer')
+  }
+
+  function toggleLayerLock(id: string) {
+    const canvas = canvasRef.current
+    const object = findObjectById(id)
+    if (!canvas || !object) return
+    const locking = object.selectable !== false
+    object.set({ selectable: !locking, evented: !locking })
+    if (locking && canvas.getActiveObject() === object) {
+      canvas.discardActiveObject()
+    }
+    canvas.requestRenderAll()
+    commitHistory(locking ? 'Locked layer' : 'Unlocked layer')
+  }
+
+  function renameLayer(id: string, name: string) {
+    const object = findObjectById(id)
+    if (!object) return
+    object.set({ name } as Partial<FabricObject>)
+    commitHistory('Renamed layer')
+  }
+
+  function reorderLayer(draggedId: string, targetId: string) {
+    const canvas = canvasRef.current
+    const dragged = findObjectById(draggedId)
+    const target = findObjectById(targetId)
+    if (!canvas || !dragged || !target || dragged === target) return
+    const targetIndex = canvas.getObjects().indexOf(target)
+    canvas.moveObjectTo(dragged, targetIndex)
+    canvas.requestRenderAll()
+    commitHistory('Reordered layers')
+  }
+
+  function handlePresetChange(nextPresetId: PosterPresetId) {
+    setPresetId(nextPresetId)
+    setPoster(applyPosterPreset(nextPresetId, customSize))
   }
 
   function applyCustomSize(nextSize = customSize) {
@@ -514,25 +971,39 @@ function App() {
     if (!canvas || !object || object.type !== 'image') return
     const image = object as FabricImage
 
-    const effectMap = {
-      grayscale: [new filters.Grayscale()],
-      contrast: [new filters.Contrast({ contrast: 0.38 })],
-      threshold: [new filters.BlackWhite()],
-      blur: [new filters.Blur({ blur: 0.18 })],
-      noise: [new filters.Noise({ noise: 120 })],
-      clear: [],
+    if (effect === 'clear') {
+      image.filters = []
+      image.applyFilters()
+      canvas.requestRenderAll()
+      commitHistory('Cleared image effects')
+      return
     }
 
-    image.filters = effectMap[effect]
+    // Fix: effects now stack (toggle on/off) instead of silently replacing each other.
+    const factories: Record<string, { type: string; create: () => filters.BaseFilter<string, Record<string, unknown>> }> = {
+      grayscale: { type: 'Grayscale', create: () => new filters.Grayscale() },
+      contrast: { type: 'Contrast', create: () => new filters.Contrast({ contrast: 0.38 }) },
+      threshold: { type: 'BlackWhite', create: () => new filters.BlackWhite() },
+      blur: { type: 'Blur', create: () => new filters.Blur({ blur: 0.18 }) },
+      noise: { type: 'Noise', create: () => new filters.Noise({ noise: 120 }) },
+    }
+    const factory = factories[effect]
+    const existing = image.filters ?? []
+    const already = existing.some((item) => item?.type === factory.type)
+    image.filters = already
+      ? existing.filter((item) => item?.type !== factory.type)
+      : [...existing, factory.create()]
     image.applyFilters()
     canvas.requestRenderAll()
-    commitHistory(`Applied ${effect} effect`)
+    commitHistory(already ? `Removed ${effect} effect` : `Added ${effect} effect`)
   }
 
-  async function applyLayerDecayToSelected() {
+  async function applyLayerDecayToSelected(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
+    const random = createSeededRandom(seed)
+    const targetIds = selectedTargetIds()
     const profile = getLayerDecayProfile(decayAmount)
     const bounds = object.getBoundingRect()
     const imageUrl = object.toDataURL({ format: 'png', multiplier: 1.35 })
@@ -547,7 +1018,7 @@ function App() {
     image.set({
       left: bounds.left,
       top: bounds.top,
-      angle: (object.angle ?? 0) + (Math.random() - 0.5) * profile.misregistration,
+      angle: (object.angle ?? 0) + (random() - 0.5) * profile.misregistration,
       opacity: profile.opacity,
       globalCompositeOperation: 'multiply',
     })
@@ -555,13 +1026,15 @@ function App() {
     canvas.remove(object)
     canvas.add(image)
     canvas.setActiveObject(image)
-    commitHistory('Applied layer decay')
+    trackChaos('Age selected', seed, targetIds, (next) => applyLayerDecayToSelected(next))
+    commitHistory(`Applied layer decay #${seed}`)
   }
 
-  function addLayerDecayMarks(kind: 'ink-loss' | 'fold' | 'all') {
+  function addLayerDecayMarks(kind: 'ink-loss' | 'fold' | 'all', seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object) return
+    const targetIds = selectedTargetIds()
     const bounds = object.getBoundingRect()
     const marks = createLayerDecayMarks(
       {
@@ -571,7 +1044,7 @@ function App() {
         width: bounds.width,
         height: bounds.height,
       },
-      { amount: decayAmount },
+      { amount: decayAmount, random: createSeededRandom(seed) },
     ).filter((mark) => kind === 'all' || mark.kind === kind)
 
     marks.forEach((mark) => {
@@ -589,7 +1062,8 @@ function App() {
       canvas.add(decayMark)
     })
 
-    commitHistory(kind === 'all' ? 'Added layer decay marks' : `Added ${kind} marks`)
+    trackChaos(`Decay marks (${kind})`, seed, targetIds, (next) => addLayerDecayMarks(kind, next))
+    commitHistory(`Added ${kind === 'all' ? 'layer decay' : kind} marks #${seed}`)
   }
 
   async function addLayerDecayOffset() {
@@ -630,13 +1104,15 @@ function App() {
       globalCompositeOperation: 'multiply',
     })
     canvas.requestRenderAll()
-    commitHistory('Applied cold dive image treatment')
+    commitHistory('Applied cold wash image treatment')
   }
 
-  async function applyXeroxToSelected() {
+  async function applyXeroxToSelected(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
+    const random = createSeededRandom(seed)
+    const targetIds = selectedTargetIds()
     const profile = getPrintScanProfile(xeroxGeneration)
     const bounds = object.getBoundingRect()
     const imageUrl = object.toDataURL({ format: 'png', multiplier: 1.45 })
@@ -652,7 +1128,7 @@ function App() {
     image.set({
       left: bounds.left,
       top: bounds.top,
-      angle: (object.angle ?? 0) + (Math.random() - 0.5) * profile.misregistration,
+      angle: (object.angle ?? 0) + (random() - 0.5) * profile.misregistration,
       opacity: profile.opacity,
       globalCompositeOperation: 'multiply',
     })
@@ -660,7 +1136,8 @@ function App() {
     canvas.remove(object)
     canvas.add(image)
     canvas.setActiveObject(image)
-    commitHistory(`Applied xerox generation ${profile.generation}`)
+    trackChaos('Xerox copy', seed, targetIds, (next) => applyXeroxToSelected(next))
+    commitHistory(`Applied xerox generation ${profile.generation} #${seed}`)
   }
 
   async function addMisprintDuplicate() {
@@ -690,7 +1167,7 @@ function App() {
     return active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
   }
 
-  function accidentTransforms(targets: FabricObject[]) {
+  function accidentTransforms(targets: FabricObject[], random: () => number) {
     return createAccidentTransforms(
       targets.map((object) => ({
         id: String(readObjectProp(object, 'id') ?? ''),
@@ -700,15 +1177,16 @@ function App() {
         scaleX: object.scaleX ?? 1,
         scaleY: object.scaleY ?? 1,
       })),
-      { intensity: accidentIntensity },
+      { intensity: accidentIntensity, random },
     )
   }
 
-  async function duplicateDriftAccident() {
+  async function duplicateDriftAccident(seed = newSeed()) {
     const canvas = canvasRef.current
     const targets = accidentTargets()
     if (!canvas || !targets) return
-    const transforms = accidentTransforms(targets)
+    const targetIds = selectedTargetIds()
+    const transforms = accidentTransforms(targets, createSeededRandom(seed))
 
     for (const [index, object] of targets.entries()) {
       const clone = await object.clone()
@@ -720,27 +1198,30 @@ function App() {
       canvas.add(clone)
     }
     canvas.requestRenderAll()
-    commitHistory('Added duplicate drift accident')
+    trackChaos('Duplicate drift', seed, targetIds, (next) => duplicateDriftAccident(next))
+    commitHistory(`Added duplicate drift accident #${seed}`)
   }
 
-  function nudgeLayoutAccident() {
+  function nudgeLayoutAccident(seed = newSeed()) {
     const canvas = canvasRef.current
     if (!canvas) return
     const targets = canvas.getObjects()
-    const transforms = accidentTransforms(targets)
+    const transforms = accidentTransforms(targets, createSeededRandom(seed))
 
     targets.forEach((object, index) => {
       object.set(transforms[index])
       object.setCoords()
     })
     canvas.requestRenderAll()
-    commitHistory('Nudged layout accident')
+    trackChaos('Nudge layout', seed, [], (next) => nudgeLayoutAccident(next))
+    commitHistory(`Nudged layout accident #${seed}`)
   }
 
-  async function badCropAccident() {
+  async function badCropAccident(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
+    const targetIds = selectedTargetIds()
     const bounds = object.getBoundingRect()
     const cropDirection = bounds.width > bounds.height ? 'vertical' : 'horizontal'
     const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
@@ -772,6 +1253,7 @@ function App() {
       canvas.add(fragment)
     }
     canvas.discardActiveObject()
+    trackChaos('Bad crop', seed, targetIds, (next) => badCropAccident(next))
     commitHistory('Applied bad crop accident')
   }
 
@@ -815,10 +1297,11 @@ function App() {
     commitHistory('Collided selected layers')
   }
 
-  function scatterSelected() {
+  function scatterSelected(seed = newSeed()) {
     const canvas = canvasRef.current
     const active = activeObject()
     if (!canvas || !active) return
+    const targetIds = selectedTargetIds()
     const targets = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
     const transforms = scatterLayers(
       targets.map((object) => ({
@@ -829,7 +1312,7 @@ function App() {
         scaleX: object.scaleX ?? 1,
         scaleY: object.scaleY ?? 1,
       })),
-      { distance: 46, rotation: 18, scale: 0.14 },
+      { distance: 46, rotation: 18, scale: 0.14, random: createSeededRandom(seed) },
     )
 
     targets.forEach((object, index) => {
@@ -837,7 +1320,8 @@ function App() {
       object.setCoords()
     })
     canvas.requestRenderAll()
-    commitHistory('Scattered selection')
+    trackChaos('Scatter', seed, targetIds, (next) => scatterSelected(next))
+    commitHistory(`Scattered selection #${seed}`)
   }
 
   async function sliceSelected(direction: 'horizontal' | 'vertical') {
@@ -876,10 +1360,11 @@ function App() {
     commitHistory(direction === 'horizontal' ? 'Sliced into strips' : 'Sliced into columns')
   }
 
-  async function aggressiveCropSelected(mode: 'close' | 'edge' | 'off-center') {
+  async function aggressiveCropSelected(mode: 'close' | 'edge' | 'off-center', seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
+    const targetIds = selectedTargetIds()
 
     const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
     const bounds = object.getBoundingRect()
@@ -891,7 +1376,7 @@ function App() {
         width: bounds.width,
         height: bounds.height,
       },
-      { mode },
+      { mode, random: createSeededRandom(seed) },
     )
     const [url] = await cropFragments(imageUrl, [frame])
     const crop = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
@@ -906,29 +1391,32 @@ function App() {
     canvas.remove(object)
     canvas.add(crop)
     canvas.setActiveObject(crop)
-    commitHistory(`Applied ${mode} crop`)
+    trackChaos(`${mode} crop`, seed, targetIds, (next) => aggressiveCropSelected(mode, next))
+    commitHistory(`Applied ${mode} crop #${seed}`)
   }
 
-  async function cropToPosterEdge() {
+  async function cropToPosterEdge(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object) return
-    await aggressiveCropSelected('edge')
+    const random = createSeededRandom(seed)
+    await aggressiveCropSelected('edge', seed)
     const cropped = activeObject()
     if (!cropped) return
     cropped.set({
-      left: Math.random() > 0.5 ? -poster.width * 0.08 : poster.width * 0.72,
-      top: Math.random() > 0.5 ? -poster.height * 0.04 : poster.height * 0.78,
+      left: random() > 0.5 ? -poster.width * 0.08 : poster.width * 0.72,
+      top: random() > 0.5 ? -poster.height * 0.04 : poster.height * 0.78,
     })
     cropped.setCoords()
     canvas.requestRenderAll()
-    commitHistory('Cropped layer to poster edge')
+    commitHistory(`Cropped layer to poster edge #${seed}`)
   }
 
-  function addTypeStrip() {
+  function addTypeStrip(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type !== 'textbox') return
+    const targetIds = selectedTargetIds()
     const text = String(readObjectProp(object, 'text') ?? 'TYPE STRIP')
     const bounds = object.getBoundingRect()
     const strips = createTypeStrips(
@@ -939,7 +1427,7 @@ function App() {
         top: bounds.top + bounds.height + 18,
         width: Math.max(bounds.width, poster.width * 0.52),
       },
-      { rows: 5, height: Math.max(18, poster.height * 0.018), gap: 4, jitter: 12 },
+      { rows: 5, height: Math.max(18, poster.height * 0.018), gap: 4, jitter: 12, random: createSeededRandom(seed) },
     )
 
     strips.forEach((strip, index) => {
@@ -970,13 +1458,15 @@ function App() {
       canvas.add(block, label)
     })
 
-    commitHistory('Added type strips')
+    trackChaos('Type strips', seed, targetIds, (next) => addTypeStrip(next))
+    commitHistory(`Added type strips #${seed}`)
   }
 
-  function breakSelectedType() {
+  function breakSelectedType(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type !== 'textbox') return
+    const targetIds = selectedTargetIds()
 
     const text = String(readObjectProp(object, 'text') ?? '')
     const glyphs = createExpressiveGlyphs(
@@ -988,7 +1478,7 @@ function App() {
         fontSize: Number(readObjectProp(object, 'fontSize') ?? 80),
         charSpacing: Number(readObjectProp(object, 'charSpacing') ?? 0),
       },
-      { intensity: typeIntensity, legibility: typeLegibility },
+      { intensity: typeIntensity, legibility: typeLegibility, random: createSeededRandom(seed) },
     )
     const fill = String(readObjectProp(object, 'fill') ?? '#111111')
     const fontFamily = String(readObjectProp(object, 'fontFamily') ?? 'Impact')
@@ -1016,7 +1506,8 @@ function App() {
     })
 
     canvas.discardActiveObject()
-    commitHistory('Broke type into expressive glyphs')
+    trackChaos('Break letters', seed, targetIds, (next) => breakSelectedType(next))
+    commitHistory(`Broke type into expressive glyphs #${seed}`)
   }
 
   async function cloneTypeAsTexture() {
@@ -1066,10 +1557,11 @@ function App() {
     commitHistory('Distressed selection')
   }
 
-  function addPhotocopyNoise() {
+  function addPhotocopyNoise(seed = newSeed()) {
     const canvas = canvasRef.current
     if (!canvas) return
-    const marks = createPhotocopyNoise(poster, { specks: 90, scratches: 18, scanlines: 9 })
+    const random = createSeededRandom(seed)
+    const marks = createPhotocopyNoise(poster, { specks: 90, scratches: 18, scanlines: 9, random })
 
     marks.forEach((mark) => {
       const object =
@@ -1081,7 +1573,7 @@ function App() {
               height: mark.size,
               fill: '#111111',
               opacity: mark.opacity,
-              angle: Math.random() * 45,
+              angle: random() * 45,
             })
           : new Rect({
               left: mark.left,
@@ -1097,13 +1589,14 @@ function App() {
       canvas.add(object)
     })
 
-    commitHistory('Added photocopy noise')
+    trackChaos('Photocopy noise', seed, [], (next) => addPhotocopyNoise(next))
+    commitHistory(`Added photocopy noise #${seed}`)
   }
 
-  function addPrintScanSurface() {
+  function addPrintScanSurface(seed = newSeed()) {
     const canvas = canvasRef.current
     if (!canvas) return
-    const artifacts = createPrintScanArtifacts(poster, { generation: xeroxGeneration })
+    const artifacts = createPrintScanArtifacts(poster, { generation: xeroxGeneration, random: createSeededRandom(seed) })
 
     artifacts.forEach((artifact) => {
       const object = new Rect({
@@ -1120,7 +1613,8 @@ function App() {
       canvas.add(object)
     })
 
-    commitHistory('Added print-scan surface')
+    trackChaos('Surface wear', seed, [], (next) => addPrintScanSurface(next))
+    commitHistory(`Added print-scan surface #${seed}`)
   }
 
   function addDiveTexture() {
@@ -1143,13 +1637,14 @@ function App() {
       canvas.add(object)
     })
 
-    commitHistory('Added diagonal dive texture')
+    commitHistory('Added diagonal texture')
   }
 
-  function addWhiteScrapes() {
+  function addWhiteScrapes(seed = newSeed()) {
     const canvas = canvasRef.current
     if (!canvas) return
-    const masks = createScrapeMasks(poster, { count: 7 })
+    const random = createSeededRandom(seed)
+    const masks = createScrapeMasks(poster, { count: 7, random })
 
     masks.forEach((mask, index) => {
       const scrape = new Rect({
@@ -1164,7 +1659,7 @@ function App() {
       tagObject(scrape, 'shape', `White scrape ${index + 1}`)
       canvas.add(scrape)
 
-      const chips = createPhotocopyNoise({ width: mask.width, height: mask.height }, { specks: 9, scratches: 2, scanlines: 0 })
+      const chips = createPhotocopyNoise({ width: mask.width, height: mask.height }, { specks: 9, scratches: 2, scanlines: 0, random })
       chips.forEach((chip) => {
         const chipObject = new Rect({
           left: mask.left + chip.left,
@@ -1181,7 +1676,8 @@ function App() {
       })
     })
 
-    commitHistory('Added white scrape masks')
+    trackChaos('White scrapes', seed, [], (next) => addWhiteScrapes(next))
+    commitHistory(`Added white scrape masks #${seed}`)
   }
 
   function addDiveRedType() {
@@ -1207,17 +1703,18 @@ function App() {
         angle: entry.angle,
         globalCompositeOperation: 'multiply',
       })
-      tagObject(text, 'text', `Dive red type ${index + 1}`)
+      tagObject(text, 'text', `Red echo type ${index + 1}`)
       canvas.add(text)
     })
 
-    commitHistory('Added dive red type')
+    commitHistory('Added red echo type')
   }
 
-  async function tearCollageSelected() {
+  async function tearCollageSelected(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
+    const targetIds = selectedTargetIds()
 
     const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
     const bounds = object.getBoundingRect()
@@ -1229,7 +1726,7 @@ function App() {
         width: bounds.width,
         height: bounds.height,
       },
-      { pieces: 7, gap: 32 },
+      { pieces: 7, gap: 32, random: createSeededRandom(seed) },
     )
 
     const cropped = await cropFragments(imageUrl, fragments)
@@ -1248,7 +1745,8 @@ function App() {
       canvas.add(fragment)
     }
     canvas.discardActiveObject()
-    commitHistory('Made tear collage')
+    trackChaos('Tear collage', seed, targetIds, (next) => tearCollageSelected(next))
+    commitHistory(`Made tear collage #${seed}`)
   }
 
   function addCropMarks() {
@@ -1299,24 +1797,29 @@ function App() {
   function applyPosterStyle(style: 'magazine' | 'type' | 'image' | 'minimal') {
     const canvas = canvasRef.current
     if (!canvas) return
+    const baseline = styleBaselineRef.current
 
     if (style === 'minimal') {
       canvas.backgroundColor = '#f8f6ef'
       canvas.getObjects().forEach((object, index) => {
+        const base = baseline.get(String(readObjectProp(object, 'id') ?? ''))
         object.set({
-          fill: object.type === 'textbox' ? (index % 2 ? '#111111' : '#e11d48') : readObjectProp(object, 'fill'),
+          fill: object.type === 'textbox' ? (index % 2 ? '#111111' : '#e11d48') : base?.fill,
           opacity: 1,
           angle: index % 2 ? -1 : 1,
         } as Partial<FabricObject>)
+        object.setCoords()
       })
     } else {
       canvas.getObjects().forEach((object, index) => {
+        const base = baseline.get(String(readObjectProp(object, 'id') ?? ''))
+        if (!base) return
         object.set({
-          left: (object.left ?? 0) + (index % 2 ? 34 : -28),
-          top: (object.top ?? 0) + (index % 3 ? -18 : 26),
-          angle: (object.angle ?? 0) + (style === 'type' ? -12 : 9),
-          opacity: style === 'image' && object.type !== 'image' ? 0.72 : object.opacity,
-          globalCompositeOperation: style === 'magazine' ? BLEND_MODES[index % BLEND_MODES.length] : 'source-over',
+          left: base.left + (index % 2 ? 34 : -28),
+          top: base.top + (index % 3 ? -18 : 26),
+          angle: base.angle + (style === 'type' ? -12 : 9),
+          opacity: style === 'image' && object.type !== 'image' ? 0.72 : base.opacity,
+          globalCompositeOperation: style === 'magazine' ? BLEND_MODES[index % BLEND_MODES.length].value : 'source-over',
         } as Partial<FabricObject>)
         object.setCoords()
       })
@@ -1326,36 +1829,68 @@ function App() {
     commitHistory(`Applied ${style} preset`)
   }
 
-  function saveProject() {
+  async function saveProjectAction() {
     const canvas = canvasRef.current
     if (!canvas) return
-    const project: SavedProject = {
-      name: projectName.trim() || 'Untitled poster',
-      savedAt: new Date().toISOString(),
-      preset: poster,
-      canvas: canvas.toObject(HISTORY_PROPS as unknown as string[]),
+    const name = projectName.trim() || 'Untitled poster'
+    try {
+      // Fix: no more silent overwrite — name collisions now require confirmation.
+      const existing = await findProjectByName(name)
+      let id = projectId
+      if (existing && existing.id !== projectId) {
+        const overwrite = window.confirm(`A poster named “${name}” already exists. Overwrite it?`)
+        if (!overwrite) {
+          setStatus('Save cancelled — rename the poster and try again')
+          return
+        }
+        id = existing.id
+        setProjectId(existing.id)
+      }
+      await persistProject({
+        id,
+        name,
+        savedAt: new Date().toISOString(),
+        preset: poster,
+        canvas: canvas.toObject(HISTORY_PROPS as unknown as string[]),
+      })
+      setSavedProjects(await listProjects())
+      await clearAutosave()
+      setStatus(`Saved “${name}”`)
+    } catch {
+      setStatus('Save failed — storage may be full or unavailable')
     }
-    const projects = [project, ...readProjects().filter((item) => item.name !== project.name)].slice(0, 12)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
-    setSavedProjects(projects)
-    setStatus('Saved locally')
   }
 
-  async function loadProject(project: SavedProject) {
+  async function loadProject(project: StoredProject, options: { keepId: boolean } = { keepId: true }) {
     const canvas = canvasRef.current
     if (!canvas) return
     setPoster(project.preset)
     setPresetId(project.preset.id)
     setProjectName(project.name)
+    if (options.keepId) setProjectId(project.id)
     restoringRef.current = true
     await canvas.loadFromJSON(project.canvas)
     restoringRef.current = false
     canvas.requestRenderAll()
     historyRef.current = [JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))]
     redoRef.current = []
+    lastChaosRef.current = null
+    setLastChaos(null)
+    captureStyleBaseline()
     syncSelected()
     syncLayers()
     setStatus(`Loaded ${project.name}`)
+  }
+
+  async function deleteSavedProject(id: string, name: string) {
+    if (!window.confirm(`Delete saved poster “${name}”? This cannot be undone.`)) return
+    try {
+      await deleteProject(id)
+      setSavedProjects(await listProjects())
+      setStatus(`Deleted “${name}”`)
+    } catch {
+      setStatus('Could not delete the saved poster')
+    }
   }
 
   function exportPoster() {
@@ -1370,27 +1905,55 @@ function App() {
           ? ''
           : '#f6f1e6'
 
-    canvas.discardActiveObject()
-    canvas.backgroundColor = background
-    canvas.requestRenderAll()
-    const dataUrl = canvas.toDataURL({
-      format,
-      multiplier: exportScale,
-      quality: exportQuality / 100,
-    })
-    canvas.backgroundColor = previousBackground
-    canvas.requestRenderAll()
+    // Fix: background swap is now atomic — a failed export can no longer corrupt canvas state.
+    try {
+      canvas.discardActiveObject()
+      canvas.backgroundColor = background
+      canvas.requestRenderAll()
+      const dataUrl = canvas.toDataURL({
+        format,
+        multiplier: exportScale,
+        quality: exportQuality / 100,
+      })
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = `${safeFileName(projectName)}@${exportScale}x.${format === 'jpeg' ? 'jpg' : 'png'}`
+      link.click()
+      setStatus(`Exported ${format.toUpperCase()} ${poster.width * exportScale} x ${poster.height * exportScale}`)
+    } catch {
+      setStatus('Export failed — try a smaller export size')
+    } finally {
+      canvas.backgroundColor = previousBackground
+      canvas.requestRenderAll()
+      syncSelected()
+    }
+  }
 
-    const link = document.createElement('a')
-    link.href = dataUrl
-    link.download = `${safeFileName(projectName)}@${exportScale}x.${format === 'jpeg' ? 'jpg' : 'png'}`
-    link.click()
-    syncSelected()
-    setStatus(`Exported ${format.toUpperCase()} ${poster.width * exportScale} x ${poster.height * exportScale}`)
+  function pushRecentColor(color: string) {
+    setRecentColors((current) => [color, ...current.filter((item) => item !== color)].slice(0, 8))
+  }
+
+  async function pickColorWithEyeDropper() {
+    const EyeDropperCtor = (window as unknown as { EyeDropper?: EyeDropperConstructor }).EyeDropper
+    if (!EyeDropperCtor) {
+      setStatus('Eyedropper is not supported in this browser')
+      return
+    }
+    try {
+      const result = await new EyeDropperCtor().open()
+      updateActive({ fill: result.sRGBHex })
+      pushRecentColor(result.sRGBHex)
+      finalizeActive('Picked color')
+    } catch {
+      /* user cancelled the eyedropper */
+    }
   }
 
   const selectedIsImage = selected?.kind === 'image' || selected?.kind === 'fragment'
   const selectedIsText = selected?.kind === 'text'
+
+  const scopeSel = <span className="scope-badge" aria-hidden="true">SEL</span>
+  const scopeAll = <span className="scope-badge scope-all" aria-hidden="true">ALL</span>
 
   return (
     <main className="editor-shell">
@@ -1403,17 +1966,17 @@ function App() {
           </div>
         </div>
         <div className="top-actions" aria-label="Poster actions">
-          <button type="button" className="icon-button" aria-label="Undo" onClick={undo}>
+          <button type="button" className="icon-button" aria-label="Undo" title="Undo (Cmd+Z)" onClick={() => void undoAsync()}>
             <Undo2 size={18} />
           </button>
-          <button type="button" className="icon-button" aria-label="Redo" onClick={redo}>
+          <button type="button" className="icon-button" aria-label="Redo" title="Redo (Cmd+Shift+Z)" onClick={redo}>
             <Redo2 size={18} />
           </button>
-          <button type="button" className="toolbar-button" onClick={saveProject}>
+          <button type="button" className="toolbar-button" title="Save to this browser (Cmd+S)" onClick={() => void saveProjectAction()}>
             <Save size={17} />
             Save
           </button>
-          <button type="button" className="primary-button" onClick={exportPoster}>
+          <button type="button" className="primary-button" title="Export the poster (Cmd+E)" onClick={exportPoster}>
             <Download size={17} />
             Export
           </button>
@@ -1425,35 +1988,35 @@ function App() {
           <div className="panel-section">
             <h2>Tools</h2>
             <div className="tool-grid">
-              <button type="button" onClick={addText}>
+              <button type="button" title="Add a text layer (T)" onClick={addText}>
                 <Type size={17} />
                 Text
               </button>
-              <button type="button" onClick={() => fileInputRef.current?.click()}>
+              <button type="button" title="Import an image from your computer" onClick={() => fileInputRef.current?.click()}>
                 <ImagePlus size={17} />
                 Image
               </button>
-              <button type="button" onClick={addShape}>
+              <button type="button" title="Add a solid block (B)" onClick={addShape}>
                 <Square size={17} />
                 Block
               </button>
-              <button type="button" onClick={duplicateSelected} disabled={!selected}>
+              <button type="button" title="Duplicate the selected layer (Cmd+D)" onClick={() => void duplicateSelected()} disabled={!selected}>
                 <FlipHorizontal size={17} />
                 Copy
               </button>
-              <button type="button" onClick={() => sliceSelected('horizontal')} disabled={!selected}>
+              <button type="button" title="Slice the selected layer into horizontal strips" onClick={() => void sliceSelected('horizontal')} disabled={!selected}>
                 <Scissors size={17} />
                 Strips
               </button>
-              <button type="button" onClick={() => sliceSelected('vertical')} disabled={!selected}>
+              <button type="button" title="Slice the selected layer into vertical columns" onClick={() => void sliceSelected('vertical')} disabled={!selected}>
                 <Scissors size={17} />
                 Columns
               </button>
-              <button type="button" onClick={scatterSelected} disabled={!selected}>
+              <button type="button" title="Scatter the selected layers with seeded randomness — press R to re-roll" onClick={() => scatterSelected()} disabled={!selected}>
                 <Shuffle size={17} />
                 Scatter
               </button>
-              <button type="button" onClick={deleteSelected} disabled={!selected}>
+              <button type="button" title="Delete the selected layer (Delete)" onClick={deleteSelected} disabled={!selected}>
                 <Trash2 size={17} />
                 Delete
               </button>
@@ -1508,17 +2071,17 @@ function App() {
               </div>
             ) : null}
             <div className="preset-row">
-              <button type="button" onClick={() => applyPosterStyle('magazine')}>
-                Magazine chaos
+              <button type="button" title="Shift every layer into colliding blend chaos — affects the whole poster" onClick={() => applyPosterStyle('magazine')}>
+                Magazine chaos {scopeAll}
               </button>
-              <button type="button" onClick={() => applyPosterStyle('type')}>
-                Oversized type
+              <button type="button" title="Rotate the whole layout toward oversized type — affects the whole poster" onClick={() => applyPosterStyle('type')}>
+                Oversized type {scopeAll}
               </button>
-              <button type="button" onClick={() => applyPosterStyle('image')}>
-                Image fracture
+              <button type="button" title="Fracture the layout around imagery — affects the whole poster" onClick={() => applyPosterStyle('image')}>
+                Image fracture {scopeAll}
               </button>
-              <button type="button" onClick={() => applyPosterStyle('minimal')}>
-                B/W red
+              <button type="button" title="Reset to black/white/red minimalism — affects the whole poster" onClick={() => applyPosterStyle('minimal')}>
+                B/W red {scopeAll}
               </button>
             </div>
           </div>
@@ -1526,25 +2089,25 @@ function App() {
           <div className="panel-section">
             <h2>Manual Effects</h2>
             <div className="preset-row">
-              <button type="button" onClick={addTypeStrip} disabled={!selectedIsText}>
+              <button type="button" title="Repeat the selected text as printed strips below it" onClick={() => addTypeStrip()} disabled={!selectedIsText}>
                 <Type size={17} />
-                Type strip
+                Type strip {scopeSel}
               </button>
-              <button type="button" onClick={() => void distressSelected()} disabled={!selected}>
+              <button type="button" title="Convert the selected layer into harsh black & white grit (rasterizes it)" onClick={() => void distressSelected()} disabled={!selected}>
                 <Sparkles size={17} />
-                Distress
+                Distress {scopeSel}
               </button>
-              <button type="button" onClick={addPhotocopyNoise}>
+              <button type="button" title="Sprinkle photocopier specks, scratches, and scanlines across the poster" onClick={() => addPhotocopyNoise()}>
                 <ScanLine size={17} />
-                Photocopy noise
+                Photocopy noise {scopeAll}
               </button>
-              <button type="button" onClick={() => void tearCollageSelected()} disabled={!selected}>
+              <button type="button" title="Tear the selected layer into shifted scraps (rasterizes it)" onClick={() => void tearCollageSelected()} disabled={!selected}>
                 <Scissors size={17} />
-                Tear collage
+                Tear collage {scopeSel}
               </button>
-              <button type="button" onClick={addCropMarks}>
+              <button type="button" title="Stamp decorative crop marks and a faint grid onto the artwork" onClick={addCropMarks}>
                 <Crop size={17} />
-                Crop marks/grid
+                Crop marks/grid {scopeAll}
               </button>
             </div>
           </div>
@@ -1568,13 +2131,13 @@ function App() {
               onCommit={() => setStatus('Updated type intensity')}
             />
             <div className="preset-row">
-              <button type="button" onClick={breakSelectedType} disabled={!selectedIsText}>
+              <button type="button" title="Break the selected text into loose, expressive letters" onClick={() => breakSelectedType()} disabled={!selectedIsText}>
                 <Type size={17} />
-                Break letters
+                Break letters {scopeSel}
               </button>
-              <button type="button" onClick={() => void cloneTypeAsTexture()} disabled={!selectedIsText}>
+              <button type="button" title="Bury a ghost copy of the selected text behind the layout" onClick={() => void cloneTypeAsTexture()} disabled={!selectedIsText}>
                 <Layers size={17} />
-                Bury type
+                Bury type {scopeSel}
               </button>
             </div>
           </div>
@@ -1590,17 +2153,17 @@ function App() {
               onCommit={() => setStatus('Updated xerox generation')}
             />
             <div className="preset-row">
-              <button type="button" onClick={() => void applyXeroxToSelected()} disabled={!selected}>
+              <button type="button" title="Re-photocopy the selected layer at the chosen generation (rasterizes it)" onClick={() => void applyXeroxToSelected()} disabled={!selected}>
                 <ScanLine size={17} />
-                Copy selected
+                Copy selected {scopeSel}
               </button>
-              <button type="button" onClick={() => void addMisprintDuplicate()} disabled={!selected}>
+              <button type="button" title="Add a faint misregistered print echo behind the selected layer" onClick={() => void addMisprintDuplicate()} disabled={!selected}>
                 <Layers size={17} />
-                Misprint offset
+                Misprint offset {scopeSel}
               </button>
-              <button type="button" onClick={addPrintScanSurface}>
+              <button type="button" title="Add photocopier bands and scanner drift across the poster" onClick={() => addPrintScanSurface()}>
                 <Sparkles size={17} />
-                Surface wear
+                Surface wear {scopeAll}
               </button>
             </div>
           </div>
@@ -1616,25 +2179,25 @@ function App() {
               onCommit={() => setStatus('Updated layer decay amount')}
             />
             <div className="preset-row">
-              <button type="button" onClick={() => void applyLayerDecayToSelected()} disabled={!selected}>
+              <button type="button" title="Age the selected layer with contrast, noise, and drift (rasterizes it)" onClick={() => void applyLayerDecayToSelected()} disabled={!selected}>
                 <Sparkles size={17} />
-                Age selected
+                Age selected {scopeSel}
               </button>
-              <button type="button" onClick={() => addLayerDecayMarks('ink-loss')} disabled={!selected}>
+              <button type="button" title="Chip ink away from the selected layer" onClick={() => addLayerDecayMarks('ink-loss')} disabled={!selected}>
                 <Scissors size={17} />
-                Ink loss
+                Ink loss {scopeSel}
               </button>
-              <button type="button" onClick={() => addLayerDecayMarks('fold')} disabled={!selected}>
+              <button type="button" title="Add fold creases across the selected layer" onClick={() => addLayerDecayMarks('fold')} disabled={!selected}>
                 <ScanLine size={17} />
-                Fold marks
+                Fold marks {scopeSel}
               </button>
-              <button type="button" onClick={() => addLayerDecayMarks('all')} disabled={!selected}>
+              <button type="button" title="Add the full wear treatment to the selected layer" onClick={() => addLayerDecayMarks('all')} disabled={!selected}>
                 <Layers size={17} />
-                Wear overlay
+                Wear overlay {scopeSel}
               </button>
-              <button type="button" onClick={() => void addLayerDecayOffset()} disabled={!selected}>
+              <button type="button" title="Add a faint decayed echo behind the selected layer" onClick={() => void addLayerDecayOffset()} disabled={!selected}>
                 <Shuffle size={17} />
-                Decay offset
+                Decay offset {scopeSel}
               </button>
             </div>
           </div>
@@ -1650,47 +2213,47 @@ function App() {
               onCommit={() => setStatus('Updated accident intensity')}
             />
             <div className="preset-row">
-              <button type="button" onClick={() => void duplicateDriftAccident()} disabled={!selected}>
+              <button type="button" title="Clone the selection with accidental drift — press R to re-roll" onClick={() => void duplicateDriftAccident()} disabled={!selected}>
                 <Shuffle size={17} />
-                Duplicate drift
+                Duplicate drift {scopeSel}
               </button>
-              <button type="button" onClick={() => void badCropAccident()} disabled={!selected}>
+              <button type="button" title="Crop the selection badly on purpose (rasterizes it)" onClick={() => void badCropAccident()} disabled={!selected}>
                 <Crop size={17} />
-                Bad crop
+                Bad crop {scopeSel}
               </button>
-              <button type="button" onClick={() => void flipMistakeAccident()} disabled={!selected}>
+              <button type="button" title="Add a flipped ghost of the selection" onClick={() => void flipMistakeAccident()} disabled={!selected}>
                 <FlipHorizontal size={17} />
-                Flip mistake
+                Flip mistake {scopeSel}
               </button>
-              <button type="button" onClick={collideSelectionAccident} disabled={!selected}>
+              <button type="button" title="Pile the selected layers into a collision (needs 2+ selected)" onClick={collideSelectionAccident} disabled={!selected}>
                 <Layers size={17} />
-                Collide selection
+                Collide selection {scopeSel}
               </button>
-              <button type="button" onClick={nudgeLayoutAccident}>
+              <button type="button" title="Nudge every layer with accidental drift — press R to re-roll" onClick={() => nudgeLayoutAccident()}>
                 <Sparkles size={17} />
-                Nudge layout
+                Nudge layout {scopeAll}
               </button>
             </div>
           </div>
 
           <div className="panel-section">
-            <h2>Dive Poster Tools</h2>
+            <h2>Texture Tools</h2>
             <div className="preset-row">
-              <button type="button" onClick={applyColdDiveImage} disabled={!selectedIsImage}>
+              <button type="button" title="Apply a cold, tinted print wash to the selected image" onClick={applyColdDiveImage} disabled={!selectedIsImage}>
                 <ImagePlus size={17} />
-                Cold image
+                Cold wash {scopeSel}
               </button>
-              <button type="button" onClick={addDiveTexture}>
+              <button type="button" title="Lay diagonal print texture lines across the poster" onClick={addDiveTexture}>
                 <ScanLine size={17} />
-                Diagonal texture
+                Diagonal texture {scopeAll}
               </button>
-              <button type="button" onClick={addWhiteScrapes}>
+              <button type="button" title="Scrape white bands with grit across the poster" onClick={() => addWhiteScrapes()}>
                 <Scissors size={17} />
-                White scrapes
+                White scrapes {scopeAll}
               </button>
-              <button type="button" onClick={addDiveRedType}>
+              <button type="button" title="Stamp three large red echo words across the poster" onClick={addDiveRedType}>
                 <Type size={17} />
-                Red dive type
+                Red echo type {scopeAll}
               </button>
             </div>
           </div>
@@ -1698,25 +2261,25 @@ function App() {
           <div className="panel-section">
             <h2>Aggressive Crop Tools</h2>
             <div className="preset-row">
-              <button type="button" onClick={() => void aggressiveCropSelected('close')} disabled={!selected}>
+              <button type="button" title="Crop tight into the center of the selection (rasterizes it)" onClick={() => void aggressiveCropSelected('close')} disabled={!selected}>
                 <Crop size={17} />
-                Close crop
+                Close crop {scopeSel}
               </button>
-              <button type="button" onClick={() => void aggressiveCropSelected('off-center')} disabled={!selected}>
+              <button type="button" title="Crop the selection off-center — press R to re-roll (rasterizes it)" onClick={() => void aggressiveCropSelected('off-center')} disabled={!selected}>
                 <Crop size={17} />
-                Off-center crop
+                Off-center crop {scopeSel}
               </button>
-              <button type="button" onClick={() => void aggressiveCropSelected('edge')} disabled={!selected}>
+              <button type="button" title="Crop the selection hard to one edge (rasterizes it)" onClick={() => void aggressiveCropSelected('edge')} disabled={!selected}>
                 <Crop size={17} />
-                Edge crop
+                Edge crop {scopeSel}
               </button>
-              <button type="button" onClick={() => void cropToPosterEdge()} disabled={!selected}>
+              <button type="button" title="Crop the selection and throw it to the poster edge (rasterizes it)" onClick={() => void cropToPosterEdge()} disabled={!selected}>
                 <Scissors size={17} />
-                Throw to edge
+                Throw to edge {scopeSel}
               </button>
-              <button type="button" onClick={() => sliceSelected('vertical')} disabled={!selected}>
+              <button type="button" title="Slice the selection into vertical strips" onClick={() => void sliceSelected('vertical')} disabled={!selected}>
                 <Scissors size={17} />
-                Crop strips
+                Crop strips {scopeSel}
               </button>
             </div>
           </div>
@@ -1730,15 +2293,66 @@ function App() {
             </div>
             <div className="layer-list">
               {layers.map((layer) => (
-                <button
+                <div
                   key={layer.id}
-                  type="button"
                   className={selected?.id === layer.id ? 'active layer-row' : 'layer-row'}
-                  onClick={() => selectLayer(layer.id)}
+                  draggable={renamingLayerId !== layer.id}
+                  onDragStart={() => setDragLayerId(layer.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    if (dragLayerId) reorderLayer(dragLayerId, layer.id)
+                    setDragLayerId(null)
+                  }}
+                  onDragEnd={() => setDragLayerId(null)}
                 >
-                  <span>{layer.name}</span>
-                  <small>{layer.kind}</small>
-                </button>
+                  {renamingLayerId === layer.id ? (
+                    <input
+                      autoFocus
+                      className="layer-rename"
+                      defaultValue={layer.name}
+                      onBlur={(event) => {
+                        renameLayer(layer.id, event.target.value.trim() || layer.name)
+                        setRenamingLayerId(null)
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') (event.target as HTMLInputElement).blur()
+                        if (event.key === 'Escape') setRenamingLayerId(null)
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="layer-select"
+                      title="Click to select · double-click to rename · drag to reorder"
+                      onClick={() => selectLayer(layer.id)}
+                      onDoubleClick={() => setRenamingLayerId(layer.id)}
+                    >
+                      <span>{layer.name}</span>
+                      <small>{layer.kind}</small>
+                    </button>
+                  )}
+                  <span className="layer-controls">
+                    <button
+                      type="button"
+                      className="icon-button layer-toggle"
+                      aria-label={layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`}
+                      title={layer.visible ? 'Hide layer' : 'Show layer'}
+                      onClick={() => toggleLayerVisibility(layer.id)}
+                    >
+                      {layer.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button layer-toggle"
+                      aria-label={layer.locked ? `Unlock ${layer.name}` : `Lock ${layer.name}`}
+                      title={layer.locked ? 'Unlock layer' : 'Lock layer'}
+                      onClick={() => toggleLayerLock(layer.id)}
+                    >
+                      {layer.locked ? <Lock size={13} /> : <LockOpen size={13} />}
+                    </button>
+                  </span>
+                </div>
               ))}
             </div>
           </div>
@@ -1746,13 +2360,46 @@ function App() {
 
         <section className="canvas-stage" aria-label="Poster canvas">
           <div className="stage-toolbar glass-bar">
-            <span>{poster.name}</span>
             <span>
-              {poster.width} x {poster.height}px
+              {poster.name} · {poster.width} x {poster.height}px
             </span>
-            <span>{status}</span>
+            <span className="zoom-controls">
+              <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Cmd+-)" onClick={() => stepZoom(-1)}>
+                <ZoomOut size={15} />
+              </button>
+              <button type="button" className="zoom-readout" title="Reset to 100% (Cmd+1)" onClick={() => setZoom(1)}>
+                {Math.round(displayScale * 100)}%
+              </button>
+              <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in (Cmd+=)" onClick={() => stepZoom(1)}>
+                <ZoomIn size={15} />
+              </button>
+              <button type="button" className="icon-button" aria-label="Fit poster to view" title="Fit to view (Cmd+0)" onClick={() => setZoom(null)}>
+                <Maximize size={15} />
+              </button>
+            </span>
+            {lastChaos ? (
+              <button
+                type="button"
+                className="reroll-button"
+                title={`Undo and re-run ${lastChaos.label} with a new seed (R)`}
+                onClick={() => void rerollLast()}
+              >
+                <Dices size={14} />
+                Re-roll {lastChaos.label} #{lastChaos.seed}
+              </button>
+            ) : null}
+            <span role="status" aria-live="polite" className="stage-status">
+              {status}
+            </span>
           </div>
-          <div className="canvas-scroll">
+          <div
+            ref={scrollRef}
+            className={isPanMode ? 'canvas-scroll panning' : 'canvas-scroll'}
+            onMouseDown={handlePanMouseDown}
+            onMouseMove={handlePanMouseMove}
+            onMouseUp={handlePanMouseUp}
+            onMouseLeave={handlePanMouseUp}
+          >
             <div
               className="canvas-shell"
               style={
@@ -1824,13 +2471,24 @@ function App() {
             </div>
             <div className="saved-list">
               {savedProjects.length === 0 ? (
-                <p className="empty">No local saves yet.</p>
+                <p className="empty">No saved posters yet.</p>
               ) : (
                 savedProjects.map((project) => (
-                  <button key={`${project.name}-${project.savedAt}`} type="button" onClick={() => void loadProject(project)}>
-                    <span>{project.name}</span>
-                    <small>{new Date(project.savedAt).toLocaleString()}</small>
-                  </button>
+                  <div key={project.id} className="saved-row">
+                    <button type="button" title={`Load “${project.name}”`} onClick={() => void loadProject(project)}>
+                      <span>{project.name}</span>
+                      <small>{new Date(project.savedAt).toLocaleString()}</small>
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Delete saved poster ${project.name}`}
+                      title="Delete this saved poster"
+                      onClick={() => void deleteSavedProject(project.id, project.name)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 ))
               )}
             </div>
@@ -1881,7 +2539,7 @@ function App() {
                         }}
                       >
                         {FONT_STACKS.map((font) => (
-                          <option key={font} value={font}>
+                          <option key={font} value={font} style={{ fontFamily: font }}>
                             {font}
                           </option>
                         ))}
@@ -1982,14 +2640,47 @@ function App() {
                 />
                 <label>
                   Color
-                  <input
-                    type="color"
-                    value={typeof selected.fill === 'string' ? selected.fill : '#111111'}
-                    onChange={(event) => updateActive({ fill: event.target.value })}
-                    onBlur={() => finalizeActive('Changed color')}
-                    disabled={selectedIsImage}
-                  />
+                  <span className="color-row">
+                    <input
+                      type="color"
+                      value={typeof selected.fill === 'string' ? selected.fill : '#111111'}
+                      onChange={(event) => updateActive({ fill: event.target.value })}
+                      onBlur={(event) => {
+                        pushRecentColor(event.target.value)
+                        finalizeActive('Changed color')
+                      }}
+                      disabled={selectedIsImage}
+                    />
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Pick a color from the screen"
+                      title="Pick a color from the screen"
+                      onClick={() => void pickColorWithEyeDropper()}
+                      disabled={selectedIsImage}
+                    >
+                      <Pipette size={14} />
+                    </button>
+                  </span>
                 </label>
+                {recentColors.length > 0 && !selectedIsImage ? (
+                  <div className="swatch-row" aria-label="Recently used colors">
+                    {recentColors.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className="swatch"
+                        style={{ background: color }}
+                        aria-label={`Use color ${color}`}
+                        title={color}
+                        onClick={() => {
+                          updateActive({ fill: color })
+                          finalizeActive('Changed color')
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
                 <label>
                   Blend
                   <select
@@ -2000,18 +2691,18 @@ function App() {
                     }}
                   >
                     {BLEND_MODES.map((mode) => (
-                      <option key={mode} value={mode}>
-                        {mode}
+                      <option key={mode.value} value={mode.value}>
+                        {mode.label}
                       </option>
                     ))}
                   </select>
                 </label>
                 <div className="button-row">
-                  <button type="button" onClick={() => moveLayer('front')}>
+                  <button type="button" title="Bring the layer to the front" onClick={() => moveLayer('front')}>
                     <BringToFront size={16} />
                     Front
                   </button>
-                  <button type="button" onClick={() => moveLayer('back')}>
+                  <button type="button" title="Send the layer to the back" onClick={() => moveLayer('back')}>
                     <SendToBack size={16} />
                     Back
                   </button>
@@ -2022,10 +2713,17 @@ function App() {
 
           <div className="panel-section">
             <h2>Image Effects</h2>
+            <p className="hint">Effects stack — click again to remove one.</p>
             <div className="preset-row">
               {(['grayscale', 'contrast', 'threshold', 'blur', 'noise', 'clear'] as const).map((effect) => (
-                <button key={effect} type="button" onClick={() => applyImageEffect(effect)} disabled={!selectedIsImage}>
-                  {effect}
+                <button
+                  key={effect}
+                  type="button"
+                  title={effect === 'clear' ? 'Remove all image effects' : `Toggle ${effect} on the selected image`}
+                  onClick={() => applyImageEffect(effect)}
+                  disabled={!selectedIsImage}
+                >
+                  {effect} {effect === 'clear' ? null : scopeSel}
                 </button>
               ))}
             </div>
@@ -2042,6 +2740,18 @@ function App() {
                 ))}
               </ul>
             )}
+          </div>
+
+          <div className="panel-section">
+            <h2>Shortcuts</h2>
+            <ul className="shortcut-list">
+              <li><kbd>Cmd+Z</kbd> Undo · <kbd>Cmd+Shift+Z</kbd> Redo</li>
+              <li><kbd>Cmd+D</kbd> Duplicate · <kbd>Delete</kbd> Remove</li>
+              <li><kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10</li>
+              <li><kbd>T</kbd> Text · <kbd>B</kbd> Block · <kbd>R</kbd> Re-roll</li>
+              <li><kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom</li>
+              <li><kbd>Space+Drag</kbd> Pan · <kbd>Cmd+Drag</kbd> No snapping</li>
+            </ul>
           </div>
         </aside>
       </section>
@@ -2080,20 +2790,16 @@ function Slider({
         min={min}
         max={max}
         value={value}
+        aria-label={label}
         onChange={(event) => onChange(Number(event.target.value))}
         onMouseUp={onCommit}
         onTouchEnd={onCommit}
+        onKeyUp={(event) => {
+          if (event.key.startsWith('Arrow')) onCommit()
+        }}
       />
     </div>
   )
-}
-
-function readProjects(): SavedProject[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
-  } catch {
-    return []
-  }
 }
 
 function readObjectProp(object: FabricObject | null, key: string) {
