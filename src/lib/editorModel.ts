@@ -5,6 +5,9 @@ export type PosterPreset = {
   name: string
   width: number
   height: number
+  dpi?: number
+  widthMm?: number
+  heightMm?: number
 }
 
 export type LayerTransform = {
@@ -200,10 +203,10 @@ export type ScrapeMask = {
 }
 
 const POSTER_PRESETS: Record<Exclude<PosterPresetId, 'custom'>, PosterPreset> = {
-  a3: { id: 'a3', name: 'A3 portrait', width: 1240, height: 1754 },
-  a2: { id: 'a2', name: 'A2 portrait', width: 1754, height: 2480 },
-  instagram: { id: 'instagram', name: 'Instagram portrait', width: 1080, height: 1350 },
-  square: { id: 'square', name: 'Square', width: 1600, height: 1600 },
+  a3: { id: 'a3', name: 'A3 portrait (300dpi)', width: 3508, height: 4961, dpi: 300, widthMm: 297, heightMm: 420 },
+  a2: { id: 'a2', name: 'A2 portrait (300dpi)', width: 4961, height: 7016, dpi: 300, widthMm: 420, heightMm: 594 },
+  instagram: { id: 'instagram', name: 'Instagram portrait', width: 1080, height: 1350, dpi: 72 },
+  square: { id: 'square', name: 'Square', width: 1600, height: 1600, dpi: 72 },
 }
 
 const CUSTOM_PRESET: PosterPreset = {
@@ -215,7 +218,11 @@ const CUSTOM_PRESET: PosterPreset = {
 
 export function clampDimension(value: number) {
   if (!Number.isFinite(value)) return 1200
-  return Math.min(3000, Math.max(320, Math.round(value)))
+  return Math.min(10000, Math.max(320, Math.round(value)))
+}
+
+export function pixelsAtDpi(mm: number, dpi: number) {
+  return Math.round((mm / 25.4) * dpi)
 }
 
 export function getPosterPreset(id: PosterPresetId) {

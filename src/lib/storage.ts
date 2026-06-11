@@ -3,6 +3,7 @@
  * silent overwrite, no autosave) with durable, quota-tolerant storage.
  * Migrates any legacy localStorage saves on first open.
  */
+import type { DocumentMeta } from './document'
 import type { PosterPreset } from './editorModel'
 
 export type StoredProject = {
@@ -11,6 +12,7 @@ export type StoredProject = {
   savedAt: string
   preset: PosterPreset
   canvas: Record<string, unknown>
+  document?: DocumentMeta
 }
 
 const DB_NAME = 'carson-poster'

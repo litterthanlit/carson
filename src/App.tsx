@@ -2,17 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlignLeft,
   BringToFront,
+  Circle,
   Crop,
   Dices,
   Download,
   Eye,
   EyeOff,
   FlipHorizontal,
+  Grid3x3,
   ImagePlus,
   Layers,
   Lock,
   LockOpen,
   Maximize,
+  Minus,
   Pipette,
   ScanLine,
   Redo2,
@@ -22,13 +25,26 @@ import {
   Shuffle,
   Sparkles,
   Square,
+  Star,
   Trash2,
   Type,
   Undo2,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
-import { ActiveSelection, Canvas, FabricObject, Image as FabricImage, Rect, Textbox, filters } from 'fabric'
+import {
+  ActiveSelection,
+  Canvas,
+  Ellipse,
+  FabricObject,
+  Gradient,
+  Image as FabricImage,
+  Line,
+  Polygon,
+  Rect,
+  Textbox,
+  filters,
+} from 'fabric'
 import {
   applyPosterPreset,
   createAccidentTransforms,
@@ -48,7 +64,6 @@ import {
   type ExpressiveLegibility,
   type PosterPreset,
   type PosterPresetId,
-  scatterLayers,
 } from './lib/editorModel'
 import { createSeededRandom, newSeed } from './lib/random'
 import { computeSnap } from './lib/snapping'
@@ -64,10 +79,37 @@ import {
   saveProject as persistProject,
   type StoredProject,
 } from './lib/storage'
+import {
+  addTreatment,
+  captureTransformBaseline,
+  readTreatments,
+  removeTreatment,
+  renderTreatmentStack,
+  treatmentLabel,
+  updateTreatment,
+  type Treatment,
+} from './lib/treatments'
+import {
+  createDefaultDocument,
+  forkVariant,
+  getActiveArtboard,
+  switchArtboard,
+  addArtboard,
+  type DocumentMeta,
+} from './lib/document'
+import { loadFontFile, loadGoogleFont, GOOGLE_FONTS } from './lib/fonts'
+import { contrastRatio, FULL_BLEND_MODES, legibilityBand } from './lib/color'
+import { alignObjects, buildColumnGrid, distributeObjects, type GridOverlay } from './lib/grid'
+import { buildPrintGuides, downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
+import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
+import type { CommandAction } from './lib/commands'
+import { CommandPalette } from './components/CommandPalette'
+import { OnboardingModal } from './components/OnboardingModal'
 import './App.css'
 
 type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
-type ExportFormat = 'png' | 'jpeg'
+type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff'
+type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'layout' | 'print'
 type ExportBackground = 'paper' | 'white' | 'transparent'
 type SelectedState = {
   id: string
@@ -107,7 +149,19 @@ type StyleBaseline = {
   globalCompositeOperation: string
 }
 
-const HISTORY_PROPS = ['id', 'name', 'kind', 'selectable', 'evented'] as const
+const HISTORY_PROPS = [
+  'id',
+  'name',
+  'kind',
+  'selectable',
+  'evented',
+  'treatments',
+  'transformBaseline',
+  'stroke',
+  'strokeWidth',
+  'strokeDashArray',
+  'clipPath',
+] as const
 const FONT_STACKS = [
   'Arial Black',
   'Impact',
@@ -118,14 +172,8 @@ const FONT_STACKS = [
   'Courier New',
   'Verdana',
 ]
-const BLEND_MODES: Array<{ value: string; label: string }> = [
-  { value: 'source-over', label: 'Normal' },
-  { value: 'multiply', label: 'Multiply' },
-  { value: 'screen', label: 'Screen' },
-  { value: 'overlay', label: 'Overlay' },
-  { value: 'difference', label: 'Difference' },
-  { value: 'exclusion', label: 'Exclusion' },
-]
+const BLEND_MODES = FULL_BLEND_MODES
+const ONBOARDING_KEY = 'carson.onboarding.v1'
 const ACCENTS = ['#05b6d4', '#e11d48', '#a3e635']
 const ZOOM_LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8]
 const SNAP_SCREEN_THRESHOLD = 6
@@ -155,6 +203,11 @@ function App() {
   const spaceDownRef = useRef(false)
   const panDragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const styleBaselineRef = useRef<Map<string, StyleBaseline>>(new Map())
+  const showPrintGuidesRef = useRef(false)
+  const showLayoutGridRef = useRef(false)
+  const gridOverlayRef = useRef<GridOverlay>({ columns: 4, rows: 8, margin: 48, gutter: 16, tension: 0 })
+  const printDpiRef = useRef(300)
+  const bleedMmRef = useRef(3)
 
   const [poster, setPoster] = useState<PosterPreset>(() => applyPosterPreset('a3'))
   const [presetId, setPresetId] = useState<PosterPresetId>('a3')
@@ -173,7 +226,6 @@ function App() {
   const [xeroxGeneration, setXeroxGeneration] = useState(5)
   const [accidentIntensity, setAccidentIntensity] = useState(60)
   const [decayAmount, setDecayAmount] = useState(55)
-  const [assets, setAssets] = useState<string[]>([])
   const [status, setStatus] = useState('Ready')
   const [zoom, setZoom] = useState<number | null>(null)
   const [isPanMode, setIsPanMode] = useState(false)
@@ -181,6 +233,26 @@ function App() {
   const [recentColors, setRecentColors] = useState<string[]>([])
   const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null)
   const [dragLayerId, setDragLayerId] = useState<string | null>(null)
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
+  const [commandOpen, setCommandOpen] = useState(false)
+  const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(null)
+  const [customFonts, setCustomFonts] = useState<string[]>([])
+  const [storedAssets, setStoredAssets] = useState<StoredAsset[]>([])
+  const [documentPalette, setDocumentPalette] = useState<string[]>(['#111111', '#e11d48', '#05b6d4', '#f6f1e6'])
+  const [fontStretch, setFontStretch] = useState(100)
+  const [gridOverlay, setGridOverlay] = useState<GridOverlay>({ columns: 4, rows: 8, margin: 48, gutter: 16, tension: 0 })
+  const [showLayoutGrid, setShowLayoutGrid] = useState(false)
+  const [showPrintGuides, setShowPrintGuides] = useState(false)
+  const [printDpi, setPrintDpi] = useState(300)
+  const [bleedMm, setBleedMm] = useState(3)
+  const [onboardingOpen, setOnboardingOpen] = useState(() => !localStorage.getItem(ONBOARDING_KEY))
+  const fontInputRef = useRef<HTMLInputElement | null>(null)
+
+  showPrintGuidesRef.current = showPrintGuides
+  showLayoutGridRef.current = showLayoutGrid
+  gridOverlayRef.current = gridOverlay
+  printDpiRef.current = printDpi
+  bleedMmRef.current = bleedMm
 
   const fitScale = useMemo(() => {
     return Math.min(1, 660 / poster.width, 780 / poster.height)
@@ -208,8 +280,11 @@ function App() {
     canvasRef.current = canvas
     seedPoster(canvas, poster)
     registerCanvasEvents(canvas)
+    setDocumentMeta(createDefaultDocument(poster, canvas.toObject(HISTORY_PROPS as unknown as string[])))
     commitHistory('Started a new poster')
     void initializeStorage()
+    void refreshAssets()
+    if (!localStorage.getItem(ONBOARDING_KEY)) setOnboardingOpen(true)
 
     return () => {
       canvas.dispose()
@@ -217,6 +292,10 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    canvasRef.current?.requestRenderAll()
+  }, [showLayoutGrid, showPrintGuides, gridOverlay, printDpi, bleedMm])
 
   useEffect(() => {
     // Fix: previously this also ran on mount, double-committing history.
@@ -232,6 +311,14 @@ function App() {
     commitHistory('Changed poster size')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poster])
+
+  async function refreshAssets() {
+    try {
+      setStoredAssets(await listAssets())
+    } catch {
+      setStoredAssets([])
+    }
+  }
 
   async function initializeStorage() {
     try {
@@ -297,25 +384,54 @@ function App() {
 
     canvas.on('after:render', () => {
       const { v, h } = guidesRef.current
-      if (v.length === 0 && h.length === 0) return
       const ctx = canvas.contextTop
       if (!ctx) return
       canvas.clearContext(ctx)
       ctx.save()
-      ctx.strokeStyle = '#e11d48'
       ctx.lineWidth = 1 / displayScaleRef.current
-      ctx.setLineDash([6, 4])
-      for (const x of v) {
-        ctx.beginPath()
-        ctx.moveTo(x, 0)
-        ctx.lineTo(x, canvas.getHeight())
-        ctx.stroke()
+
+      if (showLayoutGridRef.current) {
+        const overlay = gridOverlayRef.current
+        const columns = buildColumnGrid(
+          { width: canvas.getWidth(), height: canvas.getHeight() },
+          overlay,
+        )
+        ctx.strokeStyle = 'rgba(5, 182, 212, 0.35)'
+        ctx.setLineDash([4, 8])
+        for (const column of columns) {
+          ctx.strokeRect(column.left, column.top, column.width, column.height)
+        }
       }
-      for (const y of h) {
-        ctx.beginPath()
-        ctx.moveTo(0, y)
-        ctx.lineTo(canvas.getWidth(), y)
-        ctx.stroke()
+
+      if (showPrintGuidesRef.current) {
+        const guides = buildPrintGuides(
+          { width: canvas.getWidth(), height: canvas.getHeight() },
+          printDpiRef.current,
+          bleedMmRef.current,
+        )
+        for (const guide of guides) {
+          ctx.strokeStyle =
+            guide.kind === 'bleed' ? 'rgba(225, 29, 72, 0.55)' : guide.kind === 'safe' ? 'rgba(17, 17, 17, 0.35)' : 'rgba(17, 17, 17, 0.7)'
+          ctx.setLineDash(guide.kind === 'bleed' ? [10, 6] : [])
+          ctx.strokeRect(guide.left, guide.top, guide.width, guide.height)
+        }
+      }
+
+      if (v.length > 0 || h.length > 0) {
+        ctx.strokeStyle = '#e11d48'
+        ctx.setLineDash([6, 4])
+        for (const x of v) {
+          ctx.beginPath()
+          ctx.moveTo(x, 0)
+          ctx.lineTo(x, canvas.getHeight())
+          ctx.stroke()
+        }
+        for (const y of h) {
+          ctx.beginPath()
+          ctx.moveTo(0, y)
+          ctx.lineTo(canvas.getWidth(), y)
+          ctx.stroke()
+        }
       }
       ctx.restore()
     })
@@ -342,6 +458,8 @@ function App() {
     zoomIn: () => stepZoom(1),
     zoomOut: () => stepZoom(-1),
     reroll: () => void rerollLast(),
+    commandPalette: () => setCommandOpen(true),
+    forkVariant: () => void forkVariation(),
   }
 
   useEffect(() => {
@@ -413,6 +531,12 @@ function App() {
         } else if (key === '-') {
           event.preventDefault()
           actions.zoomOut()
+        } else if (key === 'k') {
+          event.preventDefault()
+          actions.commandPalette()
+        } else if (key === 'b') {
+          event.preventDefault()
+          actions.forkVariant()
         }
         return
       }
@@ -670,6 +794,7 @@ function App() {
         savedAt: new Date().toISOString(),
         preset: currentPoster,
         canvas: canvas.toObject(HISTORY_PROPS as unknown as string[]),
+        document: documentMeta ?? undefined,
       }).catch(() => setStatus('Autosave failed — storage may be full'))
     }, 2500)
   }
@@ -851,6 +976,240 @@ function App() {
     commitHistory('Added block')
   }
 
+  function addEllipse() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ellipse = new Ellipse({
+      left: poster.width * 0.28,
+      top: poster.height * 0.35,
+      rx: poster.width * 0.12,
+      ry: poster.height * 0.08,
+      fill: '#111111',
+      opacity: 0.88,
+      angle: -6,
+    })
+    tagObject(ellipse, 'shape', 'Ellipse')
+    canvas.add(ellipse)
+    canvas.setActiveObject(ellipse)
+    commitHistory('Added ellipse')
+  }
+
+  function addLine() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const line = new Line([poster.width * 0.1, poster.height * 0.55, poster.width * 0.78, poster.height * 0.52], {
+      stroke: '#111111',
+      strokeWidth: 3,
+      opacity: 0.9,
+    })
+    tagObject(line, 'shape', 'Line')
+    canvas.add(line)
+    canvas.setActiveObject(line)
+    commitHistory('Added line')
+  }
+
+  function addStarShape() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const points = buildStarPoints(5, 80, 36)
+    const star = new Polygon(points, {
+      left: poster.width * 0.62,
+      top: poster.height * 0.28,
+      fill: '#e11d48',
+      opacity: 0.9,
+      angle: 12,
+    })
+    tagObject(star, 'shape', 'Star')
+    canvas.add(star)
+    canvas.setActiveObject(star)
+    commitHistory('Added star')
+  }
+
+  function rerollTreatment(treatmentId: string) {
+    const object = activeObject()
+    if (!object) return
+    updateTreatment(object, treatmentId, { seed: newSeed() })
+    renderTreatmentStack(object)
+    canvasRef.current?.requestRenderAll()
+    commitHistory('Re-rolled treatment')
+  }
+
+  function toggleTreatment(treatmentId: string) {
+    const object = activeObject()
+    if (!object) return
+    const treatment = readTreatments(object).find((item) => item.id === treatmentId)
+    if (!treatment) return
+    updateTreatment(object, treatmentId, { enabled: !treatment.enabled })
+    renderTreatmentStack(object)
+    canvasRef.current?.requestRenderAll()
+    commitHistory(treatment.enabled ? 'Bypassed treatment' : 'Enabled treatment')
+  }
+
+  function alignSelection(mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
+    const canvas = canvasRef.current
+    const active = activeObject()
+    if (!canvas || !active) return
+    const objects = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
+    alignObjects(objects, mode)
+    canvas.requestRenderAll()
+    commitHistory(`Aligned ${mode}`)
+  }
+
+  function distributeSelection(axis: 'horizontal' | 'vertical') {
+    const canvas = canvasRef.current
+    const active = activeObject()
+    if (!canvas || !active) return
+    const objects = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
+    distributeObjects(objects, axis)
+    canvas.requestRenderAll()
+    commitHistory(`Distributed ${axis}`)
+  }
+
+  async function clipSelectionToShape() {
+    const canvas = canvasRef.current
+    const active = activeObject()
+    if (!canvas || !active) return
+    const objects = canvas.getActiveObjects()
+    if (objects.length < 2) {
+      setStatus('Select a content layer and a shape mask (Shift+click)')
+      return
+    }
+    const mask = objects.find((item) => item.type === 'rect' || item.type === 'ellipse' || item.type === 'polygon')
+    const content = objects.find((item) => item !== mask)
+    if (!mask || !content) return
+    const clip = await mask.clone()
+    clip.set({ absolutePositioned: true, inverted: false })
+    content.set({ clipPath: clip })
+    canvas.requestRenderAll()
+    commitHistory('Applied clipping mask')
+  }
+
+  async function saveSelectionAsComponent() {
+    const canvas = canvasRef.current
+    const active = activeObject()
+    if (!canvas || !active) return
+    const name = window.prompt('Component name', selected?.name ?? 'Component')
+    if (!name) return
+    const clone = await active.clone()
+    const snapshot = clone.toObject(HISTORY_PROPS as unknown as string[]) as Record<string, unknown>
+    setDocumentMeta((current) => {
+      const base = current ?? createDefaultDocument(poster, {})
+      return {
+        ...base,
+        components: [
+          { id: `component-${Date.now()}`, name, canvas: snapshot },
+          ...base.components,
+        ].slice(0, 16),
+      }
+    })
+    commitHistory(`Saved component “${name}”`)
+  }
+
+  async function insertComponent(componentId: string) {
+    const canvas = canvasRef.current
+    const component = documentMeta?.components.find((item) => item.id === componentId)
+    if (!canvas || !component) return
+    const object = (await FabricObject.fromObject(component.canvas as object)) as FabricObject
+    object.set({ left: poster.width * 0.2, top: poster.height * 0.2 })
+    tagObject(object, (readObjectProp(object, 'kind') as LayerKind) ?? 'shape', component.name)
+    canvas.add(object as FabricObject)
+    canvas.setActiveObject(object as FabricObject)
+    canvas.requestRenderAll()
+    commitHistory(`Inserted component “${component.name}”`)
+  }
+
+  async function forkVariation() {
+    const canvas = canvasRef.current
+    if (!canvas || !documentMeta) return
+    const name = `Variant ${documentMeta.variants.length + 1}`
+    const snapshot = canvas.toObject(HISTORY_PROPS as unknown as string[])
+    setDocumentMeta(forkVariant(documentMeta, snapshot, name))
+    setStatus(`Forked ${name} — open Layout tab to compare`)
+    commitHistory(`Forked ${name}`)
+  }
+
+  async function switchToArtboard(artboardId: string) {
+    const canvas = canvasRef.current
+    if (!canvas || !documentMeta) return
+    const current = getActiveArtboard(documentMeta)
+    if (!current) return
+    const snapshot = canvas.toObject(HISTORY_PROPS as unknown as string[])
+    const boards = documentMeta.artboards.map((board) =>
+      board.id === current.id ? { ...board, canvas: snapshot, preset: poster } : board,
+    )
+    const next = switchArtboard({ ...documentMeta, artboards: boards }, artboardId)
+    const target = getActiveArtboard(next)
+    if (!target) return
+    restoringRef.current = true
+    await canvas.loadFromJSON(target.canvas)
+    restoringRef.current = false
+    setPoster(target.preset)
+    setPresetId(target.preset.id)
+    setDocumentMeta(next)
+    canvas.requestRenderAll()
+    captureStyleBaseline()
+    syncSelected()
+    syncLayers()
+    setStatus(`Switched to ${target.name}`)
+  }
+
+  function addNewArtboard() {
+    if (!documentMeta) return
+    const next = addArtboard(documentMeta, 'instagram')
+    setDocumentMeta(next)
+    const board = getActiveArtboard(next)
+    if (board) void switchToArtboard(board.id)
+  }
+
+  async function persistAssetFromFile(file: File) {
+    const dataUrl = await readFileAsDataUrl(file)
+    const thumbnail = await createThumbnail(dataUrl)
+    const asset: StoredAsset = {
+      id: newAssetId(),
+      name: file.name,
+      mimeType: file.type,
+      dataUrl,
+      thumbnail,
+      savedAt: new Date().toISOString(),
+    }
+    await saveAsset(asset)
+    await refreshAssets()
+  }
+
+  async function insertAsset(asset: StoredAsset) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const image = await FabricImage.fromURL(asset.dataUrl, { crossOrigin: 'anonymous' })
+    image.scaleToWidth(Math.min(poster.width * 0.5, image.width ?? 400))
+    image.set({ left: poster.width * 0.15, top: poster.height * 0.18, angle: -2 })
+    tagObject(image, 'image', asset.name)
+    canvas.add(image)
+    canvas.setActiveObject(image)
+    commitHistory(`Inserted asset “${asset.name}”`)
+  }
+
+  function applyGradientFill() {
+    const object = activeObject()
+    if (!object || selectedIsImage) return
+    const gradient = new Gradient({
+      type: 'linear',
+      coords: { x1: 0, y1: 0, x2: 100, y2: 0 },
+      colorStops: [
+        { offset: 0, color: documentPalette[0] ?? '#111111' },
+        { offset: 1, color: documentPalette[1] ?? '#e11d48' },
+      ],
+    })
+    object.set({ fill: gradient })
+    canvasRef.current?.requestRenderAll()
+    finalizeActive('Applied gradient fill')
+  }
+
+  function completeOnboarding() {
+    localStorage.setItem(ONBOARDING_KEY, 'done')
+    setOnboardingOpen(false)
+    setStatus('Try Scatter, then Xerox — press R to re-roll')
+  }
+
   async function duplicateSelected() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -961,7 +1320,7 @@ function App() {
     tagObject(image, 'image', file.name)
     canvas.add(image)
     canvas.setActiveObject(image)
-    setAssets((current) => [file.name, ...current].slice(0, 8))
+    await persistAssetFromFile(file)
     commitHistory('Imported image')
   }
 
@@ -998,36 +1357,27 @@ function App() {
     commitHistory(already ? `Removed ${effect} effect` : `Added ${effect} effect`)
   }
 
-  async function applyLayerDecayToSelected(seed = newSeed()) {
+  function applyTreatmentToSelection(
+    type: Treatment['type'],
+    params: Record<string, number>,
+    label: string,
+    seed = newSeed(),
+  ) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
-    const random = createSeededRandom(seed)
     const targetIds = selectedTargetIds()
-    const profile = getLayerDecayProfile(decayAmount)
-    const bounds = object.getBoundingRect()
-    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1.35 })
-    const image = await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+    captureTransformBaseline(object)
+    addTreatment(object, type, params, seed)
+    object.set({ objectCaching: true } as Partial<FabricObject>)
+    renderTreatmentStack(object)
+    canvas.requestRenderAll()
+    trackChaos(label, seed, targetIds, (next) => applyTreatmentToSelection(type, params, label, next))
+    commitHistory(`Applied ${label} #${seed}`)
+  }
 
-    image.filters = [
-      new filters.Contrast({ contrast: profile.contrast }),
-      new filters.Noise({ noise: profile.noise }),
-      new filters.Blur({ blur: profile.blur }),
-    ]
-    image.applyFilters()
-    image.set({
-      left: bounds.left,
-      top: bounds.top,
-      angle: (object.angle ?? 0) + (random() - 0.5) * profile.misregistration,
-      opacity: profile.opacity,
-      globalCompositeOperation: 'multiply',
-    })
-    tagObject(image, 'image', `Layer decay ${profile.amount}`)
-    canvas.remove(object)
-    canvas.add(image)
-    canvas.setActiveObject(image)
-    trackChaos('Age selected', seed, targetIds, (next) => applyLayerDecayToSelected(next))
-    commitHistory(`Applied layer decay #${seed}`)
+  async function applyLayerDecayToSelected(seed = newSeed()) {
+    applyTreatmentToSelection('decay', { amount: decayAmount }, 'layer decay', seed)
   }
 
   function addLayerDecayMarks(kind: 'ink-loss' | 'fold' | 'all', seed = newSeed()) {
@@ -1108,36 +1458,7 @@ function App() {
   }
 
   async function applyXeroxToSelected(seed = newSeed()) {
-    const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object || object.type === 'activeselection') return
-    const random = createSeededRandom(seed)
-    const targetIds = selectedTargetIds()
-    const profile = getPrintScanProfile(xeroxGeneration)
-    const bounds = object.getBoundingRect()
-    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1.45 })
-    const image = await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
-
-    image.filters = [
-      new filters.Grayscale(),
-      new filters.Contrast({ contrast: profile.contrast }),
-      new filters.Noise({ noise: profile.noise }),
-      new filters.Blur({ blur: profile.blur }),
-    ]
-    image.applyFilters()
-    image.set({
-      left: bounds.left,
-      top: bounds.top,
-      angle: (object.angle ?? 0) + (random() - 0.5) * profile.misregistration,
-      opacity: profile.opacity,
-      globalCompositeOperation: 'multiply',
-    })
-    tagObject(image, 'image', `Xerox gen ${profile.generation}`)
-    canvas.remove(object)
-    canvas.add(image)
-    canvas.setActiveObject(image)
-    trackChaos('Xerox copy', seed, targetIds, (next) => applyXeroxToSelected(next))
-    commitHistory(`Applied xerox generation ${profile.generation} #${seed}`)
+    applyTreatmentToSelection('xerox', { generation: xeroxGeneration }, 'xerox copy', seed)
   }
 
   async function addMisprintDuplicate() {
@@ -1299,26 +1620,13 @@ function App() {
 
   function scatterSelected(seed = newSeed()) {
     const canvas = canvasRef.current
-    const active = activeObject()
-    if (!canvas || !active) return
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
     const targetIds = selectedTargetIds()
-    const targets = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
-    const transforms = scatterLayers(
-      targets.map((object) => ({
-        id: String(readObjectProp(object, 'id') ?? ''),
-        left: object.left ?? 0,
-        top: object.top ?? 0,
-        angle: object.angle ?? 0,
-        scaleX: object.scaleX ?? 1,
-        scaleY: object.scaleY ?? 1,
-      })),
-      { distance: 46, rotation: 18, scale: 0.14, random: createSeededRandom(seed) },
-    )
-
-    targets.forEach((object, index) => {
-      object.set(transforms[index])
-      object.setCoords()
-    })
+    captureTransformBaseline(object)
+    addTreatment(object, 'scatter', { distance: 46, rotation: 18, scale: 0.14 }, seed)
+    object.set({ objectCaching: true } as Partial<FabricObject>)
+    renderTreatmentStack(object)
     canvas.requestRenderAll()
     trackChaos('Scatter', seed, targetIds, (next) => scatterSelected(next))
     commitHistory(`Scattered selection #${seed}`)
@@ -1533,28 +1841,8 @@ function App() {
     commitHistory('Added buried type texture')
   }
 
-  async function distressSelected() {
-    const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object || object.type === 'activeselection') return
-
-    const bounds = object.getBoundingRect()
-    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1.6 })
-    const image = await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
-    image.filters = [new filters.Grayscale(), new filters.Contrast({ contrast: 0.75 }), new filters.BlackWhite(), new filters.Noise({ noise: 180 })]
-    image.applyFilters()
-    image.set({
-      left: bounds.left,
-      top: bounds.top,
-      angle: object.angle ?? 0,
-      opacity: object.opacity ?? 1,
-      globalCompositeOperation: 'multiply',
-    })
-    tagObject(image, 'image', 'Distressed layer')
-    canvas.remove(object)
-    canvas.add(image)
-    canvas.setActiveObject(image)
-    commitHistory('Distressed selection')
+  async function distressSelected(seed = newSeed()) {
+    applyTreatmentToSelection('distress', { intensity: 70 }, 'distress', seed)
   }
 
   function addPhotocopyNoise(seed = newSeed()) {
@@ -1852,6 +2140,7 @@ function App() {
         savedAt: new Date().toISOString(),
         preset: poster,
         canvas: canvas.toObject(HISTORY_PROPS as unknown as string[]),
+        document: documentMeta ?? undefined,
       })
       setSavedProjects(await listProjects())
       await clearAutosave()
@@ -1868,6 +2157,12 @@ function App() {
     setPresetId(project.preset.id)
     setProjectName(project.name)
     if (options.keepId) setProjectId(project.id)
+    if (project.document) {
+      setDocumentMeta(project.document)
+      setDocumentPalette(project.document.palette)
+      setPrintDpi(project.document.dpi)
+      setBleedMm(project.document.bleedMm)
+    }
     restoringRef.current = true
     await canvas.loadFromJSON(project.canvas)
     restoringRef.current = false
@@ -1898,28 +2193,54 @@ function App() {
     if (!canvas) return
     const previousBackground = canvas.backgroundColor
     const format = exportFormat
+    const rasterFormat = format === 'jpeg' ? 'jpeg' : 'png'
     const background =
-      exportBackground === 'white' || (format === 'jpeg' && exportBackground === 'transparent')
+      exportBackground === 'white' || (rasterFormat === 'jpeg' && exportBackground === 'transparent')
         ? '#ffffff'
         : exportBackground === 'transparent'
           ? ''
           : '#f6f1e6'
 
-    // Fix: background swap is now atomic — a failed export can no longer corrupt canvas state.
     try {
       canvas.discardActiveObject()
       canvas.backgroundColor = background
       canvas.requestRenderAll()
+      const width = poster.width * exportScale
+      const height = poster.height * exportScale
       const dataUrl = canvas.toDataURL({
-        format,
+        format: rasterFormat,
         multiplier: exportScale,
         quality: exportQuality / 100,
       })
-      const link = document.createElement('a')
-      link.href = dataUrl
-      link.download = `${safeFileName(projectName)}@${exportScale}x.${format === 'jpeg' ? 'jpg' : 'png'}`
-      link.click()
-      setStatus(`Exported ${format.toUpperCase()} ${poster.width * exportScale} x ${poster.height * exportScale}`)
+      const baseName = safeFileName(projectName)
+
+      if (format === 'pdf') {
+        downloadPdfFromImageData(dataUrl, `${baseName}@${exportScale}x.pdf`, width, height, printDpi)
+      } else if (format === 'tiff') {
+        const image = new Image()
+        image.onload = () => {
+          const scratch = document.createElement('canvas')
+          scratch.width = width
+          scratch.height = height
+          const ctx = scratch.getContext('2d')
+          ctx?.drawImage(image, 0, 0, width, height)
+          const rgba = ctx?.getImageData(0, 0, width, height).data
+          if (!rgba) return
+          const blob = rgbaToTiffBlob(width, height, rgba)
+          const link = document.createElement('a')
+          link.href = URL.createObjectURL(blob)
+          link.download = `${baseName}@${exportScale}x.tiff`
+          link.click()
+          URL.revokeObjectURL(link.href)
+        }
+        image.src = dataUrl
+      } else {
+        const link = document.createElement('a')
+        link.href = dataUrl
+        link.download = `${baseName}@${exportScale}x.${rasterFormat === 'jpeg' ? 'jpg' : 'png'}`
+        link.click()
+      }
+      setStatus(`Exported ${format.toUpperCase()} ${width} x ${height}`)
     } catch {
       setStatus('Export failed — try a smaller export size')
     } finally {
@@ -1954,9 +2275,27 @@ function App() {
 
   const scopeSel = <span className="scope-badge" aria-hidden="true">SEL</span>
   const scopeAll = <span className="scope-badge scope-all" aria-hidden="true">ALL</span>
+  const selectedObject = selected ? findObjectById(selected.id) : null
+  const selectedTreatments = readTreatments(selectedObject)
+  const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
+  const commands: CommandAction[] = [
+    { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', run: () => void applyXeroxToSelected() },
+    { id: 'scatter', label: 'Scatter selection', keywords: ['scatter', 'chaos'], scope: 'selection', run: () => scatterSelected() },
+    { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', run: () => void applyLayerDecayToSelected() },
+    { id: 'distress', label: 'Distress selection', keywords: ['distress', 'grunge'], scope: 'selection', run: () => void distressSelected() },
+    { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', run: () => alignSelection('left') },
+    { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf'], scope: 'canvas', run: exportPoster },
+    { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
+    { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
+    { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', run: () => void clipSelectionToShape() },
+    { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns'], scope: 'canvas', run: () => setShowLayoutGrid((value) => !value) },
+    { id: 'print-guides', label: 'Toggle print guides', keywords: ['bleed', 'trim', 'print'], scope: 'canvas', run: () => setShowPrintGuides((value) => !value) },
+  ]
 
   return (
     <main className="editor-shell">
+      <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
+      <OnboardingModal open={onboardingOpen} onStart={completeOnboarding} onSkip={completeOnboarding} />
       <header className="topbar glass-bar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">C</span>
@@ -1975,6 +2314,10 @@ function App() {
           <button type="button" className="toolbar-button" title="Save to this browser (Cmd+S)" onClick={() => void saveProjectAction()}>
             <Save size={17} />
             Save
+          </button>
+          <button type="button" className="toolbar-button" title="Command palette (Cmd+K)" onClick={() => setCommandOpen(true)}>
+            <Sparkles size={17} />
+            Commands
           </button>
           <button type="button" className="primary-button" title="Export the poster (Cmd+E)" onClick={exportPoster}>
             <Download size={17} />
@@ -1999,6 +2342,18 @@ function App() {
               <button type="button" title="Add a solid block (B)" onClick={addShape}>
                 <Square size={17} />
                 Block
+              </button>
+              <button type="button" title="Add an ellipse" onClick={addEllipse}>
+                <Circle size={17} />
+                Ellipse
+              </button>
+              <button type="button" title="Add a line" onClick={addLine}>
+                <Minus size={17} />
+                Line
+              </button>
+              <button type="button" title="Add a star" onClick={addStarShape}>
+                <Star size={17} />
+                Star
               </button>
               <button type="button" title="Duplicate the selected layer (Cmd+D)" onClick={() => void duplicateSelected()} disabled={!selected}>
                 <FlipHorizontal size={17} />
@@ -2362,7 +2717,22 @@ function App() {
           <div className="stage-toolbar glass-bar">
             <span>
               {poster.name} · {poster.width} x {poster.height}px
+              {poster.dpi ? ` @ ${poster.dpi}dpi` : ''}
             </span>
+            {documentMeta && documentMeta.artboards.length > 1 ? (
+              <span className="artboard-tabs">
+                {documentMeta.artboards.map((board) => (
+                  <button
+                    key={board.id}
+                    type="button"
+                    className={board.id === documentMeta.activeArtboardId ? 'active' : undefined}
+                    onClick={() => void switchToArtboard(board.id)}
+                  >
+                    {board.name}
+                  </button>
+                ))}
+              </span>
+            ) : null}
             <span className="zoom-controls">
               <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Cmd+-)" onClick={() => stepZoom(-1)}>
                 <ZoomOut size={15} />
@@ -2417,6 +2787,30 @@ function App() {
         </section>
 
         <aside className="rail inspector glass-panel" aria-label="Inspector">
+          <div className="inspector-tabs" role="tablist" aria-label="Inspector panels">
+            {(
+              [
+                ['inspect', 'Inspect'],
+                ['treatments', 'Treatments'],
+                ['assets', 'Assets'],
+                ['layout', 'Layout'],
+                ['print', 'Print'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={inspectorTab === id}
+                className={inspectorTab === id ? 'active' : undefined}
+                onClick={() => setInspectorTab(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {inspectorTab === 'inspect' ? (
           <div className="panel-section">
             <h2>Project</h2>
             <label>
@@ -2431,6 +2825,8 @@ function App() {
                   <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}>
                     <option value="png">PNG</option>
                     <option value="jpeg">JPG</option>
+                    <option value="pdf">PDF</option>
+                    <option value="tiff">TIFF</option>
                   </select>
                 </label>
                 <label>
@@ -2493,7 +2889,48 @@ function App() {
               )}
             </div>
           </div>
+          ) : null}
 
+          {inspectorTab === 'treatments' ? (
+            <div className="panel-section">
+              <h2>Treatment stack</h2>
+              <p className="hint">Non-destructive — text stays editable under filters.</p>
+              {!selected ? (
+                <p className="empty">Select a layer to view its treatment stack.</p>
+              ) : selectedTreatments.length === 0 ? (
+                <p className="empty">No treatments yet. Try Xerox or Scatter from the left rail.</p>
+              ) : (
+                <ul className="treatment-stack">
+                  {selectedTreatments.map((treatment) => (
+                    <li key={treatment.id} className={treatment.enabled ? undefined : 'bypassed'}>
+                      <span>{treatmentLabel(treatment)}</span>
+                      <small>#{treatment.seed}</small>
+                      <span className="treatment-actions">
+                        <button type="button" title="Re-roll seed" onClick={() => rerollTreatment(treatment.id)}>
+                          <Dices size={12} />
+                        </button>
+                        <button type="button" title={treatment.enabled ? 'Bypass' : 'Enable'} onClick={() => toggleTreatment(treatment.id)}>
+                          {treatment.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
+                        </button>
+                        <button type="button" title="Remove" onClick={() => {
+                          if (!selectedObject) return
+                          removeTreatment(selectedObject, treatment.id)
+                          renderTreatmentStack(selectedObject)
+                          canvasRef.current?.requestRenderAll()
+                          commitHistory('Removed treatment')
+                        }}>
+                          <Trash2 size={12} />
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+
+          {inspectorTab === 'inspect' ? (
+          <>
           <div className="panel-section">
             <div className="panel-title">
               <h2>Selection</h2>
@@ -2534,17 +2971,79 @@ function App() {
                       <select
                         value={selected.fontFamily ?? FONT_STACKS[0]}
                         onChange={(event) => {
-                          updateActive({ fontFamily: event.target.value })
-                          finalizeActive('Changed font')
+                          void loadGoogleFont(event.target.value).finally(() => {
+                            updateActive({ fontFamily: event.target.value })
+                            finalizeActive('Changed font')
+                          })
                         }}
                       >
-                        {FONT_STACKS.map((font) => (
-                          <option key={font} value={font} style={{ fontFamily: font }}>
-                            {font}
-                          </option>
-                        ))}
+                        <optgroup label="System">
+                          {FONT_STACKS.map((font) => (
+                            <option key={font} value={font} style={{ fontFamily: font }}>
+                              {font}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Google Fonts">
+                          {GOOGLE_FONTS.map((font) => (
+                            <option key={font.family} value={font.family} style={{ fontFamily: font.family }}>
+                              {font.family}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {customFonts.length > 0 ? (
+                          <optgroup label="Uploaded">
+                            {customFonts.map((font) => (
+                              <option key={font} value={font} style={{ fontFamily: font }}>
+                                {font}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
                       </select>
                     </label>
+                    <button type="button" title="Upload a font file" onClick={() => fontInputRef.current?.click()}>
+                      Upload font
+                    </button>
+                    <input
+                      ref={fontInputRef}
+                      className="visually-hidden"
+                      type="file"
+                      accept=".ttf,.otf,.woff,.woff2"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (!file) return
+                        void loadFontFile(file).then((family) => {
+                          setCustomFonts((current) => [...new Set([...current, family])])
+                          updateActive({ fontFamily: family })
+                          finalizeActive(`Loaded font ${family}`)
+                        })
+                        event.currentTarget.value = ''
+                      }}
+                    />
+                    <Slider
+                      label="Weight axis"
+                      value={Number(selected.fontWeight) || 700}
+                      min={100}
+                      max={900}
+                      onChange={(value) => updateActive({ fontWeight: value })}
+                      onCommit={() => finalizeActive('Changed weight')}
+                    />
+                    <Slider
+                      label="Width axis"
+                      value={fontStretch}
+                      min={50}
+                      max={200}
+                      format={formatPercent}
+                      onChange={(value) => {
+                        setFontStretch(value)
+                        updateActive({ scaleX: value / 100 })
+                      }}
+                      onCommit={() => finalizeActive('Changed width axis')}
+                    />
+                    <p className="hint legibility-readout">
+                      Legibility: {legibilityBand(textContrast)} · contrast {textContrast ? textContrast.toFixed(1) : '—'}:1
+                    </p>
                     <Slider
                       label="Size"
                       value={selected.fontSize ?? 80}
@@ -2663,6 +3162,27 @@ function App() {
                     </button>
                   </span>
                 </label>
+                <div className="swatch-row" aria-label="Document palette">
+                  {documentPalette.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="swatch"
+                      style={{ background: color }}
+                      title={`Document swatch ${color}`}
+                      disabled={selectedIsImage}
+                      onClick={() => {
+                        updateActive({ fill: color })
+                        finalizeActive('Applied palette color')
+                      }}
+                    />
+                  ))}
+                </div>
+                {!selectedIsImage ? (
+                  <button type="button" title="Apply a linear gradient from palette colors" onClick={applyGradientFill}>
+                    Apply gradient fill
+                  </button>
+                ) : null}
                 {recentColors.length > 0 && !selectedIsImage ? (
                   <div className="swatch-row" aria-label="Recently used colors">
                     {recentColors.map((color) => (
@@ -2712,7 +3232,7 @@ function App() {
           </div>
 
           <div className="panel-section">
-            <h2>Image Effects</h2>
+            <h2>Image effects</h2>
             <p className="hint">Effects stack — click again to remove one.</p>
             <div className="preset-row">
               {(['grayscale', 'contrast', 'threshold', 'blur', 'noise', 'clear'] as const).map((effect) => (
@@ -2730,29 +3250,115 @@ function App() {
           </div>
 
           <div className="panel-section">
-            <h2>Assets</h2>
-            {assets.length === 0 ? (
-              <p className="empty">Imported images appear here.</p>
-            ) : (
-              <ul className="asset-list">
-                {assets.map((asset) => (
-                  <li key={asset}>{asset}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="panel-section">
             <h2>Shortcuts</h2>
             <ul className="shortcut-list">
               <li><kbd>Cmd+Z</kbd> Undo · <kbd>Cmd+Shift+Z</kbd> Redo</li>
               <li><kbd>Cmd+D</kbd> Duplicate · <kbd>Delete</kbd> Remove</li>
+              <li><kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant</li>
               <li><kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10</li>
               <li><kbd>T</kbd> Text · <kbd>B</kbd> Block · <kbd>R</kbd> Re-roll</li>
               <li><kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom</li>
               <li><kbd>Space+Drag</kbd> Pan · <kbd>Cmd+Drag</kbd> No snapping</li>
             </ul>
           </div>
+          </>
+          ) : null}
+
+          {inspectorTab === 'assets' ? (
+            <div className="panel-section">
+              <h2>Asset library</h2>
+              <p className="hint">Drag thumbnails to the canvas — or click to insert.</p>
+              {storedAssets.length === 0 ? (
+                <p className="empty">Import images to build your library.</p>
+              ) : (
+                <div className="asset-grid">
+                  {storedAssets.map((asset) => (
+                    <button key={asset.id} type="button" className="asset-thumb" title={asset.name} onClick={() => void insertAsset(asset)}>
+                      <img src={asset.thumbnail} alt="" />
+                      <span>{asset.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {documentMeta && documentMeta.components.length > 0 ? (
+                <>
+                  <h3>Components</h3>
+                  <div className="preset-row">
+                    {documentMeta.components.map((component) => (
+                      <button key={component.id} type="button" onClick={() => void insertComponent(component.id)}>
+                        {component.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+              <button type="button" title="Save the current selection as a reusable component" onClick={() => void saveSelectionAsComponent()} disabled={!selected}>
+                Save selection as component
+              </button>
+            </div>
+          ) : null}
+
+          {inspectorTab === 'layout' ? (
+            <div className="panel-section">
+              <h2>Layout & grid</h2>
+              <div className="button-row">
+                <button type="button" onClick={() => alignSelection('left')}>Align left</button>
+                <button type="button" onClick={() => alignSelection('center')}>Center</button>
+                <button type="button" onClick={() => alignSelection('right')}>Align right</button>
+              </div>
+              <div className="button-row">
+                <button type="button" onClick={() => distributeSelection('horizontal')}>Distribute H</button>
+                <button type="button" onClick={() => distributeSelection('vertical')}>Distribute V</button>
+                <button type="button" onClick={() => void clipSelectionToShape()}>Clip to shape</button>
+              </div>
+              <Slider
+                label="Grid tension"
+                value={gridOverlay.tension}
+                min={0}
+                max={100}
+                format={formatPercent}
+                onChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
+                onCommit={() => setShowLayoutGrid(true)}
+              />
+              <button type="button" onClick={() => setShowLayoutGrid((value) => !value)}>
+                <Grid3x3 size={16} />
+                {showLayoutGrid ? 'Hide column grid' : 'Show column grid'}
+              </button>
+              {documentMeta && documentMeta.variants.length > 0 ? (
+                <>
+                  <h3>Variations</h3>
+                  <ul className="asset-list">
+                    {documentMeta.variants.map((variant) => (
+                      <li key={variant.id}>{variant.name} · {new Date(variant.savedAt).toLocaleString()}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          {inspectorTab === 'print' ? (
+            <div className="panel-section">
+              <h2>Print pipeline</h2>
+              <label>
+                Document DPI
+                <input type="number" value={printDpi} min={72} max={600} onChange={(event) => setPrintDpi(Number(event.target.value))} />
+              </label>
+              <label>
+                Bleed (mm)
+                <input type="number" value={bleedMm} min={0} max={20} onChange={(event) => setBleedMm(Number(event.target.value))} />
+              </label>
+              <button type="button" onClick={() => setShowPrintGuides((value) => !value)}>
+                {showPrintGuides ? 'Hide bleed/trim guides' : 'Show bleed/trim guides'}
+              </button>
+              <button type="button" onClick={() => addNewArtboard()}>
+                Add artboard (IG portrait)
+              </button>
+              <p className="hint">
+                Print guides are document chrome — they never bake into artwork. Export PDF for print shops.
+              </p>
+            </div>
+          ) : null}
         </aside>
       </section>
     </main>
@@ -2828,6 +3434,17 @@ function readFileAsDataUrl(file: File) {
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
+}
+
+function buildStarPoints(points: number, outer: number, inner: number) {
+  const result: { x: number; y: number }[] = []
+  const step = Math.PI / points
+  for (let i = 0; i < points * 2; i++) {
+    const radius = i % 2 === 0 ? outer : inner
+    const angle = i * step - Math.PI / 2
+    result.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius })
+  }
+  return result
 }
 
 function cropFragments(imageUrl: string, fragments: ReturnType<typeof createCutFragments>) {

@@ -20,12 +20,15 @@ import {
 } from './editorModel'
 
 describe('poster presets', () => {
-  it('returns practical pixel dimensions for A3 portrait posters', () => {
+  it('returns print-ready 300dpi dimensions for A3 portrait posters', () => {
     expect(getPosterPreset('a3')).toEqual({
       id: 'a3',
-      name: 'A3 portrait',
-      width: 1240,
-      height: 1754,
+      name: 'A3 portrait (300dpi)',
+      width: 3508,
+      height: 4961,
+      dpi: 300,
+      widthMm: 297,
+      heightMm: 420,
     })
   })
 
@@ -34,7 +37,7 @@ describe('poster presets', () => {
       id: 'custom',
       name: 'Custom',
       width: 320,
-      height: 3000,
+      height: 10000,
     })
   })
 })
