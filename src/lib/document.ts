@@ -86,12 +86,22 @@ export function addArtboard(doc: DocumentMeta, presetId: PosterPresetId, name?: 
   }
 }
 
-export function forkVariant(doc: DocumentMeta, canvas: Record<string, unknown>, name: string): DocumentMeta {
+export function findVariant(doc: DocumentMeta, variantId: string): DocumentVariant | undefined {
+  return doc.variants.find((variant) => variant.id === variantId)
+}
+
+export function forkVariant(
+  doc: DocumentMeta,
+  canvas: Record<string, unknown>,
+  name: string,
+  thumbnail?: string,
+): DocumentMeta {
   const variant: DocumentVariant = {
     id: newVariantId(),
     name,
     savedAt: new Date().toISOString(),
     canvas,
+    thumbnail,
   }
   return { ...doc, variants: [variant, ...doc.variants].slice(0, 12) }
 }

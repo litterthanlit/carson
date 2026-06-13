@@ -91,6 +91,7 @@ import {
 } from './lib/treatments'
 import {
   createDefaultDocument,
+  findVariant,
   forkVariant,
   getActiveArtboard,
   switchArtboard,
@@ -105,6 +106,7 @@ import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } 
 import type { CommandAction } from './lib/commands'
 import { CommandPalette } from './components/CommandPalette'
 import { OnboardingModal } from './components/OnboardingModal'
+import { VariantCompareModal } from './components/VariantCompareModal'
 import './App.css'
 
 type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
@@ -246,6 +248,10 @@ function App() {
   const [printDpi, setPrintDpi] = useState(300)
   const [bleedMm, setBleedMm] = useState(3)
   const [onboardingOpen, setOnboardingOpen] = useState(() => !localStorage.getItem(ONBOARDING_KEY))
+  const [variantCompare, setVariantCompare] = useState<{
+    variantId: string
+    currentThumbnail: string
+  } | null>(null)
   const fontInputRef = useRef<HTMLInputElement | null>(null)
 
   showPrintGuidesRef.current = showPrintGuides
@@ -1123,10 +1129,44 @@ function App() {
     if (!canvas || !documentMeta) return
     const name = `Variant ${documentMeta.variants.length + 1}`
     const snapshot = canvas.toObject(HISTORY_PROPS as unknown as string[])
-    setDocumentMeta(forkVariant(documentMeta, snapshot, name))
-    setStatus(`Forked ${name} — open Layout tab to compare`)
+    const preview = canvas.toDataURL({ format: 'jpeg', quality: 0.75, multiplier: 0.12 })
+    const thumbnail = await createThumbnail(preview, 120)
+    setDocumentMeta(forkVariant(documentMeta, snapshot, name, thumbnail))
+    setInspectorTab('layout')
+    setStatus(`Forked ${name} — click Restore in Layout to switch`)
     commitHistory(`Forked ${name}`)
   }
+
+  async function restoreVariant(variantId: string) {
+    const canvas = canvasRef.current
+    if (!canvas || !documentMeta) return
+    const variant = findVariant(documentMeta, variantId)
+    if (!variant) return
+
+    restoringRef.current = true
+    await canvas.loadFromJSON(variant.canvas)
+    restoringRef.current = false
+    canvas.requestRenderAll()
+    captureStyleBaseline()
+    syncSelected()
+    syncLayers()
+    setVariantCompare(null)
+    setStatus(`Restored ${variant.name}`)
+    commitHistory(`Restored ${variant.name}`)
+  }
+
+  async function openVariantCompare(variantId: string) {
+    const canvas = canvasRef.current
+    if (!canvas || !documentMeta) return
+    const variant = findVariant(documentMeta, variantId)
+    if (!variant) return
+    const preview = canvas.toDataURL({ format: 'jpeg', quality: 0.75, multiplier: 0.12 })
+    const currentThumbnail = await createThumbnail(preview, 160)
+    setVariantCompare({ variantId, currentThumbnail })
+  }
+
+  const comparingVariant =
+    variantCompare && documentMeta ? findVariant(documentMeta, variantCompare.variantId) ?? null : null
 
   async function switchToArtboard(artboardId: string) {
     const canvas = canvasRef.current
@@ -2296,6 +2336,15 @@ function App() {
     <main className="editor-shell">
       <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
       <OnboardingModal open={onboardingOpen} onStart={completeOnboarding} onSkip={completeOnboarding} />
+      <VariantCompareModal
+        open={variantCompare !== null}
+        variant={comparingVariant}
+        currentThumbnail={variantCompare?.currentThumbnail ?? null}
+        onRestore={() => {
+          if (variantCompare) void restoreVariant(variantCompare.variantId)
+        }}
+        onClose={() => setVariantCompare(null)}
+      />
       <header className="topbar glass-bar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">C</span>
@@ -3327,9 +3376,28 @@ function App() {
               {documentMeta && documentMeta.variants.length > 0 ? (
                 <>
                   <h3>Variations</h3>
-                  <ul className="asset-list">
+                  <p className="hint">Fork with <kbd>Cmd+B</kbd>, then restore or compare a branch.</p>
+                  <ul className="variant-list">
                     {documentMeta.variants.map((variant) => (
-                      <li key={variant.id}>{variant.name} · {new Date(variant.savedAt).toLocaleString()}</li>
+                      <li key={variant.id} className="variant-card">
+                        {variant.thumbnail ? (
+                          <img className="variant-thumb" src={variant.thumbnail} alt="" />
+                        ) : (
+                          <div className="variant-thumb variant-thumb-placeholder" aria-hidden />
+                        )}
+                        <div className="variant-meta">
+                          <strong>{variant.name}</strong>
+                          <small>{new Date(variant.savedAt).toLocaleString()}</small>
+                        </div>
+                        <div className="variant-actions">
+                          <button type="button" title={`Restore ${variant.name}`} onClick={() => void restoreVariant(variant.id)}>
+                            Restore
+                          </button>
+                          <button type="button" title={`Compare with ${variant.name}`} onClick={() => void openVariantCompare(variant.id)}>
+                            Compare
+                          </button>
+                        </div>
+                      </li>
                     ))}
                   </ul>
                 </>
