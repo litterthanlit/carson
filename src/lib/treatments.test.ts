@@ -11,6 +11,16 @@ describe('treatments', () => {
     expect(stack[0].seed).toBe(4719)
   })
 
+  it('replaces an existing slice treatment on the same layer', () => {
+    const object = { set: (values: Record<string, unknown>) => Object.assign(object, values) } as never
+    addTreatment(object, 'slice', { direction: 0, pieces: 5, gap: 9 }, 1)
+    addTreatment(object, 'slice', { direction: 1, pieces: 3, gap: 4 }, 2)
+    const stack = readTreatments(object)
+    expect(stack).toHaveLength(1)
+    expect(stack[0].params.direction).toBe(1)
+    expect(stack[0].seed).toBe(2)
+  })
+
   it('builds filter stacks for xerox and decay', () => {
     const filters = buildTreatmentFilters([
       { id: '1', type: 'xerox', seed: 1, enabled: true, params: { generation: 5 } },

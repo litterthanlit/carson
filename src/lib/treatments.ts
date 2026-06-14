@@ -3,11 +3,21 @@
  * Treatments persist on Fabric objects and render via filters + transforms.
  */
 import { filters } from 'fabric'
-import type { FabricImage, FabricObject } from 'fabric'
+import type { Canvas, FabricImage, FabricObject } from 'fabric'
 import { getLayerDecayProfile, getPrintScanProfile } from './editorModel'
 import { createSeededRandom } from './random'
+import {
+  removeSliceFragments,
+  removeSliceFragmentsForSource,
+  renderSliceTreatment,
+  restoreSliceSource,
+  sliceDirectionFromParams,
+  SLICE_SOURCE_ID_KEY,
+  SLICE_TREATMENT_ID_KEY,
+  type SliceFragmentTagger,
+} from './sliceTreatment'
 
-export type TreatmentType = 'xerox' | 'decay' | 'distress' | 'scatter'
+export type TreatmentType = 'xerox' | 'decay' | 'distress' | 'scatter' | 'slice'
 
 export type Treatment = {
   id: string
@@ -79,7 +89,9 @@ export function addTreatment(
     params,
   }
   const stack = [...readTreatments(object), treatment]
-  writeTreatments(object, stack)
+  const next =
+    type === 'slice' ? [...readTreatments(object).filter((item) => item.type !== 'slice'), treatment] : stack
+  writeTreatments(object, next)
   return treatment
 }
 
@@ -121,6 +133,10 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Distress·${treatment.params.intensity ?? 70}`
     case 'scatter':
       return `Scatter·#${treatment.seed}`
+    case 'slice': {
+      const axis = sliceDirectionFromParams(treatment.params) === 'vertical' ? 'V' : 'H'
+      return `Slice·${axis}·${treatment.params.pieces ?? 5}`
+    }
     default:
       return treatment.type
   }
@@ -171,9 +187,13 @@ export function applyScatterTransform(object: FabricObject, treatment: Treatment
   })
 }
 
-/** Re-render all treatments on an object without rasterizing. */
+/** Apply filter + scatter treatments (sync). Slice requires {@link renderTreatmentStackOnCanvas}. */
 export function renderTreatmentStack(object: FabricObject) {
-  const stack = readTreatments(object).filter((item) => item.enabled)
+  applySyncTreatmentStack(object)
+}
+
+function applySyncTreatmentStack(object: FabricObject) {
+  const stack = readTreatments(object).filter((item) => item.enabled && item.type !== 'slice')
   const filterTreatments = stack.filter((item) => item.type !== 'scatter')
   const scatter = stack.find((item) => item.type === 'scatter')
 
@@ -208,6 +228,49 @@ export function renderTreatmentStack(object: FabricObject) {
       const profile = getLayerDecayProfile(treatment.params.amount ?? 55)
       object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
     }
+  }
+
+  object.setCoords()
+}
+
+function cleanupOrphanedSliceFragments(canvas: Canvas, source: FabricObject) {
+  const sourceId = String((source as unknown as Record<string, unknown>).id ?? '')
+  const activeIds = new Set(readTreatments(source).map((item) => item.id))
+  for (const object of canvas.getObjects()) {
+    const sliceSourceId = (object as unknown as Record<string, unknown>)[SLICE_SOURCE_ID_KEY]
+    const sliceTreatmentId = (object as unknown as Record<string, unknown>)[SLICE_TREATMENT_ID_KEY]
+    if (sliceSourceId === sourceId && sliceTreatmentId && !activeIds.has(String(sliceTreatmentId))) {
+      canvas.remove(object)
+    }
+  }
+}
+
+/** Full stack render including async slice artifacts. Source layer survives slice removal. */
+export async function renderTreatmentStackOnCanvas(
+  canvas: Canvas,
+  object: FabricObject,
+  tagFragment: SliceFragmentTagger,
+) {
+  applySyncTreatmentStack(object)
+
+  const sourceId = String((object as unknown as Record<string, unknown>).id ?? '')
+  const sliceTreatments = readTreatments(object).filter((item) => item.type === 'slice')
+  const enabledSlice = sliceTreatments.some((item) => item.enabled)
+
+  cleanupOrphanedSliceFragments(canvas, object)
+
+  for (const treatment of sliceTreatments) {
+    if (treatment.enabled) {
+      await renderSliceTreatment(canvas, object, treatment, tagFragment)
+    } else {
+      removeSliceFragments(canvas, treatment.id)
+    }
+  }
+
+  if (!enabledSlice) {
+    const baseline = readTransformBaseline(object)
+    restoreSliceSource(object, baseline?.opacity ?? 1)
+    removeSliceFragmentsForSource(canvas, sourceId)
   }
 
   object.setCoords()

@@ -84,11 +84,12 @@ import {
   captureTransformBaseline,
   readTreatments,
   removeTreatment,
-  renderTreatmentStack,
+  renderTreatmentStackOnCanvas,
   treatmentLabel,
   updateTreatment,
   type Treatment,
 } from './lib/treatments'
+import { cropFragments, sliceDirectionToParam } from './lib/sliceTreatment'
 import {
   createDefaultDocument,
   findVariant,
@@ -163,6 +164,8 @@ const HISTORY_PROPS = [
   'strokeWidth',
   'strokeDashArray',
   'clipPath',
+  'sliceSourceId',
+  'sliceTreatmentId',
 ] as const
 const FONT_STACKS = [
   'Arial Black',
@@ -661,6 +664,26 @@ function App() {
     } as Partial<FabricObject>)
   }
 
+  async function refreshTreatmentStack(object?: FabricObject | null) {
+    const canvas = canvasRef.current
+    const target = object ?? activeObject()
+    if (!canvas || !target || target.type === 'activeselection') return
+    await renderTreatmentStackOnCanvas(canvas, target, (fragment, index) => {
+      tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+    })
+    canvas.requestRenderAll()
+  }
+
+  async function reconcileSliceTreatments() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    for (const object of canvas.getObjects()) {
+      if (readTreatments(object).some((item) => item.type === 'slice')) {
+        await refreshTreatmentStack(object)
+      }
+    }
+  }
+
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
     const headline = new Textbox('RAY GUN\nCUT TYPE', {
       left: currentPoster.width * 0.09,
@@ -827,6 +850,7 @@ function App() {
     restoringRef.current = true
     await canvas.loadFromJSON(JSON.parse(snapshot))
     restoringRef.current = false
+    await reconcileSliceTreatments()
     canvas.requestRenderAll()
     captureStyleBaseline()
     syncSelected()
@@ -1031,23 +1055,21 @@ function App() {
     commitHistory('Added star')
   }
 
-  function rerollTreatment(treatmentId: string) {
+  async function rerollTreatment(treatmentId: string) {
     const object = activeObject()
     if (!object) return
     updateTreatment(object, treatmentId, { seed: newSeed() })
-    renderTreatmentStack(object)
-    canvasRef.current?.requestRenderAll()
+    await refreshTreatmentStack(object)
     commitHistory('Re-rolled treatment')
   }
 
-  function toggleTreatment(treatmentId: string) {
+  async function toggleTreatment(treatmentId: string) {
     const object = activeObject()
     if (!object) return
     const treatment = readTreatments(object).find((item) => item.id === treatmentId)
     if (!treatment) return
     updateTreatment(object, treatmentId, { enabled: !treatment.enabled })
-    renderTreatmentStack(object)
-    canvasRef.current?.requestRenderAll()
+    await refreshTreatmentStack(object)
     commitHistory(treatment.enabled ? 'Bypassed treatment' : 'Enabled treatment')
   }
 
@@ -1146,6 +1168,7 @@ function App() {
     restoringRef.current = true
     await canvas.loadFromJSON(variant.canvas)
     restoringRef.current = false
+    await reconcileSliceTreatments()
     canvas.requestRenderAll()
     captureStyleBaseline()
     syncSelected()
@@ -1183,6 +1206,7 @@ function App() {
     restoringRef.current = true
     await canvas.loadFromJSON(target.canvas)
     restoringRef.current = false
+    await reconcileSliceTreatments()
     setPoster(target.preset)
     setPresetId(target.preset.id)
     setDocumentMeta(next)
@@ -1410,10 +1434,10 @@ function App() {
     captureTransformBaseline(object)
     addTreatment(object, type, params, seed)
     object.set({ objectCaching: true } as Partial<FabricObject>)
-    renderTreatmentStack(object)
-    canvas.requestRenderAll()
-    trackChaos(label, seed, targetIds, (next) => applyTreatmentToSelection(type, params, label, next))
-    commitHistory(`Applied ${label} #${seed}`)
+    void refreshTreatmentStack(object).then(() => {
+      trackChaos(label, seed, targetIds, (next) => applyTreatmentToSelection(type, params, label, next))
+      commitHistory(`Applied ${label} #${seed}`)
+    })
   }
 
   async function applyLayerDecayToSelected(seed = newSeed()) {
@@ -1658,7 +1682,7 @@ function App() {
     commitHistory('Collided selected layers')
   }
 
-  function scatterSelected(seed = newSeed()) {
+  async function scatterSelected(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
@@ -1666,45 +1690,30 @@ function App() {
     captureTransformBaseline(object)
     addTreatment(object, 'scatter', { distance: 46, rotation: 18, scale: 0.14 }, seed)
     object.set({ objectCaching: true } as Partial<FabricObject>)
-    renderTreatmentStack(object)
-    canvas.requestRenderAll()
+    await refreshTreatmentStack(object)
     trackChaos('Scatter', seed, targetIds, (next) => scatterSelected(next))
     commitHistory(`Scattered selection #${seed}`)
   }
 
-  async function sliceSelected(direction: 'horizontal' | 'vertical') {
+  async function sliceSelected(direction: 'horizontal' | 'vertical', seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
+    const targetIds = selectedTargetIds()
 
-    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
-    const bounds = object.getBoundingRect()
-    const fragments = createCutFragments(
-      {
-        id: String(readObjectProp(object, 'id') ?? 'layer'),
-        left: bounds.left,
-        top: bounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      },
-      { pieces: 5, gap: 9, direction },
+    captureTransformBaseline(object)
+    addTreatment(
+      object,
+      'slice',
+      { direction: sliceDirectionToParam(direction), pieces: 5, gap: 9 },
+      seed,
     )
-
-    const cropped = await cropFragments(imageUrl, fragments)
-    canvas.remove(object)
-    for (const [index, url] of cropped.entries()) {
-      const fragment = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
-      const frame = fragments[index]
-      fragment.set({
-        left: frame.left,
-        top: frame.top,
-        angle: index % 2 === 0 ? -2 : 3,
-        opacity: object.opacity ?? 1,
-      })
-      tagObject(fragment, 'fragment', `Cut ${index + 1}`)
-      canvas.add(fragment)
-    }
-    canvas.discardActiveObject()
+    object.set({ objectCaching: true } as Partial<FabricObject>)
+    await refreshTreatmentStack(object)
+    setInspectorTab('treatments')
+    trackChaos(direction === 'horizontal' ? 'Slice horizontal' : 'Slice vertical', seed, targetIds, (next) =>
+      sliceSelected(direction, next),
+    )
     commitHistory(direction === 'horizontal' ? 'Sliced into strips' : 'Sliced into columns')
   }
 
@@ -2206,6 +2215,7 @@ function App() {
     restoringRef.current = true
     await canvas.loadFromJSON(project.canvas)
     restoringRef.current = false
+    await reconcileSliceTreatments()
     canvas.requestRenderAll()
     historyRef.current = [JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))]
     redoRef.current = []
@@ -2943,7 +2953,7 @@ function App() {
           {inspectorTab === 'treatments' ? (
             <div className="panel-section">
               <h2>Treatment stack</h2>
-              <p className="hint">Non-destructive — text stays editable under filters.</p>
+              <p className="hint">Non-destructive — text stays editable; remove Slice to restore the source layer.</p>
               {!selected ? (
                 <p className="empty">Select a layer to view its treatment stack.</p>
               ) : selectedTreatments.length === 0 ? (
@@ -2964,9 +2974,9 @@ function App() {
                         <button type="button" title="Remove" onClick={() => {
                           if (!selectedObject) return
                           removeTreatment(selectedObject, treatment.id)
-                          renderTreatmentStack(selectedObject)
-                          canvasRef.current?.requestRenderAll()
-                          commitHistory('Removed treatment')
+                          void refreshTreatmentStack(selectedObject).then(() => {
+                            commitHistory('Removed treatment')
+                          })
                         }}>
                           <Trash2 size={12} />
                         </button>
@@ -3513,35 +3523,6 @@ function buildStarPoints(points: number, outer: number, inner: number) {
     result.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius })
   }
   return result
-}
-
-function cropFragments(imageUrl: string, fragments: ReturnType<typeof createCutFragments>) {
-  return new Promise<string[]>((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => {
-      const output = fragments.map((fragment) => {
-        const crop = document.createElement('canvas')
-        crop.width = Math.max(1, Math.round(fragment.width))
-        crop.height = Math.max(1, Math.round(fragment.height))
-        const context = crop.getContext('2d')
-        context?.drawImage(
-          image,
-          fragment.clipLeft,
-          fragment.clipTop,
-          fragment.width,
-          fragment.height,
-          0,
-          0,
-          fragment.width,
-          fragment.height,
-        )
-        return crop.toDataURL('image/png')
-      })
-      resolve(output)
-    }
-    image.onerror = reject
-    image.src = imageUrl
-  })
 }
 
 export default App
