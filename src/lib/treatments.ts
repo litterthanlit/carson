@@ -7,6 +7,15 @@ import type { Canvas, FabricImage, FabricObject } from 'fabric'
 import { getLayerDecayProfile, getPrintScanProfile } from './editorModel'
 import { createSeededRandom } from './random'
 import {
+  CROP_SOURCE_ID_KEY,
+  CROP_TREATMENT_ID_KEY,
+  cropModeFromParams,
+  removeCropFragments,
+  removeCropFragmentsForSource,
+  renderCropTreatment,
+  type CropFragmentTagger,
+} from './cropTreatment'
+import {
   removeSliceFragments,
   removeSliceFragmentsForSource,
   renderSliceTreatment,
@@ -17,7 +26,7 @@ import {
   type SliceFragmentTagger,
 } from './sliceTreatment'
 
-export type TreatmentType = 'xerox' | 'decay' | 'distress' | 'scatter' | 'slice'
+export type TreatmentType = 'xerox' | 'decay' | 'distress' | 'scatter' | 'slice' | 'crop'
 
 export type Treatment = {
   id: string
@@ -90,7 +99,11 @@ export function addTreatment(
   }
   const stack = [...readTreatments(object), treatment]
   const next =
-    type === 'slice' ? [...readTreatments(object).filter((item) => item.type !== 'slice'), treatment] : stack
+    type === 'slice'
+      ? [...readTreatments(object).filter((item) => item.type !== 'slice'), treatment]
+      : type === 'crop'
+        ? [...readTreatments(object).filter((item) => item.type !== 'crop'), treatment]
+        : stack
   writeTreatments(object, next)
   return treatment
 }
@@ -136,6 +149,10 @@ export function treatmentLabel(treatment: Treatment): string {
     case 'slice': {
       const axis = sliceDirectionFromParams(treatment.params) === 'vertical' ? 'V' : 'H'
       return `Slice·${axis}·${treatment.params.pieces ?? 5}`
+    }
+    case 'crop': {
+      const mode = cropModeFromParams(treatment.params)
+      return `Crop·${mode}`
     }
     default:
       return treatment.type
@@ -193,7 +210,9 @@ export function renderTreatmentStack(object: FabricObject) {
 }
 
 function applySyncTreatmentStack(object: FabricObject) {
-  const stack = readTreatments(object).filter((item) => item.enabled && item.type !== 'slice')
+  const stack = readTreatments(object).filter(
+    (item) => item.enabled && item.type !== 'slice' && item.type !== 'crop',
+  )
   const filterTreatments = stack.filter((item) => item.type !== 'scatter')
   const scatter = stack.find((item) => item.type === 'scatter')
 
@@ -233,44 +252,66 @@ function applySyncTreatmentStack(object: FabricObject) {
   object.setCoords()
 }
 
-function cleanupOrphanedSliceFragments(canvas: Canvas, source: FabricObject) {
+function cleanupOrphanedArtifactFragments(canvas: Canvas, source: FabricObject) {
   const sourceId = String((source as unknown as Record<string, unknown>).id ?? '')
   const activeIds = new Set(readTreatments(source).map((item) => item.id))
   for (const object of canvas.getObjects()) {
-    const sliceSourceId = (object as unknown as Record<string, unknown>)[SLICE_SOURCE_ID_KEY]
-    const sliceTreatmentId = (object as unknown as Record<string, unknown>)[SLICE_TREATMENT_ID_KEY]
+    const record = object as unknown as Record<string, unknown>
+    const sliceSourceId = record[SLICE_SOURCE_ID_KEY]
+    const sliceTreatmentId = record[SLICE_TREATMENT_ID_KEY]
+    const cropSourceId = record[CROP_SOURCE_ID_KEY]
+    const cropTreatmentId = record[CROP_TREATMENT_ID_KEY]
     if (sliceSourceId === sourceId && sliceTreatmentId && !activeIds.has(String(sliceTreatmentId))) {
+      canvas.remove(object)
+    }
+    if (cropSourceId === sourceId && cropTreatmentId && !activeIds.has(String(cropTreatmentId))) {
       canvas.remove(object)
     }
   }
 }
 
-/** Full stack render including async slice artifacts. Source layer survives slice removal. */
+export type ArtifactFragmentTaggers = {
+  slice: SliceFragmentTagger
+  crop: CropFragmentTagger
+}
+
+/** Full stack render including async slice/crop artifacts. Source layer survives removal. */
 export async function renderTreatmentStackOnCanvas(
   canvas: Canvas,
   object: FabricObject,
-  tagFragment: SliceFragmentTagger,
+  taggers: ArtifactFragmentTaggers,
 ) {
   applySyncTreatmentStack(object)
 
   const sourceId = String((object as unknown as Record<string, unknown>).id ?? '')
   const sliceTreatments = readTreatments(object).filter((item) => item.type === 'slice')
-  const enabledSlice = sliceTreatments.some((item) => item.enabled)
+  const cropTreatments = readTreatments(object).filter((item) => item.type === 'crop')
+  const enabledArtifacts =
+    sliceTreatments.some((item) => item.enabled) || cropTreatments.some((item) => item.enabled)
 
-  cleanupOrphanedSliceFragments(canvas, object)
+  cleanupOrphanedArtifactFragments(canvas, object)
 
   for (const treatment of sliceTreatments) {
     if (treatment.enabled) {
-      await renderSliceTreatment(canvas, object, treatment, tagFragment)
+      await renderSliceTreatment(canvas, object, treatment, taggers.slice)
     } else {
       removeSliceFragments(canvas, treatment.id)
     }
   }
 
-  if (!enabledSlice) {
+  for (const treatment of cropTreatments) {
+    if (treatment.enabled) {
+      await renderCropTreatment(canvas, object, treatment, taggers.crop)
+    } else {
+      removeCropFragments(canvas, treatment.id)
+    }
+  }
+
+  if (!enabledArtifacts) {
     const baseline = readTransformBaseline(object)
     restoreSliceSource(object, baseline?.opacity ?? 1)
     removeSliceFragmentsForSource(canvas, sourceId)
+    removeCropFragmentsForSource(canvas, sourceId)
   }
 
   object.setCoords()

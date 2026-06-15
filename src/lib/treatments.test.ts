@@ -21,6 +21,16 @@ describe('treatments', () => {
     expect(stack[0].seed).toBe(2)
   })
 
+  it('replaces an existing crop treatment on the same layer', () => {
+    const object = { set: (values: Record<string, unknown>) => Object.assign(object, values) } as never
+    addTreatment(object, 'crop', { mode: 0 }, 1)
+    addTreatment(object, 'crop', { mode: 1 }, 2)
+    const stack = readTreatments(object)
+    expect(stack).toHaveLength(1)
+    expect(stack[0].params.mode).toBe(1)
+    expect(stack[0].seed).toBe(2)
+  })
+
   it('builds filter stacks for xerox and decay', () => {
     const filters = buildTreatmentFilters([
       { id: '1', type: 'xerox', seed: 1, enabled: true, params: { generation: 5 } },

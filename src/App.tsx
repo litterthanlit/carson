@@ -48,7 +48,6 @@ import {
 import {
   applyPosterPreset,
   createAccidentTransforms,
-  createAggressiveCropFrame,
   createCutFragments,
   createCropGuides,
   createDiagonalTextureLines,
@@ -89,6 +88,7 @@ import {
   updateTreatment,
   type Treatment,
 } from './lib/treatments'
+import { cropModeFromParams, cropModeToParam, findCropFragments } from './lib/cropTreatment'
 import { cropFragments, sliceDirectionToParam } from './lib/sliceTreatment'
 import {
   createDefaultDocument,
@@ -166,6 +166,8 @@ const HISTORY_PROPS = [
   'clipPath',
   'sliceSourceId',
   'sliceTreatmentId',
+  'cropSourceId',
+  'cropTreatmentId',
 ] as const
 const FONT_STACKS = [
   'Arial Black',
@@ -668,17 +670,22 @@ function App() {
     const canvas = canvasRef.current
     const target = object ?? activeObject()
     if (!canvas || !target || target.type === 'activeselection') return
-    await renderTreatmentStackOnCanvas(canvas, target, (fragment, index) => {
-      tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+    await renderTreatmentStackOnCanvas(canvas, target, {
+      slice: (fragment, index) => {
+        tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+      },
+      crop: (fragment, treatment) => {
+        tagObject(fragment, 'fragment', `${cropModeFromParams(treatment.params)} crop`)
+      },
     })
     canvas.requestRenderAll()
   }
 
-  async function reconcileSliceTreatments() {
+  async function reconcileArtifactTreatments() {
     const canvas = canvasRef.current
     if (!canvas) return
     for (const object of canvas.getObjects()) {
-      if (readTreatments(object).some((item) => item.type === 'slice')) {
+      if (readTreatments(object).some((item) => item.type === 'slice' || item.type === 'crop')) {
         await refreshTreatmentStack(object)
       }
     }
@@ -850,7 +857,7 @@ function App() {
     restoringRef.current = true
     await canvas.loadFromJSON(JSON.parse(snapshot))
     restoringRef.current = false
-    await reconcileSliceTreatments()
+    await reconcileArtifactTreatments()
     canvas.requestRenderAll()
     captureStyleBaseline()
     syncSelected()
@@ -1168,7 +1175,7 @@ function App() {
     restoringRef.current = true
     await canvas.loadFromJSON(variant.canvas)
     restoringRef.current = false
-    await reconcileSliceTreatments()
+    await reconcileArtifactTreatments()
     canvas.requestRenderAll()
     captureStyleBaseline()
     syncSelected()
@@ -1206,7 +1213,7 @@ function App() {
     restoringRef.current = true
     await canvas.loadFromJSON(target.canvas)
     restoringRef.current = false
-    await reconcileSliceTreatments()
+    await reconcileArtifactTreatments()
     setPoster(target.preset)
     setPresetId(target.preset.id)
     setDocumentMeta(next)
@@ -1723,31 +1730,11 @@ function App() {
     if (!canvas || !object || object.type === 'activeselection') return
     const targetIds = selectedTargetIds()
 
-    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
-    const bounds = object.getBoundingRect()
-    const frame = createAggressiveCropFrame(
-      {
-        id: String(readObjectProp(object, 'id') ?? 'layer'),
-        left: bounds.left,
-        top: bounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      },
-      { mode, random: createSeededRandom(seed) },
-    )
-    const [url] = await cropFragments(imageUrl, [frame])
-    const crop = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
-    crop.set({
-      left: frame.left,
-      top: frame.top,
-      angle: (object.angle ?? 0) + (mode === 'edge' ? -2 : mode === 'off-center' ? 3 : 0),
-      opacity: object.opacity ?? 1,
-      globalCompositeOperation: mode === 'close' ? 'source-over' : 'multiply',
-    })
-    tagObject(crop, 'fragment', `${mode} crop`)
-    canvas.remove(object)
-    canvas.add(crop)
-    canvas.setActiveObject(crop)
+    captureTransformBaseline(object)
+    addTreatment(object, 'crop', { mode: cropModeToParam(mode) }, seed)
+    object.set({ objectCaching: true } as Partial<FabricObject>)
+    await refreshTreatmentStack(object)
+    setInspectorTab('treatments')
     trackChaos(`${mode} crop`, seed, targetIds, (next) => aggressiveCropSelected(mode, next))
     commitHistory(`Applied ${mode} crop #${seed}`)
   }
@@ -1758,7 +1745,9 @@ function App() {
     if (!canvas || !object) return
     const random = createSeededRandom(seed)
     await aggressiveCropSelected('edge', seed)
-    const cropped = activeObject()
+    const cropTreatment = readTreatments(object).find((item) => item.type === 'crop' && item.enabled)
+    if (!cropTreatment) return
+    const cropped = findCropFragments(canvas, cropTreatment.id)[0]
     if (!cropped) return
     cropped.set({
       left: random() > 0.5 ? -poster.width * 0.08 : poster.width * 0.72,
@@ -2215,7 +2204,7 @@ function App() {
     restoringRef.current = true
     await canvas.loadFromJSON(project.canvas)
     restoringRef.current = false
-    await reconcileSliceTreatments()
+    await reconcileArtifactTreatments()
     canvas.requestRenderAll()
     historyRef.current = [JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))]
     redoRef.current = []
@@ -2675,19 +2664,19 @@ function App() {
           <div className="panel-section">
             <h2>Aggressive Crop Tools</h2>
             <div className="preset-row">
-              <button type="button" title="Crop tight into the center of the selection (rasterizes it)" onClick={() => void aggressiveCropSelected('close')} disabled={!selected}>
+              <button type="button" title="Crop tight into the center — source stays editable; remove Crop in Treatments to restore" onClick={() => void aggressiveCropSelected('close')} disabled={!selected}>
                 <Crop size={17} />
                 Close crop {scopeSel}
               </button>
-              <button type="button" title="Crop the selection off-center — press R to re-roll (rasterizes it)" onClick={() => void aggressiveCropSelected('off-center')} disabled={!selected}>
+              <button type="button" title="Crop off-center — press R to re-roll; remove Crop in Treatments to restore source" onClick={() => void aggressiveCropSelected('off-center')} disabled={!selected}>
                 <Crop size={17} />
                 Off-center crop {scopeSel}
               </button>
-              <button type="button" title="Crop the selection hard to one edge (rasterizes it)" onClick={() => void aggressiveCropSelected('edge')} disabled={!selected}>
+              <button type="button" title="Crop hard to one edge — remove Crop in Treatments to restore source" onClick={() => void aggressiveCropSelected('edge')} disabled={!selected}>
                 <Crop size={17} />
                 Edge crop {scopeSel}
               </button>
-              <button type="button" title="Crop the selection and throw it to the poster edge (rasterizes it)" onClick={() => void cropToPosterEdge()} disabled={!selected}>
+              <button type="button" title="Crop to edge and throw the fragment to the poster border" onClick={() => void cropToPosterEdge()} disabled={!selected}>
                 <Scissors size={17} />
                 Throw to edge {scopeSel}
               </button>
@@ -2953,7 +2942,7 @@ function App() {
           {inspectorTab === 'treatments' ? (
             <div className="panel-section">
               <h2>Treatment stack</h2>
-              <p className="hint">Non-destructive — text stays editable; remove Slice to restore the source layer.</p>
+              <p className="hint">Non-destructive — text stays editable; remove Slice or Crop to restore the source layer.</p>
               {!selected ? (
                 <p className="empty">Select a layer to view its treatment stack.</p>
               ) : selectedTreatments.length === 0 ? (
