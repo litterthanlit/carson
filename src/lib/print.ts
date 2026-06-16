@@ -63,12 +63,27 @@ export function downloadPdfFromImageData(
   widthPx: number,
   heightPx: number,
   dpi: number,
+  options?: { registrationMarks?: boolean },
 ) {
   const widthMm = (widthPx / dpi) * 25.4
   const heightMm = (heightPx / dpi) * 25.4
   const orientation = widthMm >= heightMm ? 'landscape' : 'portrait'
   const pdf = new jsPDF({ orientation, unit: 'mm', format: [widthMm, heightMm] })
   pdf.addImage(dataUrl, 'PNG', 0, 0, widthMm, heightMm)
+  if (options?.registrationMarks) {
+    const inset = 4
+    const size = 6
+    const marks = registrationMarks({ width: widthPx, height: heightPx }, (inset / widthPx) * widthMm, (size / widthPx) * widthMm)
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.2)
+    for (const mark of marks) {
+      const x = (mark.left / widthPx) * widthMm
+      const y = (mark.top / heightPx) * heightMm
+      const w = (mark.width / widthPx) * widthMm
+      const h = (mark.height / heightPx) * heightMm
+      pdf.rect(x, y, w, h, 'F')
+    }
+  }
   pdf.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`)
 }
 

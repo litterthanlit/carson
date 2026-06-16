@@ -81,13 +81,15 @@ export type GridOverlay = {
 export function buildColumnGrid(
   canvas: { width: number; height: number },
   overlay: GridOverlay,
+  random?: () => number,
 ): Array<{ left: number; top: number; width: number; height: number }> {
   const { columns, margin, gutter, tension } = overlay
   const innerWidth = canvas.width - margin * 2
   const colWidth = (innerWidth - gutter * (columns - 1)) / columns
+  const rng = random ?? Math.random
   const lines: Array<{ left: number; top: number; width: number; height: number }> = []
   for (let i = 0; i < columns; i++) {
-    const jitter = (Math.random() - 0.5) * tension * 24
+    const jitter = (rng() - 0.5) * tension * 24
     lines.push({
       left: margin + i * (colWidth + gutter) + jitter,
       top: margin,

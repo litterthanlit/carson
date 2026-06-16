@@ -1,11 +1,18 @@
 /**
  * Non-destructive treatment stacks — Horizon 2.1 core.
- * Treatments persist on Fabric objects and render via filters + transforms.
  */
 import { filters } from 'fabric'
 import type { Canvas, FabricImage, FabricObject } from 'fabric'
 import { getLayerDecayProfile, getPrintScanProfile } from './editorModel'
 import { createSeededRandom } from './random'
+import {
+  BAD_CROP_SOURCE_ID_KEY,
+  BAD_CROP_TREATMENT_ID_KEY,
+  removeBadCropFragments,
+  removeBadCropFragmentsForSource,
+  renderBadCropTreatment,
+  type BadCropFragmentTagger,
+} from './badCropTreatment'
 import {
   CROP_SOURCE_ID_KEY,
   CROP_TREATMENT_ID_KEY,
@@ -16,6 +23,14 @@ import {
   type CropFragmentTagger,
 } from './cropTreatment'
 import {
+  GLYPH_SOURCE_ID_KEY,
+  GLYPH_TREATMENT_ID_KEY,
+  removeGlyphFragments,
+  removeGlyphFragmentsForSource,
+  renderGlyphBreakTreatment,
+  type GlyphFragmentTagger,
+} from './glyphBreakTreatment'
+import {
   removeSliceFragments,
   removeSliceFragmentsForSource,
   renderSliceTreatment,
@@ -25,8 +40,25 @@ import {
   SLICE_TREATMENT_ID_KEY,
   type SliceFragmentTagger,
 } from './sliceTreatment'
+import {
+  TEAR_SOURCE_ID_KEY,
+  TEAR_TREATMENT_ID_KEY,
+  removeTearFragments,
+  removeTearFragmentsForSource,
+  renderTearTreatment,
+  type TearFragmentTagger,
+} from './tearTreatment'
 
-export type TreatmentType = 'xerox' | 'decay' | 'distress' | 'scatter' | 'slice' | 'crop'
+export type TreatmentType =
+  | 'xerox'
+  | 'decay'
+  | 'distress'
+  | 'scatter'
+  | 'slice'
+  | 'crop'
+  | 'tear'
+  | 'bad-crop'
+  | 'glyph-break'
 
 export type Treatment = {
   id: string
@@ -46,6 +78,24 @@ export type TransformBaseline = {
 }
 
 const TREATMENT_FILTER_PREFIX = 'carson-'
+const ARTIFACT_TYPES = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
+const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
+
+const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
+  slice: SLICE_SOURCE_ID_KEY,
+  crop: CROP_SOURCE_ID_KEY,
+  tear: TEAR_SOURCE_ID_KEY,
+  'bad-crop': BAD_CROP_SOURCE_ID_KEY,
+  'glyph-break': GLYPH_SOURCE_ID_KEY,
+}
+
+const ARTIFACT_TREATMENT_KEYS: Partial<Record<TreatmentType, string>> = {
+  slice: SLICE_TREATMENT_ID_KEY,
+  crop: CROP_TREATMENT_ID_KEY,
+  tear: TEAR_TREATMENT_ID_KEY,
+  'bad-crop': BAD_CROP_TREATMENT_ID_KEY,
+  'glyph-break': GLYPH_TREATMENT_ID_KEY,
+}
 
 export function newTreatmentId(): string {
   return `tx-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
@@ -97,14 +147,10 @@ export function addTreatment(
     enabled: true,
     params,
   }
-  const stack = [...readTreatments(object), treatment]
-  const next =
-    type === 'slice'
-      ? [...readTreatments(object).filter((item) => item.type !== 'slice'), treatment]
-      : type === 'crop'
-        ? [...readTreatments(object).filter((item) => item.type !== 'crop'), treatment]
-        : stack
-  writeTreatments(object, next)
+  const stack = ONE_PER_LAYER.has(type)
+    ? [...readTreatments(object).filter((item) => item.type !== type), treatment]
+    : [...readTreatments(object), treatment]
+  writeTreatments(object, stack)
   return treatment
 }
 
@@ -150,16 +196,19 @@ export function treatmentLabel(treatment: Treatment): string {
       const axis = sliceDirectionFromParams(treatment.params) === 'vertical' ? 'V' : 'H'
       return `Slice·${axis}·${treatment.params.pieces ?? 5}`
     }
-    case 'crop': {
-      const mode = cropModeFromParams(treatment.params)
-      return `Crop·${mode}`
-    }
+    case 'crop':
+      return `Crop·${cropModeFromParams(treatment.params)}`
+    case 'tear':
+      return `Tear·${treatment.params.pieces ?? 7}`
+    case 'bad-crop':
+      return `Bad crop·${sliceDirectionFromParams(treatment.params) === 'vertical' ? 'V' : 'H'}`
+    case 'glyph-break':
+      return `Glyphs·${treatment.params.intensity ?? 70}`
     default:
       return treatment.type
   }
 }
 
-/** Build Fabric filters from enabled treatments (non-destructive). */
 export function buildTreatmentFilters(treatments: Treatment[]): filters.BaseFilter<string, Record<string, unknown>>[] {
   const output: filters.BaseFilter<string, Record<string, unknown>>[] = []
   for (const treatment of treatments.filter((item) => item.enabled)) {
@@ -184,17 +233,17 @@ export function buildTreatmentFilters(treatments: Treatment[]): filters.BaseFilt
   return output
 }
 
-/** Apply scatter transform from baseline + seed. */
-export function applyScatterTransform(object: FabricObject, treatment: Treatment) {
+export function applyScatterTransform(object: FabricObject, treatment: Treatment, tensionScale = 1) {
   const baseline = readTransformBaseline(object) ?? captureTransformBaseline(object)
   const random = createSeededRandom(treatment.seed)
-  const distance = treatment.params.distance ?? 46
-  const rotation = treatment.params.rotation ?? 18
-  const scale = treatment.params.scale ?? 0.14
+  const scale = Math.max(0.1, tensionScale)
+  const distance = (treatment.params.distance ?? 46) * scale
+  const rotation = (treatment.params.rotation ?? 18) * scale
+  const size = (treatment.params.scale ?? 0.14) * scale
   const dx = (random() - 0.5) * distance * 2
   const dy = (random() - 0.5) * distance * 2
   const da = (random() - 0.5) * rotation * 2
-  const ds = 1 + (random() - 0.5) * scale * 2
+  const ds = 1 + (random() - 0.5) * size * 2
   object.set({
     left: baseline.left + dx,
     top: baseline.top + dy,
@@ -204,15 +253,12 @@ export function applyScatterTransform(object: FabricObject, treatment: Treatment
   })
 }
 
-/** Apply filter + scatter treatments (sync). Slice requires {@link renderTreatmentStackOnCanvas}. */
-export function renderTreatmentStack(object: FabricObject) {
-  applySyncTreatmentStack(object)
+export function renderTreatmentStack(object: FabricObject, tensionScale = 1) {
+  applySyncTreatmentStack(object, tensionScale)
 }
 
-function applySyncTreatmentStack(object: FabricObject) {
-  const stack = readTreatments(object).filter(
-    (item) => item.enabled && item.type !== 'slice' && item.type !== 'crop',
-  )
+function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
+  const stack = readTreatments(object).filter((item) => item.enabled && !ARTIFACT_TYPES.has(item.type))
   const filterTreatments = stack.filter((item) => item.type !== 'scatter')
   const scatter = stack.find((item) => item.type === 'scatter')
 
@@ -227,7 +273,7 @@ function applySyncTreatmentStack(object: FabricObject) {
       opacity: baseline.opacity,
     })
   }
-  if (scatter) applyScatterTransform(object, scatter)
+  if (scatter) applyScatterTransform(object, scatter, tensionScale)
 
   const built = buildTreatmentFilters(filterTreatments)
   const filterable = object as FabricImage
@@ -257,61 +303,74 @@ function cleanupOrphanedArtifactFragments(canvas: Canvas, source: FabricObject) 
   const activeIds = new Set(readTreatments(source).map((item) => item.id))
   for (const object of canvas.getObjects()) {
     const record = object as unknown as Record<string, unknown>
-    const sliceSourceId = record[SLICE_SOURCE_ID_KEY]
-    const sliceTreatmentId = record[SLICE_TREATMENT_ID_KEY]
-    const cropSourceId = record[CROP_SOURCE_ID_KEY]
-    const cropTreatmentId = record[CROP_TREATMENT_ID_KEY]
-    if (sliceSourceId === sourceId && sliceTreatmentId && !activeIds.has(String(sliceTreatmentId))) {
-      canvas.remove(object)
-    }
-    if (cropSourceId === sourceId && cropTreatmentId && !activeIds.has(String(cropTreatmentId))) {
-      canvas.remove(object)
+    for (const type of ARTIFACT_TYPES) {
+      const sourceKey = ARTIFACT_SOURCE_KEYS[type]
+      const treatmentKey = ARTIFACT_TREATMENT_KEYS[type]
+      if (!sourceKey || !treatmentKey) continue
+      const artifactSourceId = record[sourceKey]
+      const artifactTreatmentId = record[treatmentKey]
+      if (artifactSourceId === sourceId && artifactTreatmentId && !activeIds.has(String(artifactTreatmentId))) {
+        canvas.remove(object)
+      }
     }
   }
+}
+
+function removeAllArtifactsForSource(canvas: Canvas, sourceId: string) {
+  removeSliceFragmentsForSource(canvas, sourceId)
+  removeCropFragmentsForSource(canvas, sourceId)
+  removeTearFragmentsForSource(canvas, sourceId)
+  removeBadCropFragmentsForSource(canvas, sourceId)
+  removeGlyphFragmentsForSource(canvas, sourceId)
 }
 
 export type ArtifactFragmentTaggers = {
   slice: SliceFragmentTagger
   crop: CropFragmentTagger
+  tear: TearFragmentTagger
+  badCrop: BadCropFragmentTagger
+  glyph: GlyphFragmentTagger
 }
 
-/** Full stack render including async slice/crop artifacts. Source layer survives removal. */
 export async function renderTreatmentStackOnCanvas(
   canvas: Canvas,
   object: FabricObject,
   taggers: ArtifactFragmentTaggers,
+  tensionScale = 1,
 ) {
-  applySyncTreatmentStack(object)
+  applySyncTreatmentStack(object, tensionScale)
 
   const sourceId = String((object as unknown as Record<string, unknown>).id ?? '')
-  const sliceTreatments = readTreatments(object).filter((item) => item.type === 'slice')
-  const cropTreatments = readTreatments(object).filter((item) => item.type === 'crop')
-  const enabledArtifacts =
-    sliceTreatments.some((item) => item.enabled) || cropTreatments.some((item) => item.enabled)
+  const treatments = readTreatments(object)
+  const enabledArtifacts = treatments.some((item) => ARTIFACT_TYPES.has(item.type) && item.enabled)
 
   cleanupOrphanedArtifactFragments(canvas, object)
 
-  for (const treatment of sliceTreatments) {
-    if (treatment.enabled) {
-      await renderSliceTreatment(canvas, object, treatment, taggers.slice)
-    } else {
-      removeSliceFragments(canvas, treatment.id)
-    }
+  for (const treatment of treatments.filter((item) => item.type === 'slice')) {
+    if (treatment.enabled) await renderSliceTreatment(canvas, object, treatment, taggers.slice)
+    else removeSliceFragments(canvas, treatment.id)
   }
-
-  for (const treatment of cropTreatments) {
-    if (treatment.enabled) {
-      await renderCropTreatment(canvas, object, treatment, taggers.crop)
-    } else {
-      removeCropFragments(canvas, treatment.id)
-    }
+  for (const treatment of treatments.filter((item) => item.type === 'crop')) {
+    if (treatment.enabled) await renderCropTreatment(canvas, object, treatment, taggers.crop)
+    else removeCropFragments(canvas, treatment.id)
+  }
+  for (const treatment of treatments.filter((item) => item.type === 'tear')) {
+    if (treatment.enabled) await renderTearTreatment(canvas, object, treatment, taggers.tear)
+    else removeTearFragments(canvas, treatment.id)
+  }
+  for (const treatment of treatments.filter((item) => item.type === 'bad-crop')) {
+    if (treatment.enabled) await renderBadCropTreatment(canvas, object, treatment, taggers.badCrop)
+    else removeBadCropFragments(canvas, treatment.id)
+  }
+  for (const treatment of treatments.filter((item) => item.type === 'glyph-break')) {
+    if (treatment.enabled) renderGlyphBreakTreatment(canvas, object, treatment, taggers.glyph)
+    else removeGlyphFragments(canvas, treatment.id)
   }
 
   if (!enabledArtifacts) {
     const baseline = readTransformBaseline(object)
     restoreSliceSource(object, baseline?.opacity ?? 1)
-    removeSliceFragmentsForSource(canvas, sourceId)
-    removeCropFragmentsForSource(canvas, sourceId)
+    removeAllArtifactsForSource(canvas, sourceId)
   }
 
   object.setCoords()

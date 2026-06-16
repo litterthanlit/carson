@@ -12,8 +12,6 @@ import {
   Grid3x3,
   ImagePlus,
   Layers,
-  Lock,
-  LockOpen,
   Maximize,
   Minus,
   Pipette,
@@ -48,15 +46,12 @@ import {
 import {
   applyPosterPreset,
   createAccidentTransforms,
-  createCutFragments,
   createCropGuides,
   createDiagonalTextureLines,
-  createExpressiveGlyphs,
   createLayerDecayMarks,
   createPhotocopyNoise,
   createPrintScanArtifacts,
   createScrapeMasks,
-  createTearFragments,
   createTypeStrips,
   getLayerDecayProfile,
   getPrintScanProfile,
@@ -89,23 +84,35 @@ import {
   type Treatment,
 } from './lib/treatments'
 import { cropModeFromParams, cropModeToParam, findCropFragments } from './lib/cropTreatment'
-import { cropFragments, sliceDirectionToParam } from './lib/sliceTreatment'
+import { sliceDirectionToParam } from './lib/sliceTreatment'
 import {
   createDefaultDocument,
   findVariant,
   forkVariant,
   getActiveArtboard,
+  mergeVariantCanvas,
+  renameVariant,
   switchArtboard,
   addArtboard,
   type DocumentMeta,
 } from './lib/document'
 import { loadFontFile, loadGoogleFont, GOOGLE_FONTS } from './lib/fonts'
 import { contrastRatio, FULL_BLEND_MODES, legibilityBand } from './lib/color'
-import { alignObjects, buildColumnGrid, distributeObjects, type GridOverlay } from './lib/grid'
+import { alignObjects, baselineGridLines, buildColumnGrid, distributeObjects, type GridOverlay } from './lib/grid'
+import { softProofHex } from './lib/cmykPreview'
+import {
+  createHistoryState,
+  pushHistoryOp,
+  type HistoryState,
+} from './lib/historyLog'
+import { legibilityToParam } from './lib/glyphBreakTreatment'
+import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { buildPrintGuides, downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
 import type { CommandAction } from './lib/commands'
 import { CommandPalette } from './components/CommandPalette'
+import { ExplorationTrail } from './components/ExplorationTrail'
+import { LayersPanel } from './components/LayersPanel'
 import { OnboardingModal } from './components/OnboardingModal'
 import { VariantCompareModal } from './components/VariantCompareModal'
 import './App.css'
@@ -113,6 +120,7 @@ import './App.css'
 type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
 type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff'
 type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'layout' | 'print'
+type StrokeDashPreset = 'solid' | 'dashed' | 'dotted'
 type ExportBackground = 'paper' | 'white' | 'transparent'
 type SelectedState = {
   id: string
@@ -168,6 +176,14 @@ const HISTORY_PROPS = [
   'sliceTreatmentId',
   'cropSourceId',
   'cropTreatmentId',
+  'tearSourceId',
+  'tearTreatmentId',
+  'badCropSourceId',
+  'badCropTreatmentId',
+  'glyphSourceId',
+  'glyphTreatmentId',
+  'path',
+  'originalFill',
 ] as const
 const FONT_STACKS = [
   'Arial Black',
@@ -197,6 +213,7 @@ function App() {
   const canvasRef = useRef<Canvas | null>(null)
   const historyRef = useRef<string[]>([])
   const redoRef = useRef<string[]>([])
+  const historyLogRef = useRef<HistoryState>(createHistoryState())
   const restoringRef = useRef(false)
   const layerIdRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -212,6 +229,8 @@ function App() {
   const styleBaselineRef = useRef<Map<string, StyleBaseline>>(new Map())
   const showPrintGuidesRef = useRef(false)
   const showLayoutGridRef = useRef(false)
+  const showBaselineGridRef = useRef(false)
+  const showCmykPreviewRef = useRef(false)
   const gridOverlayRef = useRef<GridOverlay>({ columns: 4, rows: 8, margin: 48, gutter: 16, tension: 0 })
   const printDpiRef = useRef(300)
   const bleedMmRef = useRef(3)
@@ -249,7 +268,11 @@ function App() {
   const [fontStretch, setFontStretch] = useState(100)
   const [gridOverlay, setGridOverlay] = useState<GridOverlay>({ columns: 4, rows: 8, margin: 48, gutter: 16, tension: 0 })
   const [showLayoutGrid, setShowLayoutGrid] = useState(false)
+  const [showBaselineGrid, setShowBaselineGrid] = useState(false)
   const [showPrintGuides, setShowPrintGuides] = useState(false)
+  const [showCmykPreview, setShowCmykPreview] = useState(false)
+  const [showInstruments, setShowInstruments] = useState(false)
+  const [pdfRegistrationMarks, setPdfRegistrationMarks] = useState(true)
   const [printDpi, setPrintDpi] = useState(300)
   const [bleedMm, setBleedMm] = useState(3)
   const [onboardingOpen, setOnboardingOpen] = useState(() => !localStorage.getItem(ONBOARDING_KEY))
@@ -261,6 +284,8 @@ function App() {
 
   showPrintGuidesRef.current = showPrintGuides
   showLayoutGridRef.current = showLayoutGrid
+  showBaselineGridRef.current = showBaselineGrid
+  showCmykPreviewRef.current = showCmykPreview
   gridOverlayRef.current = gridOverlay
   printDpiRef.current = printDpi
   bleedMmRef.current = bleedMm
@@ -306,7 +331,7 @@ function App() {
 
   useEffect(() => {
     canvasRef.current?.requestRenderAll()
-  }, [showLayoutGrid, showPrintGuides, gridOverlay, printDpi, bleedMm])
+  }, [showLayoutGrid, showBaselineGrid, showPrintGuides, gridOverlay, printDpi, bleedMm])
 
   useEffect(() => {
     // Fix: previously this also ran on mount, double-committing history.
@@ -406,11 +431,25 @@ function App() {
         const columns = buildColumnGrid(
           { width: canvas.getWidth(), height: canvas.getHeight() },
           overlay,
+          () => 0.5,
         )
         ctx.strokeStyle = 'rgba(5, 182, 212, 0.35)'
         ctx.setLineDash([4, 8])
         for (const column of columns) {
           ctx.strokeRect(column.left, column.top, column.width, column.height)
+        }
+      }
+
+      if (showBaselineGridRef.current) {
+        const step = Math.max(12, Math.round(canvas.getHeight() / (gridOverlayRef.current.rows || 8)))
+        const lines = baselineGridLines({ width: canvas.getWidth(), height: canvas.getHeight() }, step)
+        ctx.strokeStyle = 'rgba(17, 17, 17, 0.12)'
+        ctx.setLineDash([2, 10])
+        for (const line of lines) {
+          ctx.beginPath()
+          ctx.moveTo(line.x1, line.y1)
+          ctx.lineTo(line.x2, line.y2)
+          ctx.stroke()
         }
       }
 
@@ -666,26 +705,45 @@ function App() {
     } as Partial<FabricObject>)
   }
 
+  function tensionScatterScale() {
+    return 1 + gridOverlay.tension / 100
+  }
+
   async function refreshTreatmentStack(object?: FabricObject | null) {
     const canvas = canvasRef.current
     const target = object ?? activeObject()
     if (!canvas || !target || target.type === 'activeselection') return
-    await renderTreatmentStackOnCanvas(canvas, target, {
-      slice: (fragment, index) => {
-        tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+    await renderTreatmentStackOnCanvas(
+      canvas,
+      target,
+      {
+        slice: (fragment, index) => {
+          tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+        },
+        crop: (fragment, treatment) => {
+          tagObject(fragment, 'fragment', `${cropModeFromParams(treatment.params)} crop`)
+        },
+        tear: (fragment, index) => {
+          tagObject(fragment, 'fragment', `Torn scrap ${index + 1}`)
+        },
+        badCrop: (fragment, index) => {
+          tagObject(fragment, 'fragment', `Bad crop ${index + 1}`)
+        },
+        glyph: (fragment, _index, glyphText) => {
+          tagObject(fragment, 'text', `Glyph ${glyphText}`)
+        },
       },
-      crop: (fragment, treatment) => {
-        tagObject(fragment, 'fragment', `${cropModeFromParams(treatment.params)} crop`)
-      },
-    })
+      tensionScatterScale(),
+    )
     canvas.requestRenderAll()
   }
 
   async function reconcileArtifactTreatments() {
     const canvas = canvasRef.current
     if (!canvas) return
+    const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
     for (const object of canvas.getObjects()) {
-      if (readTreatments(object).some((item) => item.type === 'slice' || item.type === 'crop')) {
+      if (readTreatments(object).some((item) => artifactTypes.has(item.type))) {
         await refreshTreatmentStack(object)
       }
     }
@@ -843,6 +901,11 @@ function App() {
     if (history.at(-1) !== snapshot) {
       historyRef.current = [...history.slice(-39), snapshot]
       redoRef.current = []
+      historyLogRef.current = pushHistoryOp(historyLogRef.current, {
+        type: 'snapshot',
+        label: message,
+        data: snapshot,
+      })
       scheduleAutosave()
       if (!message.endsWith(' preset')) captureStyleBaseline()
     }
@@ -1259,12 +1322,15 @@ function App() {
     commitHistory(`Inserted asset “${asset.name}”`)
   }
 
-  function applyGradientFill() {
+  function applyGradientFill(kind: 'linear' | 'radial' = 'linear') {
     const object = activeObject()
     if (!object || selectedIsImage) return
     const gradient = new Gradient({
-      type: 'linear',
-      coords: { x1: 0, y1: 0, x2: 100, y2: 0 },
+      type: kind,
+      coords:
+        kind === 'radial'
+          ? { x1: 50, y1: 50, x2: 50, y2: 50, r1: 0, r2: 80 }
+          : { x1: 0, y1: 0, x2: 100, y2: 0 },
       colorStops: [
         { offset: 0, color: documentPalette[0] ?? '#111111' },
         { offset: 1, color: documentPalette[1] ?? '#e11d48' },
@@ -1272,7 +1338,120 @@ function App() {
     })
     object.set({ fill: gradient })
     canvasRef.current?.requestRenderAll()
-    finalizeActive('Applied gradient fill')
+    finalizeActive(kind === 'radial' ? 'Applied radial gradient' : 'Applied gradient fill')
+  }
+
+  function applyTextOnPath() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type !== 'textbox') return
+    const text = String(readObjectProp(object, 'text') ?? 'TYPE')
+    const path = new Line(
+      [object.left ?? 0, (object.top ?? 0) + 40, (object.left ?? 0) + 280, (object.top ?? 0) + 8],
+      { stroke: 'transparent', strokeWidth: 0, fill: 'transparent' },
+    )
+    const curved = new Textbox(text, {
+      left: object.left ?? 0,
+      top: object.top ?? 0,
+      width: 320,
+      fontFamily: String(readObjectProp(object, 'fontFamily') ?? 'Impact'),
+      fontSize: Number(readObjectProp(object, 'fontSize') ?? 48),
+      fill: String(readObjectProp(object, 'fill') ?? '#111111'),
+      path,
+    } as Partial<FabricObject>)
+    tagObject(curved, 'text', 'Text on path')
+    canvas.remove(object)
+    canvas.add(curved)
+    canvas.setActiveObject(curved)
+    commitHistory('Applied text on path')
+  }
+
+  function applyStrokeDash(preset: StrokeDashPreset) {
+    const object = activeObject()
+    if (!object || object.type === 'textbox') return
+    const dash =
+      preset === 'dashed' ? [12, 6] : preset === 'dotted' ? [2, 4] : undefined
+    object.set({
+      stroke: String(readObjectProp(object, 'stroke') ?? '#111111'),
+      strokeWidth: Number(readObjectProp(object, 'strokeWidth') ?? 2),
+      strokeDashArray: dash,
+    } as Partial<FabricObject>)
+    canvasRef.current?.requestRenderAll()
+    finalizeActive(`Stroke ${preset}`)
+  }
+
+  async function paintBrushMask() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object) return
+    const bounds = object.getBoundingRect()
+    const mask = new Ellipse({
+      left: bounds.left + bounds.width * 0.35,
+      top: bounds.top + bounds.height * 0.25,
+      rx: bounds.width * 0.18,
+      ry: bounds.height * 0.22,
+      absolutePositioned: true,
+      inverted: true,
+    })
+    object.set({ clipPath: mask, objectCaching: true } as Partial<FabricObject>)
+    canvas.requestRenderAll()
+    commitHistory('Painted soft brush mask')
+  }
+
+  function updatePaletteSwatch(index: number, color: string) {
+    setDocumentPalette((current) => {
+      const next = [...current]
+      next[index] = color
+      if (documentMeta) {
+        setDocumentMeta({ ...documentMeta, palette: next })
+      }
+      return next
+    })
+  }
+
+  async function saveTreatmentStackAsComponent() {
+    const object = activeObject()
+    if (!object || readTreatments(object).length === 0) return
+    const name = window.prompt('Treatment stack name', `${selected?.name ?? 'Layer'} stack`)
+    if (!name) return
+    const clone = await object.clone()
+    const snapshot = clone.toObject(HISTORY_PROPS as unknown as string[]) as Record<string, unknown>
+    setDocumentMeta((current) => {
+      const base = current ?? createDefaultDocument(poster, {})
+      return {
+        ...base,
+        components: [{ id: `component-${Date.now()}`, name, canvas: snapshot }, ...base.components],
+      }
+    })
+    commitHistory(`Saved treatment stack “${name}”`)
+  }
+
+  async function mergeVariant(variantId: string) {
+    const canvas = canvasRef.current
+    if (!canvas || !documentMeta) return
+    const variant = findVariant(documentMeta, variantId)
+    if (!variant) return
+    const current = canvas.toObject(HISTORY_PROPS as unknown as string[])
+    const merged = mergeVariantCanvas(current, variant.canvas)
+    restoringRef.current = true
+    await canvas.loadFromJSON(merged)
+    restoringRef.current = false
+    await reconcileArtifactTreatments()
+    canvas.requestRenderAll()
+    captureStyleBaseline()
+    syncSelected()
+    syncLayers()
+    commitHistory(`Merged ${variant.name}`)
+  }
+
+  function renameVariantById(variantId: string) {
+    if (!documentMeta) return
+    const variant = findVariant(documentMeta, variantId)
+    if (!variant) return
+    const name = window.prompt('Variant name', variant.name)
+    if (!name?.trim()) return
+    setDocumentMeta(renameVariant(documentMeta, variantId, name.trim()))
+    setStatus(`Renamed variant to ${name.trim()}`)
   }
 
   function completeOnboarding() {
@@ -1616,37 +1795,23 @@ function App() {
     const targetIds = selectedTargetIds()
     const bounds = object.getBoundingRect()
     const cropDirection = bounds.width > bounds.height ? 'vertical' : 'horizontal'
-    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
-    const fragments = createCutFragments(
-      {
-        id: String(readObjectProp(object, 'id') ?? 'layer'),
-        left: bounds.left,
-        top: bounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      },
-      { pieces: 3, gap: Math.max(16, accidentIntensity * 0.4), direction: cropDirection },
-    )
-    const cropped = await cropFragments(imageUrl, fragments)
-    canvas.remove(object)
 
-    for (const [index, url] of cropped.entries()) {
-      if (index === 1) continue
-      const fragment = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
-      const frame = fragments[index]
-      fragment.set({
-        left: frame.left + (index === 0 ? -accidentIntensity * 0.35 : accidentIntensity * 0.35),
-        top: frame.top + (index === 0 ? accidentIntensity * 0.15 : -accidentIntensity * 0.15),
-        angle: index === 0 ? -4 : 5,
-        opacity: object.opacity ?? 1,
-        globalCompositeOperation: 'multiply',
-      })
-      tagObject(fragment, 'fragment', `Bad crop ${index + 1}`)
-      canvas.add(fragment)
-    }
-    canvas.discardActiveObject()
+    captureTransformBaseline(object)
+    addTreatment(
+      object,
+      'bad-crop',
+      {
+        direction: badCropDirectionToParam(cropDirection),
+        gap: Math.max(16, accidentIntensity * 0.4),
+        drift: accidentIntensity,
+      },
+      seed,
+    )
+    object.set({ objectCaching: true } as Partial<FabricObject>)
+    await refreshTreatmentStack(object)
+    setInspectorTab('treatments')
     trackChaos('Bad crop', seed, targetIds, (next) => badCropAccident(next))
-    commitHistory('Applied bad crop accident')
+    commitHistory(`Applied bad crop accident #${seed}`)
   }
 
   async function flipMistakeAccident() {
@@ -1814,46 +1979,18 @@ function App() {
     if (!canvas || !object || object.type !== 'textbox') return
     const targetIds = selectedTargetIds()
 
-    const text = String(readObjectProp(object, 'text') ?? '')
-    const glyphs = createExpressiveGlyphs(
-      {
-        id: String(readObjectProp(object, 'id') ?? 'type'),
-        text,
-        left: object.left ?? 0,
-        top: object.top ?? 0,
-        fontSize: Number(readObjectProp(object, 'fontSize') ?? 80),
-        charSpacing: Number(readObjectProp(object, 'charSpacing') ?? 0),
-      },
-      { intensity: typeIntensity, legibility: typeLegibility, random: createSeededRandom(seed) },
+    captureTransformBaseline(object)
+    addTreatment(
+      object,
+      'glyph-break',
+      { intensity: typeIntensity, legibility: legibilityToParam(typeLegibility) },
+      seed,
     )
-    const fill = String(readObjectProp(object, 'fill') ?? '#111111')
-    const fontFamily = String(readObjectProp(object, 'fontFamily') ?? 'Impact')
-    const fontWeight = readObjectProp(object, 'fontWeight') as string | number | undefined
-    const baseAngle = object.angle ?? 0
-
-    canvas.remove(object)
-    glyphs.forEach((glyph, index) => {
-      const letter = new Textbox(glyph.text, {
-        left: glyph.left,
-        top: glyph.top,
-        width: Math.max(16, glyph.fontSize * 0.9),
-        fontFamily,
-        fontSize: glyph.fontSize,
-        fontWeight,
-        fill: index % 7 === 0 && typeLegibility === 'low' ? ACCENTS[index % ACCENTS.length] : fill,
-        opacity: glyph.opacity,
-        angle: baseAngle + glyph.angle,
-        scaleX: glyph.scaleX,
-        scaleY: glyph.scaleY,
-        charSpacing: -20,
-      })
-      tagObject(letter, 'text', `Glyph ${glyph.text}`)
-      canvas.add(letter)
+    void refreshTreatmentStack(object).then(() => {
+      setInspectorTab('treatments')
+      trackChaos('Break letters', seed, targetIds, (next) => breakSelectedType(next))
+      commitHistory(`Broke type into expressive glyphs #${seed}`)
     })
-
-    canvas.discardActiveObject()
-    trackChaos('Break letters', seed, targetIds, (next) => breakSelectedType(next))
-    commitHistory(`Broke type into expressive glyphs #${seed}`)
   }
 
   async function cloneTypeAsTexture() {
@@ -2042,35 +2179,11 @@ function App() {
     if (!canvas || !object || object.type === 'activeselection') return
     const targetIds = selectedTargetIds()
 
-    const imageUrl = object.toDataURL({ format: 'png', multiplier: 1 })
-    const bounds = object.getBoundingRect()
-    const fragments = createTearFragments(
-      {
-        id: String(readObjectProp(object, 'id') ?? 'layer'),
-        left: bounds.left,
-        top: bounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      },
-      { pieces: 7, gap: 32, random: createSeededRandom(seed) },
-    )
-
-    const cropped = await cropFragments(imageUrl, fragments)
-    canvas.remove(object)
-    for (const [index, url] of cropped.entries()) {
-      const fragment = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
-      const frame = fragments[index]
-      fragment.set({
-        left: frame.left,
-        top: frame.top,
-        angle: frame.angle,
-        opacity: object.opacity ?? 1,
-        globalCompositeOperation: index % 3 === 0 ? 'multiply' : 'source-over',
-      })
-      tagObject(fragment, 'fragment', `Torn scrap ${index + 1}`)
-      canvas.add(fragment)
-    }
-    canvas.discardActiveObject()
+    captureTransformBaseline(object)
+    addTreatment(object, 'tear', { pieces: 7, gap: 32 }, seed)
+    object.set({ objectCaching: true } as Partial<FabricObject>)
+    await refreshTreatmentStack(object)
+    setInspectorTab('treatments')
     trackChaos('Tear collage', seed, targetIds, (next) => tearCollageSelected(next))
     commitHistory(`Made tear collage #${seed}`)
   }
@@ -2123,6 +2236,7 @@ function App() {
   function applyPosterStyle(style: 'magazine' | 'type' | 'image' | 'minimal') {
     const canvas = canvasRef.current
     if (!canvas) return
+    captureStyleBaseline()
     const baseline = styleBaselineRef.current
 
     if (style === 'minimal') {
@@ -2227,6 +2341,46 @@ function App() {
     }
   }
 
+  async function exportAllArtboards() {
+    if (!documentMeta || documentMeta.artboards.length < 2) {
+      exportPoster()
+      return
+    }
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const activeId = documentMeta.activeArtboardId
+    for (const board of documentMeta.artboards) {
+      await switchToArtboard(board.id)
+      exportPoster()
+    }
+    if (activeId !== documentMeta.activeArtboardId) {
+      await switchToArtboard(activeId)
+    }
+    setStatus(`Exported ${documentMeta.artboards.length} artboards`)
+  }
+
+  function toggleCmykPreview(enabled: boolean) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    setShowCmykPreview(enabled)
+    canvas.getObjects().forEach((object) => {
+      const fill = readObjectProp(object, 'fill')
+      if (typeof fill === 'string' && fill.startsWith('#')) {
+        const original = readObjectProp(object, 'originalFill') as string | undefined
+        if (enabled) {
+          object.set({
+            originalFill: fill,
+            fill: softProofHex(fill),
+          } as Partial<FabricObject>)
+        } else if (original) {
+          object.set({ fill: original, originalFill: undefined } as Partial<FabricObject>)
+        }
+      }
+    })
+    canvas.requestRenderAll()
+    setStatus(enabled ? 'CMYK soft-proof preview on' : 'CMYK soft-proof preview off')
+  }
+
   function exportPoster() {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -2254,7 +2408,9 @@ function App() {
       const baseName = safeFileName(projectName)
 
       if (format === 'pdf') {
-        downloadPdfFromImageData(dataUrl, `${baseName}@${exportScale}x.pdf`, width, height, printDpi)
+        downloadPdfFromImageData(dataUrl, `${baseName}@${exportScale}x.pdf`, width, height, printDpi, {
+          registrationMarks: pdfRegistrationMarks,
+        })
       } else if (format === 'tiff') {
         const image = new Image()
         image.onload = () => {
@@ -2423,6 +2579,15 @@ function App() {
                 <Trash2 size={17} />
                 Delete
               </button>
+              <button
+                type="button"
+                title={showInstruments ? 'Hide chaos instruments' : 'Show Xerox, decay, accidents, texture, and crop tools'}
+                className={showInstruments ? 'active' : undefined}
+                onClick={() => setShowInstruments((value) => !value)}
+              >
+                <Sparkles size={17} />
+                Instruments
+              </button>
             </div>
             <input
               ref={fileInputRef}
@@ -2437,6 +2602,8 @@ function App() {
             />
           </div>
 
+          {showInstruments ? (
+          <>
           <div className="panel-section">
             <h2>Poster</h2>
             <label>
@@ -2456,7 +2623,7 @@ function App() {
                   <input
                     type="number"
                     min={320}
-                    max={3000}
+                    max={10000}
                     value={customSize.width}
                     onChange={(event) => applyCustomSize({ ...customSize, width: Number(event.target.value) })}
                   />
@@ -2466,7 +2633,7 @@ function App() {
                   <input
                     type="number"
                     min={320}
-                    max={3000}
+                    max={10000}
                     value={customSize.height}
                     onChange={(event) => applyCustomSize({ ...customSize, height: Number(event.target.value) })}
                   />
@@ -2504,7 +2671,7 @@ function App() {
                 <ScanLine size={17} />
                 Photocopy noise {scopeAll}
               </button>
-              <button type="button" title="Tear the selected layer into shifted scraps (rasterizes it)" onClick={() => void tearCollageSelected()} disabled={!selected}>
+              <button type="button" title="Tear the selected layer into shifted scraps — remove Tear in Treatments to restore" onClick={() => void tearCollageSelected()} disabled={!selected}>
                 <Scissors size={17} />
                 Tear collage {scopeSel}
               </button>
@@ -2620,7 +2787,7 @@ function App() {
                 <Shuffle size={17} />
                 Duplicate drift {scopeSel}
               </button>
-              <button type="button" title="Crop the selection badly on purpose (rasterizes it)" onClick={() => void badCropAccident()} disabled={!selected}>
+              <button type="button" title="Crop the selection badly on purpose — remove Bad crop in Treatments to restore" onClick={() => void badCropAccident()} disabled={!selected}>
                 <Crop size={17} />
                 Bad crop {scopeSel}
               </button>
@@ -2686,78 +2853,17 @@ function App() {
               </button>
             </div>
           </div>
+          </>
+          ) : null}
 
-          <div className="panel-section layer-section">
+          <div className="panel-section layer-section compact">
             <div className="panel-title">
-              <h2>
-                Layers <span className="section-count">[{layers.length}]</span>
-              </h2>
-              <Layers size={15} />
+              <h2>Layers</h2>
+              <button type="button" className="toolbar-button" onClick={() => setInspectorTab('layers')}>
+                Open panel
+              </button>
             </div>
-            <div className="layer-list">
-              {layers.map((layer) => (
-                <div
-                  key={layer.id}
-                  className={selected?.id === layer.id ? 'active layer-row' : 'layer-row'}
-                  draggable={renamingLayerId !== layer.id}
-                  onDragStart={() => setDragLayerId(layer.id)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    if (dragLayerId) reorderLayer(dragLayerId, layer.id)
-                    setDragLayerId(null)
-                  }}
-                  onDragEnd={() => setDragLayerId(null)}
-                >
-                  {renamingLayerId === layer.id ? (
-                    <input
-                      autoFocus
-                      className="layer-rename"
-                      defaultValue={layer.name}
-                      onBlur={(event) => {
-                        renameLayer(layer.id, event.target.value.trim() || layer.name)
-                        setRenamingLayerId(null)
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') (event.target as HTMLInputElement).blur()
-                        if (event.key === 'Escape') setRenamingLayerId(null)
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="layer-select"
-                      title="Click to select · double-click to rename · drag to reorder"
-                      onClick={() => selectLayer(layer.id)}
-                      onDoubleClick={() => setRenamingLayerId(layer.id)}
-                    >
-                      <span>{layer.name}</span>
-                      <small>{layer.kind}</small>
-                    </button>
-                  )}
-                  <span className="layer-controls">
-                    <button
-                      type="button"
-                      className="icon-button layer-toggle"
-                      aria-label={layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`}
-                      title={layer.visible ? 'Hide layer' : 'Show layer'}
-                      onClick={() => toggleLayerVisibility(layer.id)}
-                    >
-                      {layer.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button layer-toggle"
-                      aria-label={layer.locked ? `Unlock ${layer.name}` : `Lock ${layer.name}`}
-                      title={layer.locked ? 'Unlock layer' : 'Lock layer'}
-                      onClick={() => toggleLayerLock(layer.id)}
-                    >
-                      {layer.locked ? <Lock size={13} /> : <LockOpen size={13} />}
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </div>
+            <p className="hint">{layers.length} layer{layers.length === 1 ? '' : 's'} — reorder, hide, and lock in the Layers tab.</p>
           </div>
         </aside>
 
@@ -2817,6 +2923,13 @@ function App() {
             onMouseMove={handlePanMouseMove}
             onMouseUp={handlePanMouseUp}
             onMouseLeave={handlePanMouseUp}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault()
+              const assetId = event.dataTransfer.getData('text/carson-asset')
+              const asset = storedAssets.find((item) => item.id === assetId)
+              if (asset) void insertAsset(asset)
+            }}
           >
             <div
               className="canvas-shell"
@@ -2832,6 +2945,12 @@ function App() {
               <canvas ref={canvasEl} />
             </div>
           </div>
+          <ExplorationTrail
+            variants={documentMeta?.variants ?? []}
+            activeLabel={projectName}
+            onSelect={(variantId) => void restoreVariant(variantId)}
+            onFork={() => void forkVariation()}
+          />
         </section>
 
         <aside className="rail inspector glass-panel" aria-label="Inspector">
@@ -2840,6 +2959,7 @@ function App() {
               [
                 ['inspect', 'Inspect'],
                 ['treatments', 'Treatments'],
+                ['layers', 'Layers'],
                 ['assets', 'Assets'],
                 ['layout', 'Layout'],
                 ['print', 'Print'],
@@ -2942,7 +3062,7 @@ function App() {
           {inspectorTab === 'treatments' ? (
             <div className="panel-section">
               <h2>Treatment stack</h2>
-              <p className="hint">Non-destructive — text stays editable; remove Slice or Crop to restore the source layer.</p>
+              <p className="hint">Non-destructive — text stays editable; remove artifact treatments to restore the source layer.</p>
               {!selected ? (
                 <p className="empty">Select a layer to view its treatment stack.</p>
               ) : selectedTreatments.length === 0 ? (
@@ -2974,6 +3094,39 @@ function App() {
                   ))}
                 </ul>
               )}
+              <button
+                type="button"
+                title="Save this layer's treatment stack as a reusable component"
+                onClick={() => void saveTreatmentStackAsComponent()}
+                disabled={!selected || selectedTreatments.length === 0}
+              >
+                Save stack as component
+              </button>
+            </div>
+          ) : null}
+
+          {inspectorTab === 'layers' ? (
+            <div className="panel-section">
+              <h2>Layers</h2>
+              <LayersPanel
+                layers={layers}
+                selectedId={selected?.id ?? null}
+                renamingLayerId={renamingLayerId}
+                dragLayerId={dragLayerId}
+                onSelect={selectLayer}
+                onToggleVisibility={toggleLayerVisibility}
+                onToggleLock={toggleLayerLock}
+                onRenameStart={setRenamingLayerId}
+                onRenameEnd={(id, name) => {
+                  renameLayer(id, name.trim() || 'Layer')
+                  setRenamingLayerId(null)
+                }}
+                onDragStart={setDragLayerId}
+                onDragOver={(id) => {
+                  if (dragLayerId && dragLayerId !== id) reorderLayer(dragLayerId, id)
+                }}
+                onDragEnd={() => setDragLayerId(null)}
+              />
             </div>
           ) : null}
 
@@ -3211,25 +3364,49 @@ function App() {
                   </span>
                 </label>
                 <div className="swatch-row" aria-label="Document palette">
-                  {documentPalette.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className="swatch"
-                      style={{ background: color }}
-                      title={`Document swatch ${color}`}
-                      disabled={selectedIsImage}
-                      onClick={() => {
-                        updateActive({ fill: color })
-                        finalizeActive('Applied palette color')
-                      }}
-                    />
+                  {documentPalette.map((color, index) => (
+                    <label key={`${color}-${index}`} className="swatch-edit" title={`Document swatch ${index + 1}`}>
+                      <input
+                        type="color"
+                        value={color}
+                        disabled={selectedIsImage}
+                        onChange={(event) => updatePaletteSwatch(index, event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="swatch"
+                        style={{ background: color }}
+                        disabled={selectedIsImage}
+                        onClick={() => {
+                          updateActive({ fill: color })
+                          finalizeActive('Applied palette color')
+                        }}
+                      />
+                    </label>
                   ))}
                 </div>
-                {!selectedIsImage ? (
-                  <button type="button" title="Apply a linear gradient from palette colors" onClick={applyGradientFill}>
-                    Apply gradient fill
+                {!selectedIsText ? null : (
+                  <button type="button" title="Wrap selected text on a curved path" onClick={applyTextOnPath}>
+                    Text on path
                   </button>
+                )}
+                {!selectedIsImage ? (
+                  <div className="button-row">
+                    <button type="button" title="Apply a linear gradient from palette colors" onClick={() => applyGradientFill('linear')}>
+                      Linear gradient
+                    </button>
+                    <button type="button" title="Apply a radial gradient from palette colors" onClick={() => applyGradientFill('radial')}>
+                      Radial gradient
+                    </button>
+                  </div>
+                ) : null}
+                {!selectedIsText && selected ? (
+                  <div className="button-row">
+                    <button type="button" onClick={() => applyStrokeDash('solid')}>Solid stroke</button>
+                    <button type="button" onClick={() => applyStrokeDash('dashed')}>Dashed</button>
+                    <button type="button" onClick={() => applyStrokeDash('dotted')}>Dotted</button>
+                    <button type="button" onClick={() => void paintBrushMask()}>Brush mask</button>
+                  </div>
                 ) : null}
                 {recentColors.length > 0 && !selectedIsImage ? (
                   <div className="swatch-row" aria-label="Recently used colors">
@@ -3321,7 +3498,17 @@ function App() {
               ) : (
                 <div className="asset-grid">
                   {storedAssets.map((asset) => (
-                    <button key={asset.id} type="button" className="asset-thumb" title={asset.name} onClick={() => void insertAsset(asset)}>
+                    <button
+                      key={asset.id}
+                      type="button"
+                      className="asset-thumb"
+                      title={asset.name}
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData('text/carson-asset', asset.id)
+                      }}
+                      onClick={() => void insertAsset(asset)}
+                    >
                       <img src={asset.thumbnail} alt="" />
                       <span>{asset.name}</span>
                     </button>
@@ -3366,11 +3553,24 @@ function App() {
                 max={100}
                 format={formatPercent}
                 onChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
-                onCommit={() => setShowLayoutGrid(true)}
+                onCommit={() => {
+                  setShowLayoutGrid(true)
+                  const canvas = canvasRef.current
+                  if (!canvas) return
+                  for (const object of canvas.getObjects()) {
+                    if (readTreatments(object).some((item) => item.type === 'scatter')) {
+                      void refreshTreatmentStack(object)
+                    }
+                  }
+                }}
               />
               <button type="button" onClick={() => setShowLayoutGrid((value) => !value)}>
                 <Grid3x3 size={16} />
                 {showLayoutGrid ? 'Hide column grid' : 'Show column grid'}
+              </button>
+              <button type="button" onClick={() => setShowBaselineGrid((value) => !value)}>
+                <Grid3x3 size={16} />
+                {showBaselineGrid ? 'Hide baseline grid' : 'Show baseline grid'}
               </button>
               {documentMeta && documentMeta.variants.length > 0 ? (
                 <>
@@ -3395,6 +3595,12 @@ function App() {
                           <button type="button" title={`Compare with ${variant.name}`} onClick={() => void openVariantCompare(variant.id)}>
                             Compare
                           </button>
+                          <button type="button" title={`Merge ${variant.name} into current`} onClick={() => void mergeVariant(variant.id)}>
+                            Merge
+                          </button>
+                          <button type="button" title={`Rename ${variant.name}`} onClick={() => renameVariantById(variant.id)}>
+                            Rename
+                          </button>
                         </div>
                       </li>
                     ))}
@@ -3418,8 +3624,22 @@ function App() {
               <button type="button" onClick={() => setShowPrintGuides((value) => !value)}>
                 {showPrintGuides ? 'Hide bleed/trim guides' : 'Show bleed/trim guides'}
               </button>
+              <button type="button" onClick={() => toggleCmykPreview(!showCmykPreview)}>
+                {showCmykPreview ? 'Disable CMYK soft-proof' : 'Enable CMYK soft-proof'}
+              </button>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={pdfRegistrationMarks}
+                  onChange={(event) => setPdfRegistrationMarks(event.target.checked)}
+                />
+                Registration marks in PDF export
+              </label>
               <button type="button" onClick={() => addNewArtboard()}>
                 Add artboard (IG portrait)
+              </button>
+              <button type="button" onClick={() => void exportAllArtboards()}>
+                Export all artboards
               </button>
               <p className="hint">
                 Print guides are document chrome — they never bake into artwork. Export PDF for print shops.

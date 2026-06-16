@@ -106,6 +106,46 @@ export function forkVariant(
   return { ...doc, variants: [variant, ...doc.variants].slice(0, 12) }
 }
 
+export function renameVariant(doc: DocumentMeta, variantId: string, name: string): DocumentMeta {
+  return {
+    ...doc,
+    variants: doc.variants.map((variant) => (variant.id === variantId ? { ...variant, name } : variant)),
+  }
+}
+
+export function mergeVariantCanvas(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const currentObjects = Array.isArray(current.objects) ? [...current.objects] : []
+  const incomingObjects = Array.isArray(incoming.objects) ? incoming.objects : []
+  const existingIds = new Set(
+    currentObjects.map((object) => (object as { id?: string }).id).filter(Boolean),
+  )
+  const merged = [
+    ...currentObjects,
+    ...incomingObjects.filter((object) => {
+      const id = (object as { id?: string }).id
+      return !id || !existingIds.has(id)
+    }),
+  ]
+  return { ...current, objects: merged }
+}
+
+export function updateArtboardPreset(
+  doc: DocumentMeta,
+  artboardId: string,
+  preset: PosterPreset,
+  name?: string,
+): DocumentMeta {
+  return {
+    ...doc,
+    artboards: doc.artboards.map((board) =>
+      board.id === artboardId ? { ...board, preset, name: name ?? board.name } : board,
+    ),
+  }
+}
+
 export function mmToPx(mm: number, dpi: number) {
   return Math.round((mm / 25.4) * dpi)
 }
