@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlignLeft,
   BringToFront,
+  ChevronDown,
+  ChevronUp,
   Circle,
   Crop,
   Dices,
@@ -12,12 +14,10 @@ import {
   Grid3x3,
   ImagePlus,
   Layers,
-  Maximize,
   Minus,
+  PenLine,
   Pipette,
   ScanLine,
-  Redo2,
-  Save,
   Scissors,
   SendToBack,
   Shuffle,
@@ -26,9 +26,6 @@ import {
   Star,
   Trash2,
   Type,
-  Undo2,
-  ZoomIn,
-  ZoomOut,
 } from 'lucide-react'
 import {
   ActiveSelection,
@@ -38,6 +35,7 @@ import {
   Gradient,
   Image as FabricImage,
   Line,
+  PencilBrush,
   Polygon,
   Rect,
   Textbox,
@@ -51,7 +49,6 @@ import {
   createLayerDecayMarks,
   createPhotocopyNoise,
   createPrintScanArtifacts,
-  createScrapeMasks,
   createTypeStrips,
   getLayerDecayProfile,
   getPrintScanProfile,
@@ -79,6 +76,7 @@ import {
   readTreatments,
   removeTreatment,
   renderTreatmentStackOnCanvas,
+  reorderTreatment,
   treatmentLabel,
   updateTreatment,
   type Treatment,
@@ -94,26 +92,62 @@ import {
   renameVariant,
   switchArtboard,
   addArtboard,
+  updateArtboardPreset,
   type DocumentMeta,
 } from './lib/document'
 import { loadFontFile, loadGoogleFont, GOOGLE_FONTS } from './lib/fonts'
-import { contrastRatio, FULL_BLEND_MODES, legibilityBand } from './lib/color'
+import { contrastRatio, legibilityBand } from './lib/color'
 import { alignObjects, baselineGridLines, buildColumnGrid, distributeObjects, type GridOverlay } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
 import {
   createHistoryState,
   pushHistoryOp,
+  redoState,
+  snapshotForRedo,
+  snapshotForUndo,
+  undoState,
   type HistoryState,
 } from './lib/historyLog'
+import {
+  addPosterTreatment,
+  posterTreatmentLabel,
+  readPosterTreatments,
+  removePosterTreatment,
+  renderPosterTreatments,
+  reorderPosterTreatment,
+  updatePosterTreatment,
+} from './lib/posterTreatments'
+import {
+  ACCENTS,
+  BLEND_MODES,
+  FONT_STACKS,
+  HISTORY_PROPS,
+  ONBOARDING_KEY,
+  POSTER_PRESET_OPTIONS,
+  SNAP_SCREEN_THRESHOLD,
+  ZOOM_LEVELS,
+} from './lib/editorConstants'
+import {
+  buildStarPoints,
+  formatDegrees,
+  formatLineHeight,
+  formatPercent,
+  readFileAsDataUrl,
+  readObjectProp,
+  round,
+  safeFileName,
+} from './lib/canvasUtils'
 import { legibilityToParam } from './lib/glyphBreakTreatment'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { buildPrintGuides, downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
 import type { CommandAction } from './lib/commands'
 import { CommandPalette } from './components/CommandPalette'
-import { ExplorationTrail } from './components/ExplorationTrail'
+import { EditorCanvas } from './components/EditorCanvas'
 import { LayersPanel } from './components/LayersPanel'
 import { OnboardingModal } from './components/OnboardingModal'
+import { Slider } from './components/Slider'
+import { TopBar } from './components/TopBar'
 import { VariantCompareModal } from './components/VariantCompareModal'
 import './App.css'
 
@@ -144,6 +178,8 @@ type SelectedState = {
   skewX?: number
   skewY?: number
   blendMode?: string
+  stroke?: string
+  strokeWidth?: number
 }
 type ChaosRun = {
   label: string
@@ -160,59 +196,12 @@ type StyleBaseline = {
   globalCompositeOperation: string
 }
 
-const HISTORY_PROPS = [
-  'id',
-  'name',
-  'kind',
-  'selectable',
-  'evented',
-  'treatments',
-  'transformBaseline',
-  'stroke',
-  'strokeWidth',
-  'strokeDashArray',
-  'clipPath',
-  'sliceSourceId',
-  'sliceTreatmentId',
-  'cropSourceId',
-  'cropTreatmentId',
-  'tearSourceId',
-  'tearTreatmentId',
-  'badCropSourceId',
-  'badCropTreatmentId',
-  'glyphSourceId',
-  'glyphTreatmentId',
-  'path',
-  'originalFill',
-] as const
-const FONT_STACKS = [
-  'Arial Black',
-  'Impact',
-  'Helvetica',
-  'Arial Narrow',
-  'Georgia',
-  'Times New Roman',
-  'Courier New',
-  'Verdana',
-]
-const BLEND_MODES = FULL_BLEND_MODES
-const ONBOARDING_KEY = 'carson.onboarding.v1'
-const ACCENTS = ['#05b6d4', '#e11d48', '#a3e635']
-const ZOOM_LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8]
-const SNAP_SCREEN_THRESHOLD = 6
-
-const formatPercent = (value: number) => `${Math.round(value)}%`
-const formatDegrees = (value: number) => `${Math.round(value)}°`
-const formatLineHeight = (value: number) => (value / 100).toFixed(2)
-
 type EyeDropperResult = { sRGBHex: string }
 type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 
 function App() {
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const canvasRef = useRef<Canvas | null>(null)
-  const historyRef = useRef<string[]>([])
-  const redoRef = useRef<string[]>([])
   const historyLogRef = useRef<HistoryState>(createHistoryState())
   const restoringRef = useRef(false)
   const layerIdRef = useRef(0)
@@ -272,6 +261,10 @@ function App() {
   const [showPrintGuides, setShowPrintGuides] = useState(false)
   const [showCmykPreview, setShowCmykPreview] = useState(false)
   const [showInstruments, setShowInstruments] = useState(false)
+  const [penMode, setPenMode] = useState(false)
+  const [penStrokeWidth, setPenStrokeWidth] = useState(3)
+  const [penStrokeColor, setPenStrokeColor] = useState('#111111')
+  const [newArtboardPreset, setNewArtboardPreset] = useState<PosterPresetId>('instagram')
   const [pdfRegistrationMarks, setPdfRegistrationMarks] = useState(true)
   const [printDpi, setPrintDpi] = useState(300)
   const [bleedMm, setBleedMm] = useState(3)
@@ -281,6 +274,11 @@ function App() {
     currentThumbnail: string
   } | null>(null)
   const fontInputRef = useRef<HTMLInputElement | null>(null)
+
+  const penStrokeColorRef = useRef(penStrokeColor)
+  const penStrokeWidthRef = useRef(penStrokeWidth)
+  penStrokeColorRef.current = penStrokeColor
+  penStrokeWidthRef.current = penStrokeWidth
 
   showPrintGuidesRef.current = showPrintGuides
   showLayoutGridRef.current = showLayoutGrid
@@ -334,6 +332,32 @@ function App() {
   }, [showLayoutGrid, showBaselineGrid, showPrintGuides, gridOverlay, printDpi, bleedMm])
 
   useEffect(() => {
+    void refreshPosterTreatments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentMeta?.activeArtboardId, poster.width, poster.height])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.isDrawingMode = penMode
+    if (penMode) {
+      const brush = new PencilBrush(canvas)
+      brush.color = penStrokeColor
+      brush.width = penStrokeWidth
+      canvas.freeDrawingBrush = brush
+      canvas.selection = false
+      canvas.skipTargetFind = true
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      syncSelected()
+    } else if (!spaceDownRef.current) {
+      canvas.selection = true
+      canvas.skipTargetFind = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [penMode, penStrokeColor, penStrokeWidth])
+
+  useEffect(() => {
     // Fix: previously this also ran on mount, double-committing history.
     if (posterInitRef.current) {
       posterInitRef.current = false
@@ -384,6 +408,18 @@ function App() {
     canvas.on('object:modified', () => commitHistory('Changed layer'))
     canvas.on('object:added', syncLayers)
     canvas.on('object:removed', syncLayers)
+
+    canvas.on('path:created', (event) => {
+      const path = event.path
+      if (!path) return
+      tagObject(path, 'shape', 'Pen stroke')
+      path.set({
+        stroke: penStrokeColorRef.current,
+        strokeWidth: penStrokeWidthRef.current,
+        fill: '',
+      } as Partial<FabricObject>)
+      commitHistory('Drew pen stroke')
+    })
 
     // Snapping v1: canvas edges, centers, and object-to-object. Hold Cmd/Ctrl to suspend.
     canvas.on('object:moving', (event) => {
@@ -610,6 +646,8 @@ function App() {
         actions.addText()
       } else if (event.key.toLowerCase() === 'b') {
         actions.addShape()
+      } else if (event.key.toLowerCase() === 'p') {
+        setPenMode((value) => !value)
       } else if (event.key.toLowerCase() === 'r') {
         actions.reroll()
       }
@@ -747,6 +785,23 @@ function App() {
         await refreshTreatmentStack(object)
       }
     }
+  }
+
+  function tagPosterFragment(object: FabricObject, name: string) {
+    object.set({
+      kind: 'fragment',
+      name,
+      selectable: false,
+      evented: false,
+    } as Partial<FabricObject>)
+  }
+
+  async function refreshPosterTreatments() {
+    const canvas = canvasRef.current
+    const board = documentMeta ? getActiveArtboard(documentMeta) : undefined
+    if (!canvas || !board) return
+    renderPosterTreatments(canvas, readPosterTreatments(board), poster, tagPosterFragment)
+    canvas.requestRenderAll()
   }
 
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
@@ -897,18 +952,20 @@ function App() {
     const canvas = canvasRef.current
     if (!canvas || restoringRef.current) return
     const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
-    const history = historyRef.current
-    if (history.at(-1) !== snapshot) {
-      historyRef.current = [...history.slice(-39), snapshot]
-      redoRef.current = []
-      historyLogRef.current = pushHistoryOp(historyLogRef.current, {
-        type: 'snapshot',
-        label: message,
-        data: snapshot,
-      })
-      scheduleAutosave()
-      if (!message.endsWith(' preset')) captureStyleBaseline()
+    const lastOp = historyLogRef.current.ops[historyLogRef.current.cursor]
+    if (lastOp?.type === 'snapshot' && lastOp.data === snapshot) {
+      syncSelected()
+      syncLayers()
+      setStatus(message)
+      return
     }
+    historyLogRef.current = pushHistoryOp(historyLogRef.current, {
+      type: 'snapshot',
+      label: message,
+      data: snapshot,
+    })
+    scheduleAutosave()
+    if (!message.endsWith(' preset')) captureStyleBaseline()
     syncSelected()
     syncLayers()
     setStatus(message)
@@ -921,6 +978,7 @@ function App() {
     await canvas.loadFromJSON(JSON.parse(snapshot))
     restoringRef.current = false
     await reconcileArtifactTreatments()
+    await refreshPosterTreatments()
     canvas.requestRenderAll()
     captureStyleBaseline()
     syncSelected()
@@ -929,22 +987,21 @@ function App() {
   }
 
   function undoAsync() {
-    const history = historyRef.current
-    if (history.length < 2) return Promise.resolve()
-    const current = history.at(-1)
-    const previous = history.at(-2)
-    if (!current || !previous) return Promise.resolve()
-    redoRef.current = [current, ...redoRef.current]
-    historyRef.current = history.slice(0, -1)
-    return restoreSnapshot(previous, 'Undo')
+    const undone = undoState(historyLogRef.current)
+    if (!undone.op) return Promise.resolve()
+    const snapshot = snapshotForUndo(undone.state)
+    historyLogRef.current = undone.state
+    if (!snapshot) return Promise.resolve()
+    return restoreSnapshot(snapshot, `Undo: ${undone.op.label}`)
   }
 
   function redo() {
-    const [next, ...rest] = redoRef.current
-    if (!next) return
-    redoRef.current = rest
-    historyRef.current = [...historyRef.current, next]
-    void restoreSnapshot(next, 'Redo')
+    const redone = redoState(historyLogRef.current)
+    if (!redone.op) return
+    const snapshot = snapshotForRedo(redone.state)
+    historyLogRef.current = redone.state
+    if (!snapshot) return
+    void restoreSnapshot(snapshot, `Redo: ${redone.op.label}`)
   }
 
   function syncLayers() {
@@ -981,6 +1038,8 @@ function App() {
       skewX: readObjectProp(object, 'skewX') as number | undefined,
       skewY: readObjectProp(object, 'skewY') as number | undefined,
       blendMode: String(readObjectProp(object, 'globalCompositeOperation') ?? 'source-over'),
+      stroke: readObjectProp(object, 'stroke') as string | undefined,
+      strokeWidth: readObjectProp(object, 'strokeWidth') as number | undefined,
     }
   }
 
@@ -1133,6 +1192,68 @@ function App() {
     commitHistory('Re-rolled treatment')
   }
 
+  async function reorderLayerTreatment(treatmentId: string, direction: 'up' | 'down') {
+    const object = activeObject()
+    if (!object) return
+    reorderTreatment(object, treatmentId, direction)
+    await refreshTreatmentStack(object)
+    commitHistory('Reordered treatment')
+  }
+
+  async function rerollPosterTreatment(treatmentId: string) {
+    if (!documentMeta) return
+    const board = getActiveArtboard(documentMeta)
+    if (!board) return
+    const nextBoard = updatePosterTreatment(board, treatmentId, { seed: newSeed() })
+    setDocumentMeta({
+      ...documentMeta,
+      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+    })
+    await refreshPosterTreatments()
+    commitHistory('Re-rolled poster treatment')
+  }
+
+  async function togglePosterTreatment(treatmentId: string) {
+    if (!documentMeta) return
+    const board = getActiveArtboard(documentMeta)
+    if (!board) return
+    const treatment = readPosterTreatments(board).find((item) => item.id === treatmentId)
+    if (!treatment) return
+    const nextBoard = updatePosterTreatment(board, treatmentId, { enabled: !treatment.enabled })
+    setDocumentMeta({
+      ...documentMeta,
+      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+    })
+    await refreshPosterTreatments()
+    commitHistory(treatment.enabled ? 'Bypassed poster treatment' : 'Enabled poster treatment')
+  }
+
+  async function removePosterTreatmentAction(treatmentId: string) {
+    if (!documentMeta) return
+    const board = getActiveArtboard(documentMeta)
+    if (!board) return
+    const nextBoard = removePosterTreatment(board, treatmentId)
+    setDocumentMeta({
+      ...documentMeta,
+      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+    })
+    await refreshPosterTreatments()
+    commitHistory('Removed poster treatment')
+  }
+
+  async function reorderPosterTreatmentAction(treatmentId: string, direction: 'up' | 'down') {
+    if (!documentMeta) return
+    const board = getActiveArtboard(documentMeta)
+    if (!board) return
+    const nextBoard = reorderPosterTreatment(board, treatmentId, direction)
+    setDocumentMeta({
+      ...documentMeta,
+      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+    })
+    await refreshPosterTreatments()
+    commitHistory('Reordered poster treatment')
+  }
+
   async function toggleTreatment(treatmentId: string) {
     const object = activeObject()
     if (!object) return
@@ -1239,6 +1360,7 @@ function App() {
     await canvas.loadFromJSON(variant.canvas)
     restoringRef.current = false
     await reconcileArtifactTreatments()
+    await refreshPosterTreatments()
     canvas.requestRenderAll()
     captureStyleBaseline()
     syncSelected()
@@ -1280,6 +1402,7 @@ function App() {
     setPoster(target.preset)
     setPresetId(target.preset.id)
     setDocumentMeta(next)
+    await refreshPosterTreatments()
     canvas.requestRenderAll()
     captureStyleBaseline()
     syncSelected()
@@ -1289,10 +1412,28 @@ function App() {
 
   function addNewArtboard() {
     if (!documentMeta) return
-    const next = addArtboard(documentMeta, 'instagram')
+    const next = addArtboard(documentMeta, newArtboardPreset)
     setDocumentMeta(next)
     const board = getActiveArtboard(next)
     if (board) void switchToArtboard(board.id)
+  }
+
+  function changeArtboardPreset(artboardId: string, presetId: string) {
+    const canvas = canvasRef.current
+    if (!documentMeta || !canvas) return
+    const preset = applyPosterPreset(presetId as PosterPresetId)
+    const next = updateArtboardPreset(documentMeta, artboardId, preset)
+    const target = next.artboards.find((board) => board.id === artboardId)
+    if (!target) return
+    if (artboardId === documentMeta.activeArtboardId) {
+      setPoster(target.preset)
+      setPresetId(target.preset.id)
+      canvas.setDimensions({ width: target.preset.width, height: target.preset.height })
+      void refreshPosterTreatments()
+      canvas.requestRenderAll()
+    }
+    setDocumentMeta(next)
+    commitHistory(`Changed artboard preset to ${target.name}`)
   }
 
   async function persistAssetFromFile(file: File) {
@@ -1437,6 +1578,7 @@ function App() {
     await canvas.loadFromJSON(merged)
     restoringRef.current = false
     await reconcileArtifactTreatments()
+    await refreshPosterTreatments()
     canvas.requestRenderAll()
     captureStyleBaseline()
     syncSelected()
@@ -2103,44 +2245,19 @@ function App() {
     commitHistory('Added diagonal texture')
   }
 
-  function addWhiteScrapes(seed = newSeed()) {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const random = createSeededRandom(seed)
-    const masks = createScrapeMasks(poster, { count: 7, random })
-
-    masks.forEach((mask, index) => {
-      const scrape = new Rect({
-        left: mask.left,
-        top: mask.top,
-        width: mask.width,
-        height: mask.height,
-        fill: '#f8f6ef',
-        opacity: mask.opacity,
-        angle: mask.angle,
-      })
-      tagObject(scrape, 'shape', `White scrape ${index + 1}`)
-      canvas.add(scrape)
-
-      const chips = createPhotocopyNoise({ width: mask.width, height: mask.height }, { specks: 9, scratches: 2, scanlines: 0, random })
-      chips.forEach((chip) => {
-        const chipObject = new Rect({
-          left: mask.left + chip.left,
-          top: mask.top + chip.top,
-          width: chip.kind === 'speck' ? chip.size : chip.width,
-          height: chip.kind === 'speck' ? chip.size : chip.height,
-          fill: '#111111',
-          opacity: chip.opacity * 0.42,
-          angle: chip.kind === 'speck' ? mask.angle : chip.angle,
-          globalCompositeOperation: 'multiply',
-        })
-        tagObject(chipObject, 'shape', 'Scrape grit')
-        canvas.add(chipObject)
-      })
+  async function addWhiteScrapes(seed = newSeed()) {
+    if (!documentMeta) return
+    const board = getActiveArtboard(documentMeta)
+    if (!board) return
+    const { artboard: nextBoard } = addPosterTreatment(board, 'scrape', { count: 7 }, seed)
+    setDocumentMeta({
+      ...documentMeta,
+      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
     })
-
+    await refreshPosterTreatments()
+    setInspectorTab('treatments')
     trackChaos('White scrapes', seed, [], (next) => addWhiteScrapes(next))
-    commitHistory(`Added white scrape masks #${seed}`)
+    commitHistory(`Added scrape mask treatment #${seed}`)
   }
 
   function addDiveRedType() {
@@ -2319,9 +2436,13 @@ function App() {
     await canvas.loadFromJSON(project.canvas)
     restoringRef.current = false
     await reconcileArtifactTreatments()
+    await refreshPosterTreatments()
     canvas.requestRenderAll()
-    historyRef.current = [JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))]
-    redoRef.current = []
+    historyLogRef.current = pushHistoryOp(createHistoryState(), {
+      type: 'snapshot',
+      label: `Loaded ${project.name}`,
+      data: JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])),
+    })
     lastChaosRef.current = null
     setLastChaos(null)
     captureStyleBaseline()
@@ -2472,6 +2593,9 @@ function App() {
   const scopeAll = <span className="scope-badge scope-all" aria-hidden="true">ALL</span>
   const selectedObject = selected ? findObjectById(selected.id) : null
   const selectedTreatments = readTreatments(selectedObject)
+  const activeBoard = documentMeta ? getActiveArtboard(documentMeta) : undefined
+  const posterTreatments = readPosterTreatments(activeBoard)
+  const selectedIsPath = selectedObject?.type === 'path' || selectedObject?.type === 'line'
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', run: () => void applyXeroxToSelected() },
@@ -2500,35 +2624,13 @@ function App() {
         }}
         onClose={() => setVariantCompare(null)}
       />
-      <header className="topbar glass-bar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">C</span>
-          <div>
-            <h1>Carson</h1>
-            <p>Poster editor</p>
-          </div>
-        </div>
-        <div className="top-actions" aria-label="Poster actions">
-          <button type="button" className="icon-button" aria-label="Undo" title="Undo (Cmd+Z)" onClick={() => void undoAsync()}>
-            <Undo2 size={18} />
-          </button>
-          <button type="button" className="icon-button" aria-label="Redo" title="Redo (Cmd+Shift+Z)" onClick={redo}>
-            <Redo2 size={18} />
-          </button>
-          <button type="button" className="toolbar-button" title="Save to this browser (Cmd+S)" onClick={() => void saveProjectAction()}>
-            <Save size={17} />
-            Save
-          </button>
-          <button type="button" className="toolbar-button" title="Command palette (Cmd+K)" onClick={() => setCommandOpen(true)}>
-            <Sparkles size={17} />
-            Commands
-          </button>
-          <button type="button" className="primary-button" title="Export the poster (Cmd+E)" onClick={exportPoster}>
-            <Download size={17} />
-            Export
-          </button>
-        </div>
-      </header>
+      <TopBar
+        onUndo={() => void undoAsync()}
+        onRedo={redo}
+        onSave={() => void saveProjectAction()}
+        onOpenCommands={() => setCommandOpen(true)}
+        onExport={exportPoster}
+      />
 
       <section className="workspace">
         <aside className="rail left-rail glass-panel" aria-label="Tools and layers">
@@ -2558,6 +2660,15 @@ function App() {
               <button type="button" title="Add a star" onClick={addStarShape}>
                 <Star size={17} />
                 Star
+              </button>
+              <button
+                type="button"
+                title="Draw freehand strokes (P)"
+                className={penMode ? 'active' : undefined}
+                onClick={() => setPenMode((value) => !value)}
+              >
+                <PenLine size={17} />
+                Pen
               </button>
               <button type="button" title="Duplicate the selected layer (Cmd+D)" onClick={() => void duplicateSelected()} disabled={!selected}>
                 <FlipHorizontal size={17} />
@@ -2867,91 +2978,32 @@ function App() {
           </div>
         </aside>
 
-        <section className="canvas-stage" aria-label="Poster canvas">
-          <div className="stage-toolbar glass-bar">
-            <span>
-              {poster.name} · {poster.width} x {poster.height}px
-              {poster.dpi ? ` @ ${poster.dpi}dpi` : ''}
-            </span>
-            {documentMeta && documentMeta.artboards.length > 1 ? (
-              <span className="artboard-tabs">
-                {documentMeta.artboards.map((board) => (
-                  <button
-                    key={board.id}
-                    type="button"
-                    className={board.id === documentMeta.activeArtboardId ? 'active' : undefined}
-                    onClick={() => void switchToArtboard(board.id)}
-                  >
-                    {board.name}
-                  </button>
-                ))}
-              </span>
-            ) : null}
-            <span className="zoom-controls">
-              <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Cmd+-)" onClick={() => stepZoom(-1)}>
-                <ZoomOut size={15} />
-              </button>
-              <button type="button" className="zoom-readout" title="Reset to 100% (Cmd+1)" onClick={() => setZoom(1)}>
-                {Math.round(displayScale * 100)}%
-              </button>
-              <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in (Cmd+=)" onClick={() => stepZoom(1)}>
-                <ZoomIn size={15} />
-              </button>
-              <button type="button" className="icon-button" aria-label="Fit poster to view" title="Fit to view (Cmd+0)" onClick={() => setZoom(null)}>
-                <Maximize size={15} />
-              </button>
-            </span>
-            {lastChaos ? (
-              <button
-                type="button"
-                className="reroll-button"
-                title={`Undo and re-run ${lastChaos.label} with a new seed (R)`}
-                onClick={() => void rerollLast()}
-              >
-                <Dices size={14} />
-                Re-roll {lastChaos.label} #{lastChaos.seed}
-              </button>
-            ) : null}
-            <span role="status" aria-live="polite" className="stage-status">
-              {status}
-            </span>
-          </div>
-          <div
-            ref={scrollRef}
-            className={isPanMode ? 'canvas-scroll panning' : 'canvas-scroll'}
-            onMouseDown={handlePanMouseDown}
-            onMouseMove={handlePanMouseMove}
-            onMouseUp={handlePanMouseUp}
-            onMouseLeave={handlePanMouseUp}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault()
-              const assetId = event.dataTransfer.getData('text/carson-asset')
-              const asset = storedAssets.find((item) => item.id === assetId)
-              if (asset) void insertAsset(asset)
-            }}
-          >
-            <div
-              className="canvas-shell"
-              style={
-                {
-                  '--poster-width': `${poster.width}px`,
-                  '--poster-height': `${poster.height}px`,
-                  '--poster-display-width': `${poster.width * displayScale}px`,
-                  '--poster-display-height': `${poster.height * displayScale}px`,
-                } as React.CSSProperties
-              }
-            >
-              <canvas ref={canvasEl} />
-            </div>
-          </div>
-          <ExplorationTrail
-            variants={documentMeta?.variants ?? []}
-            activeLabel={projectName}
-            onSelect={(variantId) => void restoreVariant(variantId)}
-            onFork={() => void forkVariation()}
-          />
-        </section>
+        <EditorCanvas
+          poster={poster}
+          displayScale={displayScale}
+          status={status}
+          isPanMode={isPanMode}
+          documentMeta={documentMeta}
+          lastChaos={lastChaos}
+          projectName={projectName}
+          canvasEl={canvasEl}
+          scrollRef={scrollRef}
+          onSwitchArtboard={(artboardId) => void switchToArtboard(artboardId)}
+          onChangeArtboardPreset={changeArtboardPreset}
+          onStepZoom={stepZoom}
+          onZoom100={() => setZoom(1)}
+          onZoomFit={() => setZoom(null)}
+          onReroll={() => void rerollLast()}
+          onPanMouseDown={handlePanMouseDown}
+          onPanMouseMove={handlePanMouseMove}
+          onPanMouseUp={handlePanMouseUp}
+          onAssetDrop={(assetId) => {
+            const asset = storedAssets.find((item) => item.id === assetId)
+            if (asset) void insertAsset(asset)
+          }}
+          onRestoreVariant={(variantId) => void restoreVariant(variantId)}
+          onForkVariant={() => void forkVariation()}
+        />
 
         <aside className="rail inspector glass-panel" aria-label="Inspector">
           <div className="inspector-tabs" role="tablist" aria-label="Inspector panels">
@@ -3063,36 +3115,75 @@ function App() {
             <div className="panel-section">
               <h2>Treatment stack</h2>
               <p className="hint">Non-destructive — text stays editable; remove artifact treatments to restore the source layer.</p>
+              {posterTreatments.length > 0 ? (
+                <>
+                  <h3 className="property-kicker">Poster treatments</h3>
+                  <ul className="treatment-stack">
+                    {posterTreatments.map((treatment, index) => (
+                      <li key={treatment.id} className={treatment.enabled ? undefined : 'bypassed'}>
+                        <span>{posterTreatmentLabel(treatment)}</span>
+                        <small>#{treatment.seed}</small>
+                        <span className="treatment-actions">
+                          <button type="button" title="Move up" disabled={index === 0} onClick={() => void reorderPosterTreatmentAction(treatment.id, 'up')}>
+                            <ChevronUp size={12} />
+                          </button>
+                          <button type="button" title="Move down" disabled={index === posterTreatments.length - 1} onClick={() => void reorderPosterTreatmentAction(treatment.id, 'down')}>
+                            <ChevronDown size={12} />
+                          </button>
+                          <button type="button" title="Re-roll seed" onClick={() => void rerollPosterTreatment(treatment.id)}>
+                            <Dices size={12} />
+                          </button>
+                          <button type="button" title={treatment.enabled ? 'Bypass' : 'Enable'} onClick={() => void togglePosterTreatment(treatment.id)}>
+                            {treatment.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
+                          </button>
+                          <button type="button" title="Remove" onClick={() => void removePosterTreatmentAction(treatment.id)}>
+                            <Trash2 size={12} />
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
               {!selected ? (
                 <p className="empty">Select a layer to view its treatment stack.</p>
               ) : selectedTreatments.length === 0 ? (
-                <p className="empty">No treatments yet. Try Xerox or Scatter from the left rail.</p>
+                <p className="empty">No layer treatments yet. Try Xerox or Scatter from the left rail.</p>
               ) : (
-                <ul className="treatment-stack">
-                  {selectedTreatments.map((treatment) => (
-                    <li key={treatment.id} className={treatment.enabled ? undefined : 'bypassed'}>
-                      <span>{treatmentLabel(treatment)}</span>
-                      <small>#{treatment.seed}</small>
-                      <span className="treatment-actions">
-                        <button type="button" title="Re-roll seed" onClick={() => rerollTreatment(treatment.id)}>
-                          <Dices size={12} />
-                        </button>
-                        <button type="button" title={treatment.enabled ? 'Bypass' : 'Enable'} onClick={() => toggleTreatment(treatment.id)}>
-                          {treatment.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
-                        </button>
-                        <button type="button" title="Remove" onClick={() => {
-                          if (!selectedObject) return
-                          removeTreatment(selectedObject, treatment.id)
-                          void refreshTreatmentStack(selectedObject).then(() => {
-                            commitHistory('Removed treatment')
-                          })
-                        }}>
-                          <Trash2 size={12} />
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <h3 className="property-kicker">Layer treatments</h3>
+                  <ul className="treatment-stack">
+                    {selectedTreatments.map((treatment, index) => (
+                      <li key={treatment.id} className={treatment.enabled ? undefined : 'bypassed'}>
+                        <span>{treatmentLabel(treatment)}</span>
+                        <small>#{treatment.seed}</small>
+                        <span className="treatment-actions">
+                          <button type="button" title="Move up" disabled={index === 0} onClick={() => void reorderLayerTreatment(treatment.id, 'up')}>
+                            <ChevronUp size={12} />
+                          </button>
+                          <button type="button" title="Move down" disabled={index === selectedTreatments.length - 1} onClick={() => void reorderLayerTreatment(treatment.id, 'down')}>
+                            <ChevronDown size={12} />
+                          </button>
+                          <button type="button" title="Re-roll seed" onClick={() => rerollTreatment(treatment.id)}>
+                            <Dices size={12} />
+                          </button>
+                          <button type="button" title={treatment.enabled ? 'Bypass' : 'Enable'} onClick={() => toggleTreatment(treatment.id)}>
+                            {treatment.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
+                          </button>
+                          <button type="button" title="Remove" onClick={() => {
+                            if (!selectedObject) return
+                            removeTreatment(selectedObject, treatment.id)
+                            void refreshTreatmentStack(selectedObject).then(() => {
+                              commitHistory('Removed treatment')
+                            })
+                          }}>
+                            <Trash2 size={12} />
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
               <button
                 type="button"
@@ -3408,6 +3499,33 @@ function App() {
                     <button type="button" onClick={() => void paintBrushMask()}>Brush mask</button>
                   </div>
                 ) : null}
+                {selectedIsPath ? (
+                  <>
+                    <label>
+                      Stroke color
+                      <input
+                        type="color"
+                        value={selected.stroke ?? '#111111'}
+                        onChange={(event) => {
+                          updateActive({ stroke: event.target.value } as Partial<SelectedState>)
+                          if (penMode) setPenStrokeColor(event.target.value)
+                        }}
+                        onBlur={() => finalizeActive('Changed stroke color')}
+                      />
+                    </label>
+                    <Slider
+                      label="Stroke width"
+                      value={selected.strokeWidth ?? penStrokeWidth}
+                      min={1}
+                      max={48}
+                      onChange={(value) => {
+                        updateActive({ strokeWidth: value } as Partial<SelectedState>)
+                        if (penMode) setPenStrokeWidth(value)
+                      }}
+                      onCommit={() => finalizeActive('Changed stroke width')}
+                    />
+                  </>
+                ) : null}
                 {recentColors.length > 0 && !selectedIsImage ? (
                   <div className="swatch-row" aria-label="Recently used colors">
                     {recentColors.map((color) => (
@@ -3636,8 +3754,18 @@ function App() {
                 Registration marks in PDF export
               </label>
               <button type="button" onClick={() => addNewArtboard()}>
-                Add artboard (IG portrait)
+                Add artboard
               </button>
+              <label>
+                New artboard preset
+                <select value={newArtboardPreset} onChange={(event) => setNewArtboardPreset(event.target.value as PosterPresetId)}>
+                  {POSTER_PRESET_OPTIONS.filter((option) => option.id !== 'custom').map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button type="button" onClick={() => void exportAllArtboards()}>
                 Export all artboards
               </button>
@@ -3650,88 +3778,6 @@ function App() {
       </section>
     </main>
   )
-}
-
-function Slider({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-  onCommit,
-  format,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  onChange: (value: number) => void
-  onCommit: () => void
-  format?: (value: number) => string
-}) {
-  const display = format ? format(value) : String(Math.round(value))
-
-  return (
-    <div className="dial">
-      <div className="dial-header">
-        <span className="dial-label">{label}</span>
-        <span className="dial-value">{display}</span>
-      </div>
-      <input
-        className="dial-input"
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        aria-label={label}
-        onChange={(event) => onChange(Number(event.target.value))}
-        onMouseUp={onCommit}
-        onTouchEnd={onCommit}
-        onKeyUp={(event) => {
-          if (event.key.startsWith('Arrow')) onCommit()
-        }}
-      />
-    </div>
-  )
-}
-
-function readObjectProp(object: FabricObject | null, key: string) {
-  if (!object) return undefined
-  return (object as unknown as Record<string, unknown>)[key]
-}
-
-function round(value: number) {
-  return Math.round(value * 100) / 100
-}
-
-function safeFileName(projectName: string) {
-  return (
-    projectName
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'poster'
-  )
-}
-
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
-function buildStarPoints(points: number, outer: number, inner: number) {
-  const result: { x: number; y: number }[] = []
-  const step = Math.PI / points
-  for (let i = 0; i < points * 2; i++) {
-    const radius = i % 2 === 0 ? outer : inner
-    const angle = i * step - Math.PI / 2
-    result.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius })
-  }
-  return result
 }
 
 export default App

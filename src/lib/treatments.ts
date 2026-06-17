@@ -59,6 +59,7 @@ export type TreatmentType =
   | 'tear'
   | 'bad-crop'
   | 'glyph-break'
+  | 'scrape'
 
 export type Treatment = {
   id: string
@@ -204,6 +205,8 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Bad crop·${sliceDirectionFromParams(treatment.params) === 'vertical' ? 'V' : 'H'}`
     case 'glyph-break':
       return `Glyphs·${treatment.params.intensity ?? 70}`
+    case 'scrape':
+      return `Scrape·${treatment.params.count ?? 7}`
     default:
       return treatment.type
   }

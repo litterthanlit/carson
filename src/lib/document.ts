@@ -3,12 +3,14 @@
  */
 import type { PosterPreset, PosterPresetId } from './editorModel'
 import { applyPosterPreset } from './editorModel'
+import type { Treatment } from './treatments'
 
 export type Artboard = {
   id: string
   name: string
   preset: PosterPreset
   canvas: Record<string, unknown>
+  posterTreatments?: Treatment[]
 }
 
 export type DocumentVariant = {
