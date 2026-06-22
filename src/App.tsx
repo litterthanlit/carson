@@ -1,33 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlignLeft,
-  BringToFront,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  Crop,
-  Dices,
-  Download,
-  Eye,
-  EyeOff,
-  FlipHorizontal,
-  Grid3x3,
-  ImagePlus,
-  Layers,
-  Minus,
-  PenLine,
-  Pipette,
-  ScanLine,
-  Scissors,
-  SendToBack,
-  Shuffle,
-  Sparkles,
-  Square,
-  Star,
-  Trash2,
-  Type,
-} from 'lucide-react'
-import {
   ActiveSelection,
   Canvas,
   Ellipse,
@@ -70,18 +42,8 @@ import {
   saveProject as persistProject,
   type StoredProject,
 } from './lib/storage'
-import {
-  addTreatment,
-  captureTransformBaseline,
-  readTreatments,
-  removeTreatment,
-  renderTreatmentStackOnCanvas,
-  reorderTreatment,
-  treatmentLabel,
-  updateTreatment,
-  type Treatment,
-} from './lib/treatments'
-import { cropModeFromParams, cropModeToParam, findCropFragments } from './lib/cropTreatment'
+import { addTreatment, captureTransformBaseline, readTreatments, type Treatment } from './lib/treatments'
+import { cropModeToParam, findCropFragments } from './lib/cropTreatment'
 import { sliceDirectionToParam } from './lib/sliceTreatment'
 import {
   createDefaultDocument,
@@ -95,8 +57,8 @@ import {
   updateArtboardPreset,
   type DocumentMeta,
 } from './lib/document'
-import { loadFontFile, loadGoogleFont, GOOGLE_FONTS } from './lib/fonts'
-import { contrastRatio, legibilityBand } from './lib/color'
+import { loadFontFile, loadGoogleFont } from './lib/fonts'
+import { contrastRatio } from './lib/color'
 import { alignObjects, baselineGridLines, buildColumnGrid, distributeObjects, type GridOverlay } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
 import {
@@ -108,30 +70,17 @@ import {
   undoState,
   type HistoryState,
 } from './lib/historyLog'
-import {
-  addPosterTreatment,
-  posterTreatmentLabel,
-  readPosterTreatments,
-  removePosterTreatment,
-  renderPosterTreatments,
-  reorderPosterTreatment,
-  updatePosterTreatment,
-} from './lib/posterTreatments'
+import { addPosterTreatment, readPosterTreatments } from './lib/posterTreatments'
 import {
   ACCENTS,
   BLEND_MODES,
-  FONT_STACKS,
   HISTORY_PROPS,
   ONBOARDING_KEY,
-  POSTER_PRESET_OPTIONS,
   SNAP_SCREEN_THRESHOLD,
   ZOOM_LEVELS,
 } from './lib/editorConstants'
 import {
   buildStarPoints,
-  formatDegrees,
-  formatLineHeight,
-  formatPercent,
   readFileAsDataUrl,
   readObjectProp,
   round,
@@ -144,43 +93,22 @@ import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } 
 import type { CommandAction } from './lib/commands'
 import { CommandPalette } from './components/CommandPalette'
 import { EditorCanvas } from './components/EditorCanvas'
-import { LayersPanel } from './components/LayersPanel'
+import { InspectorPanel } from './components/InspectorPanel'
+import { LeftRail } from './components/LeftRail'
 import { OnboardingModal } from './components/OnboardingModal'
-import { Slider } from './components/Slider'
 import { TopBar } from './components/TopBar'
 import { VariantCompareModal } from './components/VariantCompareModal'
+import { useTreatments } from './hooks/useTreatments'
+import type {
+  ExportBackground,
+  ExportFormat,
+  InspectorTab,
+  LayerKind,
+  SelectedState,
+  StrokeDashPreset,
+} from './types/editor'
 import './App.css'
 
-type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
-type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff'
-type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'layout' | 'print'
-type StrokeDashPreset = 'solid' | 'dashed' | 'dotted'
-type ExportBackground = 'paper' | 'white' | 'transparent'
-type SelectedState = {
-  id: string
-  kind: LayerKind
-  name: string
-  left: number
-  top: number
-  angle: number
-  opacity: number
-  scaleX: number
-  scaleY: number
-  visible: boolean
-  locked: boolean
-  fontFamily?: string
-  fontSize?: number
-  fontWeight?: string | number
-  charSpacing?: number
-  lineHeight?: number
-  text?: string
-  fill?: string
-  skewX?: number
-  skewY?: number
-  blendMode?: string
-  stroke?: string
-  strokeWidth?: number
-}
 type ChaosRun = {
   label: string
   seed: number
@@ -274,6 +202,32 @@ function App() {
     currentThumbnail: string
   } | null>(null)
   const fontInputRef = useRef<HTMLInputElement | null>(null)
+  const commitHistoryRef = useRef<(message: string) => void>(() => {})
+  const activeObjectRef = useRef<() => FabricObject | null>(() => null)
+  const tagObjectRef = useRef<(object: FabricObject, kind: LayerKind, name: string) => void>(() => {})
+
+  const {
+    refreshTreatmentStack,
+    reconcileArtifactTreatments,
+    refreshPosterTreatments,
+    rerollTreatment,
+    reorderLayerTreatment,
+    toggleTreatment,
+    removeLayerTreatment,
+    rerollPosterTreatment,
+    togglePosterTreatment,
+    removePosterTreatmentAction,
+    reorderPosterTreatmentAction,
+  } = useTreatments({
+    canvasRef,
+    documentMeta,
+    setDocumentMeta,
+    gridOverlay,
+    poster,
+    commitHistoryRef,
+    activeObjectRef,
+    tagObjectRef,
+  })
 
   const penStrokeColorRef = useRef(penStrokeColor)
   const penStrokeWidthRef = useRef(penStrokeWidth)
@@ -743,66 +697,7 @@ function App() {
     } as Partial<FabricObject>)
   }
 
-  function tensionScatterScale() {
-    return 1 + gridOverlay.tension / 100
-  }
-
-  async function refreshTreatmentStack(object?: FabricObject | null) {
-    const canvas = canvasRef.current
-    const target = object ?? activeObject()
-    if (!canvas || !target || target.type === 'activeselection') return
-    await renderTreatmentStackOnCanvas(
-      canvas,
-      target,
-      {
-        slice: (fragment, index) => {
-          tagObject(fragment, 'fragment', `Cut ${index + 1}`)
-        },
-        crop: (fragment, treatment) => {
-          tagObject(fragment, 'fragment', `${cropModeFromParams(treatment.params)} crop`)
-        },
-        tear: (fragment, index) => {
-          tagObject(fragment, 'fragment', `Torn scrap ${index + 1}`)
-        },
-        badCrop: (fragment, index) => {
-          tagObject(fragment, 'fragment', `Bad crop ${index + 1}`)
-        },
-        glyph: (fragment, _index, glyphText) => {
-          tagObject(fragment, 'text', `Glyph ${glyphText}`)
-        },
-      },
-      tensionScatterScale(),
-    )
-    canvas.requestRenderAll()
-  }
-
-  async function reconcileArtifactTreatments() {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
-    for (const object of canvas.getObjects()) {
-      if (readTreatments(object).some((item) => artifactTypes.has(item.type))) {
-        await refreshTreatmentStack(object)
-      }
-    }
-  }
-
-  function tagPosterFragment(object: FabricObject, name: string) {
-    object.set({
-      kind: 'fragment',
-      name,
-      selectable: false,
-      evented: false,
-    } as Partial<FabricObject>)
-  }
-
-  async function refreshPosterTreatments() {
-    const canvas = canvasRef.current
-    const board = documentMeta ? getActiveArtboard(documentMeta) : undefined
-    if (!canvas || !board) return
-    renderPosterTreatments(canvas, readPosterTreatments(board), poster, tagPosterFragment)
-    canvas.requestRenderAll()
-  }
+  tagObjectRef.current = tagObject
 
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
     const headline = new Textbox('RAY GUN\nCUT TYPE', {
@@ -913,6 +808,8 @@ function App() {
     return canvasRef.current?.getActiveObject() ?? null
   }
 
+  activeObjectRef.current = activeObject
+
   function captureStyleBaseline() {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -970,6 +867,8 @@ function App() {
     syncLayers()
     setStatus(message)
   }
+
+  commitHistoryRef.current = commitHistory
 
   async function restoreSnapshot(snapshot: string, message: string) {
     const canvas = canvasRef.current
@@ -1047,7 +946,12 @@ function App() {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object) return
-    object.set(values as Partial<FabricObject>)
+    const patch = { ...values } as Partial<FabricObject>
+    if (values.blendMode !== undefined) {
+      patch.globalCompositeOperation = values.blendMode as GlobalCompositeOperation
+      delete (patch as Partial<SelectedState>).blendMode
+    }
+    object.set(patch)
     object.setCoords()
     canvas.requestRenderAll()
     syncSelected()
@@ -1182,86 +1086,6 @@ function App() {
     canvas.add(star)
     canvas.setActiveObject(star)
     commitHistory('Added star')
-  }
-
-  async function rerollTreatment(treatmentId: string) {
-    const object = activeObject()
-    if (!object) return
-    updateTreatment(object, treatmentId, { seed: newSeed() })
-    await refreshTreatmentStack(object)
-    commitHistory('Re-rolled treatment')
-  }
-
-  async function reorderLayerTreatment(treatmentId: string, direction: 'up' | 'down') {
-    const object = activeObject()
-    if (!object) return
-    reorderTreatment(object, treatmentId, direction)
-    await refreshTreatmentStack(object)
-    commitHistory('Reordered treatment')
-  }
-
-  async function rerollPosterTreatment(treatmentId: string) {
-    if (!documentMeta) return
-    const board = getActiveArtboard(documentMeta)
-    if (!board) return
-    const nextBoard = updatePosterTreatment(board, treatmentId, { seed: newSeed() })
-    setDocumentMeta({
-      ...documentMeta,
-      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
-    })
-    await refreshPosterTreatments()
-    commitHistory('Re-rolled poster treatment')
-  }
-
-  async function togglePosterTreatment(treatmentId: string) {
-    if (!documentMeta) return
-    const board = getActiveArtboard(documentMeta)
-    if (!board) return
-    const treatment = readPosterTreatments(board).find((item) => item.id === treatmentId)
-    if (!treatment) return
-    const nextBoard = updatePosterTreatment(board, treatmentId, { enabled: !treatment.enabled })
-    setDocumentMeta({
-      ...documentMeta,
-      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
-    })
-    await refreshPosterTreatments()
-    commitHistory(treatment.enabled ? 'Bypassed poster treatment' : 'Enabled poster treatment')
-  }
-
-  async function removePosterTreatmentAction(treatmentId: string) {
-    if (!documentMeta) return
-    const board = getActiveArtboard(documentMeta)
-    if (!board) return
-    const nextBoard = removePosterTreatment(board, treatmentId)
-    setDocumentMeta({
-      ...documentMeta,
-      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
-    })
-    await refreshPosterTreatments()
-    commitHistory('Removed poster treatment')
-  }
-
-  async function reorderPosterTreatmentAction(treatmentId: string, direction: 'up' | 'down') {
-    if (!documentMeta) return
-    const board = getActiveArtboard(documentMeta)
-    if (!board) return
-    const nextBoard = reorderPosterTreatment(board, treatmentId, direction)
-    setDocumentMeta({
-      ...documentMeta,
-      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
-    })
-    await refreshPosterTreatments()
-    commitHistory('Reordered poster treatment')
-  }
-
-  async function toggleTreatment(treatmentId: string) {
-    const object = activeObject()
-    if (!object) return
-    const treatment = readTreatments(object).find((item) => item.id === treatmentId)
-    if (!treatment) return
-    updateTreatment(object, treatmentId, { enabled: !treatment.enabled })
-    await refreshTreatmentStack(object)
-    commitHistory(treatment.enabled ? 'Bypassed treatment' : 'Enabled treatment')
   }
 
   function alignSelection(mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
@@ -1828,7 +1652,7 @@ function App() {
     commitHistory('Added layer decay offset')
   }
 
-  function applyColdDiveImage() {
+  function applyColdWashImage() {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object || object.type !== 'image') return
@@ -2222,7 +2046,7 @@ function App() {
     commitHistory(`Added print-scan surface #${seed}`)
   }
 
-  function addDiveTexture() {
+  function addDiagonalTexture() {
     const canvas = canvasRef.current
     if (!canvas) return
     const lines = createDiagonalTextureLines(poster, { spacing: 18, angle: -18, opacity: 0.12 })
@@ -2260,13 +2084,13 @@ function App() {
     commitHistory(`Added scrape mask treatment #${seed}`)
   }
 
-  function addDiveRedType() {
+  function addRedEchoType() {
     const canvas = canvasRef.current
     if (!canvas) return
     const entries = [
-      { text: 'dive', left: poster.width * 0.06, top: poster.height * 0.08, width: poster.width * 0.58, size: poster.width * 0.17, angle: 0 },
-      { text: 'dive', left: poster.width * 0.16, top: poster.height * 0.72, width: poster.width * 0.72, size: poster.width * 0.19, angle: -4 },
-      { text: 'dive', left: poster.width * 0.72, top: poster.height * 0.36, width: poster.width * 0.64, size: poster.width * 0.18, angle: 90 },
+      { text: 'ECHO', left: poster.width * 0.06, top: poster.height * 0.08, width: poster.width * 0.58, size: poster.width * 0.17, angle: 0 },
+      { text: 'ECHO', left: poster.width * 0.16, top: poster.height * 0.72, width: poster.width * 0.72, size: poster.width * 0.19, angle: -4 },
+      { text: 'ECHO', left: poster.width * 0.72, top: poster.height * 0.36, width: poster.width * 0.64, size: poster.width * 0.18, angle: 90 },
     ]
 
     entries.forEach((entry, index) => {
@@ -2589,8 +2413,6 @@ function App() {
   const selectedIsImage = selected?.kind === 'image' || selected?.kind === 'fragment'
   const selectedIsText = selected?.kind === 'text'
 
-  const scopeSel = <span className="scope-badge" aria-hidden="true">SEL</span>
-  const scopeAll = <span className="scope-badge scope-all" aria-hidden="true">ALL</span>
   const selectedObject = selected ? findObjectById(selected.id) : null
   const selectedTreatments = readTreatments(selectedObject)
   const activeBoard = documentMeta ? getActiveArtboard(documentMeta) : undefined
@@ -2633,350 +2455,72 @@ function App() {
       />
 
       <section className="workspace">
-        <aside className="rail left-rail glass-panel" aria-label="Tools and layers">
-          <div className="panel-section">
-            <h2>Tools</h2>
-            <div className="tool-grid">
-              <button type="button" title="Add a text layer (T)" onClick={addText}>
-                <Type size={17} />
-                Text
-              </button>
-              <button type="button" title="Import an image from your computer" onClick={() => fileInputRef.current?.click()}>
-                <ImagePlus size={17} />
-                Image
-              </button>
-              <button type="button" title="Add a solid block (B)" onClick={addShape}>
-                <Square size={17} />
-                Block
-              </button>
-              <button type="button" title="Add an ellipse" onClick={addEllipse}>
-                <Circle size={17} />
-                Ellipse
-              </button>
-              <button type="button" title="Add a line" onClick={addLine}>
-                <Minus size={17} />
-                Line
-              </button>
-              <button type="button" title="Add a star" onClick={addStarShape}>
-                <Star size={17} />
-                Star
-              </button>
-              <button
-                type="button"
-                title="Draw freehand strokes (P)"
-                className={penMode ? 'active' : undefined}
-                onClick={() => setPenMode((value) => !value)}
-              >
-                <PenLine size={17} />
-                Pen
-              </button>
-              <button type="button" title="Duplicate the selected layer (Cmd+D)" onClick={() => void duplicateSelected()} disabled={!selected}>
-                <FlipHorizontal size={17} />
-                Copy
-              </button>
-              <button type="button" title="Slice the selected layer into horizontal strips" onClick={() => void sliceSelected('horizontal')} disabled={!selected}>
-                <Scissors size={17} />
-                Strips
-              </button>
-              <button type="button" title="Slice the selected layer into vertical columns" onClick={() => void sliceSelected('vertical')} disabled={!selected}>
-                <Scissors size={17} />
-                Columns
-              </button>
-              <button type="button" title="Scatter the selected layers with seeded randomness — press R to re-roll" onClick={() => scatterSelected()} disabled={!selected}>
-                <Shuffle size={17} />
-                Scatter
-              </button>
-              <button type="button" title="Delete the selected layer (Delete)" onClick={deleteSelected} disabled={!selected}>
-                <Trash2 size={17} />
-                Delete
-              </button>
-              <button
-                type="button"
-                title={showInstruments ? 'Hide chaos instruments' : 'Show Xerox, decay, accidents, texture, and crop tools'}
-                className={showInstruments ? 'active' : undefined}
-                onClick={() => setShowInstruments((value) => !value)}
-              >
-                <Sparkles size={17} />
-                Instruments
-              </button>
-            </div>
-            <input
-              ref={fileInputRef}
-              className="visually-hidden"
-              type="file"
-              accept="image/*"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) void handleImageFile(file)
-                event.currentTarget.value = ''
-              }}
-            />
-          </div>
-
-          {showInstruments ? (
-          <>
-          <div className="panel-section">
-            <h2>Poster</h2>
-            <label>
-              Size
-              <select value={presetId} onChange={(event) => handlePresetChange(event.target.value as PosterPresetId)}>
-                <option value="a3">A3 portrait</option>
-                <option value="a2">A2 portrait</option>
-                <option value="instagram">Instagram portrait</option>
-                <option value="square">Square</option>
-                <option value="custom">Custom</option>
-              </select>
-            </label>
-            {presetId === 'custom' ? (
-              <div className="split-inputs">
-                <label>
-                  W
-                  <input
-                    type="number"
-                    min={320}
-                    max={10000}
-                    value={customSize.width}
-                    onChange={(event) => applyCustomSize({ ...customSize, width: Number(event.target.value) })}
-                  />
-                </label>
-                <label>
-                  H
-                  <input
-                    type="number"
-                    min={320}
-                    max={10000}
-                    value={customSize.height}
-                    onChange={(event) => applyCustomSize({ ...customSize, height: Number(event.target.value) })}
-                  />
-                </label>
-              </div>
-            ) : null}
-            <div className="preset-row">
-              <button type="button" title="Shift every layer into colliding blend chaos — affects the whole poster" onClick={() => applyPosterStyle('magazine')}>
-                Magazine chaos {scopeAll}
-              </button>
-              <button type="button" title="Rotate the whole layout toward oversized type — affects the whole poster" onClick={() => applyPosterStyle('type')}>
-                Oversized type {scopeAll}
-              </button>
-              <button type="button" title="Fracture the layout around imagery — affects the whole poster" onClick={() => applyPosterStyle('image')}>
-                Image fracture {scopeAll}
-              </button>
-              <button type="button" title="Reset to black/white/red minimalism — affects the whole poster" onClick={() => applyPosterStyle('minimal')}>
-                B/W red {scopeAll}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h2>Manual Effects</h2>
-            <div className="preset-row">
-              <button type="button" title="Repeat the selected text as printed strips below it" onClick={() => addTypeStrip()} disabled={!selectedIsText}>
-                <Type size={17} />
-                Type strip {scopeSel}
-              </button>
-              <button type="button" title="Convert the selected layer into harsh black & white grit (rasterizes it)" onClick={() => void distressSelected()} disabled={!selected}>
-                <Sparkles size={17} />
-                Distress {scopeSel}
-              </button>
-              <button type="button" title="Sprinkle photocopier specks, scratches, and scanlines across the poster" onClick={() => addPhotocopyNoise()}>
-                <ScanLine size={17} />
-                Photocopy noise {scopeAll}
-              </button>
-              <button type="button" title="Tear the selected layer into shifted scraps — remove Tear in Treatments to restore" onClick={() => void tearCollageSelected()} disabled={!selected}>
-                <Scissors size={17} />
-                Tear collage {scopeSel}
-              </button>
-              <button type="button" title="Stamp decorative crop marks and a faint grid onto the artwork" onClick={addCropMarks}>
-                <Crop size={17} />
-                Crop marks/grid {scopeAll}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h2>Expressive Type Lab</h2>
-            <label>
-              Legibility
-              <select value={typeLegibility} onChange={(event) => setTypeLegibility(event.target.value as ExpressiveLegibility)}>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </label>
-            <Slider
-              label="Intensity"
-              value={typeIntensity}
-              min={0}
-              max={100}
-              onChange={setTypeIntensity}
-              onCommit={() => setStatus('Updated type intensity')}
-            />
-            <div className="preset-row">
-              <button type="button" title="Break the selected text into loose, expressive letters" onClick={() => breakSelectedType()} disabled={!selectedIsText}>
-                <Type size={17} />
-                Break letters {scopeSel}
-              </button>
-              <button type="button" title="Bury a ghost copy of the selected text behind the layout" onClick={() => void cloneTypeAsTexture()} disabled={!selectedIsText}>
-                <Layers size={17} />
-                Bury type {scopeSel}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h2>Xerox / Print-Scan</h2>
-            <Slider
-              label="Generation"
-              value={xeroxGeneration}
-              min={1}
-              max={10}
-              onChange={setXeroxGeneration}
-              onCommit={() => setStatus('Updated xerox generation')}
-            />
-            <div className="preset-row">
-              <button type="button" title="Re-photocopy the selected layer at the chosen generation (rasterizes it)" onClick={() => void applyXeroxToSelected()} disabled={!selected}>
-                <ScanLine size={17} />
-                Copy selected {scopeSel}
-              </button>
-              <button type="button" title="Add a faint misregistered print echo behind the selected layer" onClick={() => void addMisprintDuplicate()} disabled={!selected}>
-                <Layers size={17} />
-                Misprint offset {scopeSel}
-              </button>
-              <button type="button" title="Add photocopier bands and scanner drift across the poster" onClick={() => addPrintScanSurface()}>
-                <Sparkles size={17} />
-                Surface wear {scopeAll}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h2>Layer Decay</h2>
-            <Slider
-              label="Amount"
-              value={decayAmount}
-              min={0}
-              max={100}
-              onChange={setDecayAmount}
-              onCommit={() => setStatus('Updated layer decay amount')}
-            />
-            <div className="preset-row">
-              <button type="button" title="Age the selected layer with contrast, noise, and drift (rasterizes it)" onClick={() => void applyLayerDecayToSelected()} disabled={!selected}>
-                <Sparkles size={17} />
-                Age selected {scopeSel}
-              </button>
-              <button type="button" title="Chip ink away from the selected layer" onClick={() => addLayerDecayMarks('ink-loss')} disabled={!selected}>
-                <Scissors size={17} />
-                Ink loss {scopeSel}
-              </button>
-              <button type="button" title="Add fold creases across the selected layer" onClick={() => addLayerDecayMarks('fold')} disabled={!selected}>
-                <ScanLine size={17} />
-                Fold marks {scopeSel}
-              </button>
-              <button type="button" title="Add the full wear treatment to the selected layer" onClick={() => addLayerDecayMarks('all')} disabled={!selected}>
-                <Layers size={17} />
-                Wear overlay {scopeSel}
-              </button>
-              <button type="button" title="Add a faint decayed echo behind the selected layer" onClick={() => void addLayerDecayOffset()} disabled={!selected}>
-                <Shuffle size={17} />
-                Decay offset {scopeSel}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h2>Accident Engine</h2>
-            <Slider
-              label="Intensity"
-              value={accidentIntensity}
-              min={0}
-              max={100}
-              onChange={setAccidentIntensity}
-              onCommit={() => setStatus('Updated accident intensity')}
-            />
-            <div className="preset-row">
-              <button type="button" title="Clone the selection with accidental drift — press R to re-roll" onClick={() => void duplicateDriftAccident()} disabled={!selected}>
-                <Shuffle size={17} />
-                Duplicate drift {scopeSel}
-              </button>
-              <button type="button" title="Crop the selection badly on purpose — remove Bad crop in Treatments to restore" onClick={() => void badCropAccident()} disabled={!selected}>
-                <Crop size={17} />
-                Bad crop {scopeSel}
-              </button>
-              <button type="button" title="Add a flipped ghost of the selection" onClick={() => void flipMistakeAccident()} disabled={!selected}>
-                <FlipHorizontal size={17} />
-                Flip mistake {scopeSel}
-              </button>
-              <button type="button" title="Pile the selected layers into a collision (needs 2+ selected)" onClick={collideSelectionAccident} disabled={!selected}>
-                <Layers size={17} />
-                Collide selection {scopeSel}
-              </button>
-              <button type="button" title="Nudge every layer with accidental drift — press R to re-roll" onClick={() => nudgeLayoutAccident()}>
-                <Sparkles size={17} />
-                Nudge layout {scopeAll}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h2>Texture Tools</h2>
-            <div className="preset-row">
-              <button type="button" title="Apply a cold, tinted print wash to the selected image" onClick={applyColdDiveImage} disabled={!selectedIsImage}>
-                <ImagePlus size={17} />
-                Cold wash {scopeSel}
-              </button>
-              <button type="button" title="Lay diagonal print texture lines across the poster" onClick={addDiveTexture}>
-                <ScanLine size={17} />
-                Diagonal texture {scopeAll}
-              </button>
-              <button type="button" title="Scrape white bands with grit across the poster" onClick={() => addWhiteScrapes()}>
-                <Scissors size={17} />
-                White scrapes {scopeAll}
-              </button>
-              <button type="button" title="Stamp three large red echo words across the poster" onClick={addDiveRedType}>
-                <Type size={17} />
-                Red echo type {scopeAll}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h2>Aggressive Crop Tools</h2>
-            <div className="preset-row">
-              <button type="button" title="Crop tight into the center — source stays editable; remove Crop in Treatments to restore" onClick={() => void aggressiveCropSelected('close')} disabled={!selected}>
-                <Crop size={17} />
-                Close crop {scopeSel}
-              </button>
-              <button type="button" title="Crop off-center — press R to re-roll; remove Crop in Treatments to restore source" onClick={() => void aggressiveCropSelected('off-center')} disabled={!selected}>
-                <Crop size={17} />
-                Off-center crop {scopeSel}
-              </button>
-              <button type="button" title="Crop hard to one edge — remove Crop in Treatments to restore source" onClick={() => void aggressiveCropSelected('edge')} disabled={!selected}>
-                <Crop size={17} />
-                Edge crop {scopeSel}
-              </button>
-              <button type="button" title="Crop to edge and throw the fragment to the poster border" onClick={() => void cropToPosterEdge()} disabled={!selected}>
-                <Scissors size={17} />
-                Throw to edge {scopeSel}
-              </button>
-              <button type="button" title="Slice the selection into vertical strips" onClick={() => void sliceSelected('vertical')} disabled={!selected}>
-                <Scissors size={17} />
-                Crop strips {scopeSel}
-              </button>
-            </div>
-          </div>
-          </>
-          ) : null}
-
-          <div className="panel-section layer-section compact">
-            <div className="panel-title">
-              <h2>Layers</h2>
-              <button type="button" className="toolbar-button" onClick={() => setInspectorTab('layers')}>
-                Open panel
-              </button>
-            </div>
-            <p className="hint">{layers.length} layer{layers.length === 1 ? '' : 's'} — reorder, hide, and lock in the Layers tab.</p>
-          </div>
-        </aside>
+        <LeftRail
+          fileInputRef={fileInputRef}
+          penMode={penMode}
+          showInstruments={showInstruments}
+          selected={Boolean(selected)}
+          selectedIsImage={selectedIsImage}
+          selectedIsText={selectedIsText}
+          presetId={presetId}
+          customSize={customSize}
+          typeLegibility={typeLegibility}
+          typeIntensity={typeIntensity}
+          xeroxGeneration={xeroxGeneration}
+          accidentIntensity={accidentIntensity}
+          decayAmount={decayAmount}
+          layerCount={layers.length}
+          onAddText={addText}
+          onImageInputChange={(file) => void handleImageFile(file)}
+          onAddShape={addShape}
+          onAddEllipse={addEllipse}
+          onAddLine={addLine}
+          onAddStar={addStarShape}
+          onTogglePenMode={() => setPenMode((value) => !value)}
+          onDuplicateSelected={() => void duplicateSelected()}
+          onSliceHorizontal={() => void sliceSelected('horizontal')}
+          onSliceVertical={() => void sliceSelected('vertical')}
+          onScatter={() => scatterSelected()}
+          onDeleteSelected={deleteSelected}
+          onToggleInstruments={() => setShowInstruments((value) => !value)}
+          onPresetChange={(id) => handlePresetChange(id)}
+          onCustomSizeChange={applyCustomSize}
+          onApplyPosterStyle={applyPosterStyle}
+          onTypeLegibilityChange={setTypeLegibility}
+          onTypeIntensityChange={setTypeIntensity}
+          onTypeIntensityCommit={() => setStatus('Updated type intensity')}
+          onXeroxGenerationChange={setXeroxGeneration}
+          onXeroxGenerationCommit={() => setStatus('Updated xerox generation')}
+          onAccidentIntensityChange={setAccidentIntensity}
+          onAccidentIntensityCommit={() => setStatus('Updated accident intensity')}
+          onDecayAmountChange={setDecayAmount}
+          onDecayAmountCommit={() => setStatus('Updated layer decay amount')}
+          onAddTypeStrip={() => addTypeStrip()}
+          onDistressSelected={() => void distressSelected()}
+          onAddPhotocopyNoise={() => addPhotocopyNoise()}
+          onTearCollage={() => void tearCollageSelected()}
+          onAddCropMarks={addCropMarks}
+          onBreakSelectedType={() => breakSelectedType()}
+          onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
+          onApplyXerox={() => void applyXeroxToSelected()}
+          onAddMisprintDuplicate={() => void addMisprintDuplicate()}
+          onAddPrintScanSurface={() => addPrintScanSurface()}
+          onApplyLayerDecay={() => void applyLayerDecayToSelected()}
+          onAddLayerDecayMarks={(kind) => addLayerDecayMarks(kind)}
+          onAddLayerDecayOffset={() => void addLayerDecayOffset()}
+          onDuplicateDriftAccident={() => void duplicateDriftAccident()}
+          onBadCropAccident={() => void badCropAccident()}
+          onFlipMistakeAccident={() => void flipMistakeAccident()}
+          onCollideSelectionAccident={collideSelectionAccident}
+          onNudgeLayoutAccident={() => nudgeLayoutAccident()}
+          onApplyColdWashImage={applyColdWashImage}
+          onAddDiagonalTexture={addDiagonalTexture}
+          onAddWhiteScrapes={() => addWhiteScrapes()}
+          onAddRedEchoType={addRedEchoType}
+          onAggressiveCrop={(mode) => void aggressiveCropSelected(mode)}
+          onCropToPosterEdge={() => void cropToPosterEdge()}
+          onOpenLayersPanel={() => setInspectorTab('layers')}
+        />
 
         <EditorCanvas
           poster={poster}
@@ -3005,777 +2549,132 @@ function App() {
           onForkVariant={() => void forkVariation()}
         />
 
-        <aside className="rail inspector glass-panel" aria-label="Inspector">
-          <div className="inspector-tabs" role="tablist" aria-label="Inspector panels">
-            {(
-              [
-                ['inspect', 'Inspect'],
-                ['treatments', 'Treatments'],
-                ['layers', 'Layers'],
-                ['assets', 'Assets'],
-                ['layout', 'Layout'],
-                ['print', 'Print'],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={inspectorTab === id}
-                className={inspectorTab === id ? 'active' : undefined}
-                onClick={() => setInspectorTab(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {inspectorTab === 'inspect' ? (
-          <div className="panel-section">
-            <h2>Project</h2>
-            <label>
-              Name
-              <input value={projectName} onChange={(event) => setProjectName(event.target.value)} />
-            </label>
-            <div className="export-box">
-              <h3>Export</h3>
-              <div className="split-inputs">
-                <label>
-                  Format
-                  <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}>
-                    <option value="png">PNG</option>
-                    <option value="jpeg">JPG</option>
-                    <option value="pdf">PDF</option>
-                    <option value="tiff">TIFF</option>
-                  </select>
-                </label>
-                <label>
-                  Size
-                  <select value={exportScale} onChange={(event) => setExportScale(Number(event.target.value))}>
-                    <option value={1}>1x</option>
-                    <option value={2}>2x</option>
-                    <option value={3}>3x</option>
-                    <option value={4}>4x</option>
-                  </select>
-                </label>
-              </div>
-              <label>
-                Background
-                <select value={exportBackground} onChange={(event) => setExportBackground(event.target.value as ExportBackground)}>
-                  <option value="paper">Paper</option>
-                  <option value="white">White</option>
-                  <option value="transparent" disabled={exportFormat === 'jpeg'}>
-                    Transparent
-                  </option>
-                </select>
-              </label>
-              {exportFormat === 'jpeg' ? (
-                <Slider
-                  label="JPG quality"
-                  value={exportQuality}
-                  min={40}
-                  max={100}
-                  format={formatPercent}
-                  onChange={setExportQuality}
-                  onCommit={() => setStatus('Updated export quality')}
-                />
-              ) : null}
-              <button type="button" className="primary-button export-button" onClick={exportPoster}>
-                <Download size={17} />
-                Export {poster.width * exportScale} x {poster.height * exportScale}
-              </button>
-            </div>
-            <div className="saved-list">
-              {savedProjects.length === 0 ? (
-                <p className="empty">No saved posters yet.</p>
-              ) : (
-                savedProjects.map((project) => (
-                  <div key={project.id} className="saved-row">
-                    <button type="button" title={`Load “${project.name}”`} onClick={() => void loadProject(project)}>
-                      <span>{project.name}</span>
-                      <small>{new Date(project.savedAt).toLocaleString()}</small>
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={`Delete saved poster ${project.name}`}
-                      title="Delete this saved poster"
-                      onClick={() => void deleteSavedProject(project.id, project.name)}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          ) : null}
-
-          {inspectorTab === 'treatments' ? (
-            <div className="panel-section">
-              <h2>Treatment stack</h2>
-              <p className="hint">Non-destructive — text stays editable; remove artifact treatments to restore the source layer.</p>
-              {posterTreatments.length > 0 ? (
-                <>
-                  <h3 className="property-kicker">Poster treatments</h3>
-                  <ul className="treatment-stack">
-                    {posterTreatments.map((treatment, index) => (
-                      <li key={treatment.id} className={treatment.enabled ? undefined : 'bypassed'}>
-                        <span>{posterTreatmentLabel(treatment)}</span>
-                        <small>#{treatment.seed}</small>
-                        <span className="treatment-actions">
-                          <button type="button" title="Move up" disabled={index === 0} onClick={() => void reorderPosterTreatmentAction(treatment.id, 'up')}>
-                            <ChevronUp size={12} />
-                          </button>
-                          <button type="button" title="Move down" disabled={index === posterTreatments.length - 1} onClick={() => void reorderPosterTreatmentAction(treatment.id, 'down')}>
-                            <ChevronDown size={12} />
-                          </button>
-                          <button type="button" title="Re-roll seed" onClick={() => void rerollPosterTreatment(treatment.id)}>
-                            <Dices size={12} />
-                          </button>
-                          <button type="button" title={treatment.enabled ? 'Bypass' : 'Enable'} onClick={() => void togglePosterTreatment(treatment.id)}>
-                            {treatment.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
-                          </button>
-                          <button type="button" title="Remove" onClick={() => void removePosterTreatmentAction(treatment.id)}>
-                            <Trash2 size={12} />
-                          </button>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-              {!selected ? (
-                <p className="empty">Select a layer to view its treatment stack.</p>
-              ) : selectedTreatments.length === 0 ? (
-                <p className="empty">No layer treatments yet. Try Xerox or Scatter from the left rail.</p>
-              ) : (
-                <>
-                  <h3 className="property-kicker">Layer treatments</h3>
-                  <ul className="treatment-stack">
-                    {selectedTreatments.map((treatment, index) => (
-                      <li key={treatment.id} className={treatment.enabled ? undefined : 'bypassed'}>
-                        <span>{treatmentLabel(treatment)}</span>
-                        <small>#{treatment.seed}</small>
-                        <span className="treatment-actions">
-                          <button type="button" title="Move up" disabled={index === 0} onClick={() => void reorderLayerTreatment(treatment.id, 'up')}>
-                            <ChevronUp size={12} />
-                          </button>
-                          <button type="button" title="Move down" disabled={index === selectedTreatments.length - 1} onClick={() => void reorderLayerTreatment(treatment.id, 'down')}>
-                            <ChevronDown size={12} />
-                          </button>
-                          <button type="button" title="Re-roll seed" onClick={() => rerollTreatment(treatment.id)}>
-                            <Dices size={12} />
-                          </button>
-                          <button type="button" title={treatment.enabled ? 'Bypass' : 'Enable'} onClick={() => toggleTreatment(treatment.id)}>
-                            {treatment.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
-                          </button>
-                          <button type="button" title="Remove" onClick={() => {
-                            if (!selectedObject) return
-                            removeTreatment(selectedObject, treatment.id)
-                            void refreshTreatmentStack(selectedObject).then(() => {
-                              commitHistory('Removed treatment')
-                            })
-                          }}>
-                            <Trash2 size={12} />
-                          </button>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              <button
-                type="button"
-                title="Save this layer's treatment stack as a reusable component"
-                onClick={() => void saveTreatmentStackAsComponent()}
-                disabled={!selected || selectedTreatments.length === 0}
-              >
-                Save stack as component
-              </button>
-            </div>
-          ) : null}
-
-          {inspectorTab === 'layers' ? (
-            <div className="panel-section">
-              <h2>Layers</h2>
-              <LayersPanel
-                layers={layers}
-                selectedId={selected?.id ?? null}
-                renamingLayerId={renamingLayerId}
-                dragLayerId={dragLayerId}
-                onSelect={selectLayer}
-                onToggleVisibility={toggleLayerVisibility}
-                onToggleLock={toggleLayerLock}
-                onRenameStart={setRenamingLayerId}
-                onRenameEnd={(id, name) => {
-                  renameLayer(id, name.trim() || 'Layer')
-                  setRenamingLayerId(null)
-                }}
-                onDragStart={setDragLayerId}
-                onDragOver={(id) => {
-                  if (dragLayerId && dragLayerId !== id) reorderLayer(dragLayerId, id)
-                }}
-                onDragEnd={() => setDragLayerId(null)}
-              />
-            </div>
-          ) : null}
-
-          {inspectorTab === 'inspect' ? (
-          <>
-          <div className="panel-section">
-            <div className="panel-title">
-              <h2>Selection</h2>
-              <AlignLeft size={15} />
-            </div>
-            {!selected ? (
-              <p className="empty">Select a layer to edit it.</p>
-            ) : (
-              <div className="control-stack">
-                <div className="property-heading">
-                  <p className="property-kicker">Properties</p>
-                  <div className="property-title-row">
-                    <h3>{selected.name}</h3>
-                    <span className="property-badge">{selected.kind}</span>
-                  </div>
-                </div>
-                <label>
-                  Name
-                  <input
-                    value={selected.name}
-                    onChange={(event) => updateActive({ name: event.target.value })}
-                    onBlur={() => finalizeActive('Renamed layer')}
-                  />
-                </label>
-                {selectedIsText ? (
-                  <>
-                    <label>
-                      Text
-                      <textarea
-                        value={selected.text ?? ''}
-                        rows={4}
-                        onChange={(event) => updateActive({ text: event.target.value })}
-                        onBlur={() => finalizeActive('Edited text')}
-                      />
-                    </label>
-                    <label>
-                      Font
-                      <select
-                        value={selected.fontFamily ?? FONT_STACKS[0]}
-                        onChange={(event) => {
-                          void loadGoogleFont(event.target.value).finally(() => {
-                            updateActive({ fontFamily: event.target.value })
-                            finalizeActive('Changed font')
-                          })
-                        }}
-                      >
-                        <optgroup label="System">
-                          {FONT_STACKS.map((font) => (
-                            <option key={font} value={font} style={{ fontFamily: font }}>
-                              {font}
-                            </option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Google Fonts">
-                          {GOOGLE_FONTS.map((font) => (
-                            <option key={font.family} value={font.family} style={{ fontFamily: font.family }}>
-                              {font.family}
-                            </option>
-                          ))}
-                        </optgroup>
-                        {customFonts.length > 0 ? (
-                          <optgroup label="Uploaded">
-                            {customFonts.map((font) => (
-                              <option key={font} value={font} style={{ fontFamily: font }}>
-                                {font}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ) : null}
-                      </select>
-                    </label>
-                    <button type="button" title="Upload a font file" onClick={() => fontInputRef.current?.click()}>
-                      Upload font
-                    </button>
-                    <input
-                      ref={fontInputRef}
-                      className="visually-hidden"
-                      type="file"
-                      accept=".ttf,.otf,.woff,.woff2"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0]
-                        if (!file) return
-                        void loadFontFile(file).then((family) => {
-                          setCustomFonts((current) => [...new Set([...current, family])])
-                          updateActive({ fontFamily: family })
-                          finalizeActive(`Loaded font ${family}`)
-                        })
-                        event.currentTarget.value = ''
-                      }}
-                    />
-                    <Slider
-                      label="Weight axis"
-                      value={Number(selected.fontWeight) || 700}
-                      min={100}
-                      max={900}
-                      onChange={(value) => updateActive({ fontWeight: value })}
-                      onCommit={() => finalizeActive('Changed weight')}
-                    />
-                    <Slider
-                      label="Width axis"
-                      value={fontStretch}
-                      min={50}
-                      max={200}
-                      format={formatPercent}
-                      onChange={(value) => {
-                        setFontStretch(value)
-                        updateActive({ scaleX: value / 100 })
-                      }}
-                      onCommit={() => finalizeActive('Changed width axis')}
-                    />
-                    <p className="hint legibility-readout">
-                      Legibility: {legibilityBand(textContrast)} · contrast {textContrast ? textContrast.toFixed(1) : '—'}:1
-                    </p>
-                    <Slider
-                      label="Size"
-                      value={selected.fontSize ?? 80}
-                      min={12}
-                      max={360}
-                      onChange={(value) => updateActive({ fontSize: value })}
-                      onCommit={() => finalizeActive('Changed type size')}
-                    />
-                    <Slider
-                      label="Spacing"
-                      value={selected.charSpacing ?? 0}
-                      min={-120}
-                      max={260}
-                      onChange={(value) => updateActive({ charSpacing: value })}
-                      onCommit={() => finalizeActive('Changed spacing')}
-                    />
-                    <Slider
-                      label="Line"
-                      value={Math.round((selected.lineHeight ?? 1) * 100)}
-                      min={50}
-                      max={180}
-                      format={formatLineHeight}
-                      onChange={(value) => updateActive({ lineHeight: value / 100 })}
-                      onCommit={() => finalizeActive('Changed line height')}
-                    />
-                  </>
-                ) : null}
-
-                <div className="split-inputs">
-                  <label>
-                    X
-                    <input
-                      type="number"
-                      value={selected.left}
-                      onChange={(event) => updateActive({ left: Number(event.target.value) })}
-                      onBlur={() => finalizeActive('Moved layer')}
-                    />
-                  </label>
-                  <label>
-                    Y
-                    <input
-                      type="number"
-                      value={selected.top}
-                      onChange={(event) => updateActive({ top: Number(event.target.value) })}
-                      onBlur={() => finalizeActive('Moved layer')}
-                    />
-                  </label>
-                </div>
-                <Slider
-                  label="Rotate"
-                  value={selected.angle}
-                  min={-180}
-                  max={180}
-                  format={formatDegrees}
-                  onChange={(value) => updateActive({ angle: value })}
-                  onCommit={() => finalizeActive('Rotated layer')}
-                />
-                <Slider
-                  label="Opacity"
-                  value={Math.round(selected.opacity * 100)}
-                  min={5}
-                  max={100}
-                  format={formatPercent}
-                  onChange={(value) => updateActive({ opacity: value / 100 })}
-                  onCommit={() => finalizeActive('Changed opacity')}
-                />
-                <Slider
-                  label="Stretch X"
-                  value={Math.round(selected.scaleX * 100)}
-                  min={20}
-                  max={320}
-                  format={formatPercent}
-                  onChange={(value) => updateActive({ scaleX: value / 100 })}
-                  onCommit={() => finalizeActive('Stretched layer')}
-                />
-                <Slider
-                  label="Stretch Y"
-                  value={Math.round(selected.scaleY * 100)}
-                  min={20}
-                  max={320}
-                  format={formatPercent}
-                  onChange={(value) => updateActive({ scaleY: value / 100 })}
-                  onCommit={() => finalizeActive('Stretched layer')}
-                />
-                <Slider
-                  label="Skew X"
-                  value={selected.skewX ?? 0}
-                  min={-45}
-                  max={45}
-                  format={formatDegrees}
-                  onChange={(value) => updateActive({ skewX: value })}
-                  onCommit={() => finalizeActive('Skewed layer')}
-                />
-                <label>
-                  Color
-                  <span className="color-row">
-                    <input
-                      type="color"
-                      value={typeof selected.fill === 'string' ? selected.fill : '#111111'}
-                      onChange={(event) => updateActive({ fill: event.target.value })}
-                      onBlur={(event) => {
-                        pushRecentColor(event.target.value)
-                        finalizeActive('Changed color')
-                      }}
-                      disabled={selectedIsImage}
-                    />
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label="Pick a color from the screen"
-                      title="Pick a color from the screen"
-                      onClick={() => void pickColorWithEyeDropper()}
-                      disabled={selectedIsImage}
-                    >
-                      <Pipette size={14} />
-                    </button>
-                  </span>
-                </label>
-                <div className="swatch-row" aria-label="Document palette">
-                  {documentPalette.map((color, index) => (
-                    <label key={`${color}-${index}`} className="swatch-edit" title={`Document swatch ${index + 1}`}>
-                      <input
-                        type="color"
-                        value={color}
-                        disabled={selectedIsImage}
-                        onChange={(event) => updatePaletteSwatch(index, event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="swatch"
-                        style={{ background: color }}
-                        disabled={selectedIsImage}
-                        onClick={() => {
-                          updateActive({ fill: color })
-                          finalizeActive('Applied palette color')
-                        }}
-                      />
-                    </label>
-                  ))}
-                </div>
-                {!selectedIsText ? null : (
-                  <button type="button" title="Wrap selected text on a curved path" onClick={applyTextOnPath}>
-                    Text on path
-                  </button>
-                )}
-                {!selectedIsImage ? (
-                  <div className="button-row">
-                    <button type="button" title="Apply a linear gradient from palette colors" onClick={() => applyGradientFill('linear')}>
-                      Linear gradient
-                    </button>
-                    <button type="button" title="Apply a radial gradient from palette colors" onClick={() => applyGradientFill('radial')}>
-                      Radial gradient
-                    </button>
-                  </div>
-                ) : null}
-                {!selectedIsText && selected ? (
-                  <div className="button-row">
-                    <button type="button" onClick={() => applyStrokeDash('solid')}>Solid stroke</button>
-                    <button type="button" onClick={() => applyStrokeDash('dashed')}>Dashed</button>
-                    <button type="button" onClick={() => applyStrokeDash('dotted')}>Dotted</button>
-                    <button type="button" onClick={() => void paintBrushMask()}>Brush mask</button>
-                  </div>
-                ) : null}
-                {selectedIsPath ? (
-                  <>
-                    <label>
-                      Stroke color
-                      <input
-                        type="color"
-                        value={selected.stroke ?? '#111111'}
-                        onChange={(event) => {
-                          updateActive({ stroke: event.target.value } as Partial<SelectedState>)
-                          if (penMode) setPenStrokeColor(event.target.value)
-                        }}
-                        onBlur={() => finalizeActive('Changed stroke color')}
-                      />
-                    </label>
-                    <Slider
-                      label="Stroke width"
-                      value={selected.strokeWidth ?? penStrokeWidth}
-                      min={1}
-                      max={48}
-                      onChange={(value) => {
-                        updateActive({ strokeWidth: value } as Partial<SelectedState>)
-                        if (penMode) setPenStrokeWidth(value)
-                      }}
-                      onCommit={() => finalizeActive('Changed stroke width')}
-                    />
-                  </>
-                ) : null}
-                {recentColors.length > 0 && !selectedIsImage ? (
-                  <div className="swatch-row" aria-label="Recently used colors">
-                    {recentColors.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        className="swatch"
-                        style={{ background: color }}
-                        aria-label={`Use color ${color}`}
-                        title={color}
-                        onClick={() => {
-                          updateActive({ fill: color })
-                          finalizeActive('Changed color')
-                        }}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-                <label>
-                  Blend
-                  <select
-                    value={selected.blendMode ?? 'source-over'}
-                    onChange={(event) => {
-                      updateActive({ globalCompositeOperation: event.target.value } as Partial<SelectedState>)
-                      finalizeActive('Changed blend mode')
-                    }}
-                  >
-                    {BLEND_MODES.map((mode) => (
-                      <option key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="button-row">
-                  <button type="button" title="Bring the layer to the front" onClick={() => moveLayer('front')}>
-                    <BringToFront size={16} />
-                    Front
-                  </button>
-                  <button type="button" title="Send the layer to the back" onClick={() => moveLayer('back')}>
-                    <SendToBack size={16} />
-                    Back
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="panel-section">
-            <h2>Image effects</h2>
-            <p className="hint">Effects stack — click again to remove one.</p>
-            <div className="preset-row">
-              {(['grayscale', 'contrast', 'threshold', 'blur', 'noise', 'clear'] as const).map((effect) => (
-                <button
-                  key={effect}
-                  type="button"
-                  title={effect === 'clear' ? 'Remove all image effects' : `Toggle ${effect} on the selected image`}
-                  onClick={() => applyImageEffect(effect)}
-                  disabled={!selectedIsImage}
-                >
-                  {effect} {effect === 'clear' ? null : scopeSel}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="panel-section">
-            <h2>Shortcuts</h2>
-            <ul className="shortcut-list">
-              <li><kbd>Cmd+Z</kbd> Undo · <kbd>Cmd+Shift+Z</kbd> Redo</li>
-              <li><kbd>Cmd+D</kbd> Duplicate · <kbd>Delete</kbd> Remove</li>
-              <li><kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant</li>
-              <li><kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10</li>
-              <li><kbd>T</kbd> Text · <kbd>B</kbd> Block · <kbd>R</kbd> Re-roll</li>
-              <li><kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom</li>
-              <li><kbd>Space+Drag</kbd> Pan · <kbd>Cmd+Drag</kbd> No snapping</li>
-            </ul>
-          </div>
-          </>
-          ) : null}
-
-          {inspectorTab === 'assets' ? (
-            <div className="panel-section">
-              <h2>Asset library</h2>
-              <p className="hint">Drag thumbnails to the canvas — or click to insert.</p>
-              {storedAssets.length === 0 ? (
-                <p className="empty">Import images to build your library.</p>
-              ) : (
-                <div className="asset-grid">
-                  {storedAssets.map((asset) => (
-                    <button
-                      key={asset.id}
-                      type="button"
-                      className="asset-thumb"
-                      title={asset.name}
-                      draggable
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData('text/carson-asset', asset.id)
-                      }}
-                      onClick={() => void insertAsset(asset)}
-                    >
-                      <img src={asset.thumbnail} alt="" />
-                      <span>{asset.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {documentMeta && documentMeta.components.length > 0 ? (
-                <>
-                  <h3>Components</h3>
-                  <div className="preset-row">
-                    {documentMeta.components.map((component) => (
-                      <button key={component.id} type="button" onClick={() => void insertComponent(component.id)}>
-                        {component.name}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-              <button type="button" title="Save the current selection as a reusable component" onClick={() => void saveSelectionAsComponent()} disabled={!selected}>
-                Save selection as component
-              </button>
-            </div>
-          ) : null}
-
-          {inspectorTab === 'layout' ? (
-            <div className="panel-section">
-              <h2>Layout & grid</h2>
-              <div className="button-row">
-                <button type="button" onClick={() => alignSelection('left')}>Align left</button>
-                <button type="button" onClick={() => alignSelection('center')}>Center</button>
-                <button type="button" onClick={() => alignSelection('right')}>Align right</button>
-              </div>
-              <div className="button-row">
-                <button type="button" onClick={() => distributeSelection('horizontal')}>Distribute H</button>
-                <button type="button" onClick={() => distributeSelection('vertical')}>Distribute V</button>
-                <button type="button" onClick={() => void clipSelectionToShape()}>Clip to shape</button>
-              </div>
-              <Slider
-                label="Grid tension"
-                value={gridOverlay.tension}
-                min={0}
-                max={100}
-                format={formatPercent}
-                onChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
-                onCommit={() => {
-                  setShowLayoutGrid(true)
-                  const canvas = canvasRef.current
-                  if (!canvas) return
-                  for (const object of canvas.getObjects()) {
-                    if (readTreatments(object).some((item) => item.type === 'scatter')) {
-                      void refreshTreatmentStack(object)
-                    }
-                  }
-                }}
-              />
-              <button type="button" onClick={() => setShowLayoutGrid((value) => !value)}>
-                <Grid3x3 size={16} />
-                {showLayoutGrid ? 'Hide column grid' : 'Show column grid'}
-              </button>
-              <button type="button" onClick={() => setShowBaselineGrid((value) => !value)}>
-                <Grid3x3 size={16} />
-                {showBaselineGrid ? 'Hide baseline grid' : 'Show baseline grid'}
-              </button>
-              {documentMeta && documentMeta.variants.length > 0 ? (
-                <>
-                  <h3>Variations</h3>
-                  <p className="hint">Fork with <kbd>Cmd+B</kbd>, then restore or compare a branch.</p>
-                  <ul className="variant-list">
-                    {documentMeta.variants.map((variant) => (
-                      <li key={variant.id} className="variant-card">
-                        {variant.thumbnail ? (
-                          <img className="variant-thumb" src={variant.thumbnail} alt="" />
-                        ) : (
-                          <div className="variant-thumb variant-thumb-placeholder" aria-hidden />
-                        )}
-                        <div className="variant-meta">
-                          <strong>{variant.name}</strong>
-                          <small>{new Date(variant.savedAt).toLocaleString()}</small>
-                        </div>
-                        <div className="variant-actions">
-                          <button type="button" title={`Restore ${variant.name}`} onClick={() => void restoreVariant(variant.id)}>
-                            Restore
-                          </button>
-                          <button type="button" title={`Compare with ${variant.name}`} onClick={() => void openVariantCompare(variant.id)}>
-                            Compare
-                          </button>
-                          <button type="button" title={`Merge ${variant.name} into current`} onClick={() => void mergeVariant(variant.id)}>
-                            Merge
-                          </button>
-                          <button type="button" title={`Rename ${variant.name}`} onClick={() => renameVariantById(variant.id)}>
-                            Rename
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-
-          {inspectorTab === 'print' ? (
-            <div className="panel-section">
-              <h2>Print pipeline</h2>
-              <label>
-                Document DPI
-                <input type="number" value={printDpi} min={72} max={600} onChange={(event) => setPrintDpi(Number(event.target.value))} />
-              </label>
-              <label>
-                Bleed (mm)
-                <input type="number" value={bleedMm} min={0} max={20} onChange={(event) => setBleedMm(Number(event.target.value))} />
-              </label>
-              <button type="button" onClick={() => setShowPrintGuides((value) => !value)}>
-                {showPrintGuides ? 'Hide bleed/trim guides' : 'Show bleed/trim guides'}
-              </button>
-              <button type="button" onClick={() => toggleCmykPreview(!showCmykPreview)}>
-                {showCmykPreview ? 'Disable CMYK soft-proof' : 'Enable CMYK soft-proof'}
-              </button>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={pdfRegistrationMarks}
-                  onChange={(event) => setPdfRegistrationMarks(event.target.checked)}
-                />
-                Registration marks in PDF export
-              </label>
-              <button type="button" onClick={() => addNewArtboard()}>
-                Add artboard
-              </button>
-              <label>
-                New artboard preset
-                <select value={newArtboardPreset} onChange={(event) => setNewArtboardPreset(event.target.value as PosterPresetId)}>
-                  {POSTER_PRESET_OPTIONS.filter((option) => option.id !== 'custom').map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" onClick={() => void exportAllArtboards()}>
-                Export all artboards
-              </button>
-              <p className="hint">
-                Print guides are document chrome — they never bake into artwork. Export PDF for print shops.
-              </p>
-            </div>
-          ) : null}
-        </aside>
+        <InspectorPanel
+          inspectorTab={inspectorTab}
+          onInspectorTabChange={setInspectorTab}
+          projectName={projectName}
+          onProjectNameChange={setProjectName}
+          exportFormat={exportFormat}
+          onExportFormatChange={setExportFormat}
+          exportScale={exportScale}
+          onExportScaleChange={setExportScale}
+          exportBackground={exportBackground}
+          onExportBackgroundChange={setExportBackground}
+          exportQuality={exportQuality}
+          onExportQualityChange={setExportQuality}
+          onExportQualityCommit={() => setStatus('Updated export quality')}
+          posterWidth={poster.width}
+          posterHeight={poster.height}
+          onExport={exportPoster}
+          savedProjects={savedProjects}
+          onLoadProject={(project) => void loadProject(project)}
+          onDeleteProject={(id, name) => void deleteSavedProject(id, name)}
+          posterTreatments={posterTreatments}
+          selected={selected}
+          selectedObject={selectedObject}
+          selectedTreatments={selectedTreatments}
+          onReorderPosterTreatment={(id, direction) => void reorderPosterTreatmentAction(id, direction)}
+          onRerollPosterTreatment={(id) => void rerollPosterTreatment(id)}
+          onTogglePosterTreatment={(id) => void togglePosterTreatment(id)}
+          onRemovePosterTreatment={(id) => void removePosterTreatmentAction(id)}
+          onReorderLayerTreatment={(id, direction) => void reorderLayerTreatment(id, direction)}
+          onRerollLayerTreatment={(id) => void rerollTreatment(id)}
+          onToggleLayerTreatment={(id) => void toggleTreatment(id)}
+          onRemoveLayerTreatment={(object, id) => void removeLayerTreatment(object, id)}
+          onSaveTreatmentStackAsComponent={() => void saveTreatmentStackAsComponent()}
+          layers={layers}
+          renamingLayerId={renamingLayerId}
+          dragLayerId={dragLayerId}
+          onSelectLayer={selectLayer}
+          onToggleLayerVisibility={toggleLayerVisibility}
+          onToggleLayerLock={toggleLayerLock}
+          onRenameLayerStart={setRenamingLayerId}
+          onRenameLayerEnd={(id, name) => {
+            renameLayer(id, name.trim() || 'Layer')
+            setRenamingLayerId(null)
+          }}
+          onDragLayerStart={setDragLayerId}
+          onDragLayerOver={(id) => {
+            if (dragLayerId && dragLayerId !== id) reorderLayer(dragLayerId, id)
+          }}
+          onDragLayerEnd={() => setDragLayerId(null)}
+          selectedIsText={selectedIsText}
+          selectedIsImage={selectedIsImage}
+          selectedIsPath={selectedIsPath}
+          customFonts={customFonts}
+          fontInputRef={fontInputRef}
+          onFontFileChange={(file) => {
+            void loadFontFile(file).then((family) => {
+              setCustomFonts((current) => [...new Set([...current, family])])
+              updateActive({ fontFamily: family })
+              finalizeActive(`Loaded font ${family}`)
+            })
+          }}
+          fontStretch={fontStretch}
+          onFontStretchChange={setFontStretch}
+          textContrast={textContrast}
+          onUpdateActive={updateActive}
+          onFinalizeActive={finalizeActive}
+          onLoadGoogleFont={loadGoogleFont}
+          documentPalette={documentPalette}
+          onUpdatePaletteSwatch={updatePaletteSwatch}
+          recentColors={recentColors}
+          onPushRecentColor={pushRecentColor}
+          onPickColorWithEyeDropper={() => void pickColorWithEyeDropper()}
+          onApplyTextOnPath={applyTextOnPath}
+          onApplyGradientFill={applyGradientFill}
+          onApplyStrokeDash={applyStrokeDash}
+          onPaintBrushMask={() => void paintBrushMask()}
+          penStrokeWidth={penStrokeWidth}
+          onPenStrokeColorChange={setPenStrokeColor}
+          onPenStrokeWidthChange={setPenStrokeWidth}
+          onMoveLayer={moveLayer}
+          onApplyImageEffect={applyImageEffect}
+          storedAssets={storedAssets}
+          documentMeta={documentMeta}
+          onInsertAsset={(asset) => void insertAsset(asset)}
+          onInsertComponent={(componentId) => void insertComponent(componentId)}
+          onSaveSelectionAsComponent={() => void saveSelectionAsComponent()}
+          onAlignSelection={alignSelection}
+          onDistributeSelection={distributeSelection}
+          onClipSelectionToShape={() => void clipSelectionToShape()}
+          gridOverlay={gridOverlay}
+          onGridTensionChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
+          onGridTensionCommit={() => {
+            setShowLayoutGrid(true)
+            const canvas = canvasRef.current
+            if (!canvas) return
+            for (const object of canvas.getObjects()) {
+              if (readTreatments(object).some((item) => item.type === 'scatter')) {
+                void refreshTreatmentStack(object)
+              }
+            }
+          }}
+          showLayoutGrid={showLayoutGrid}
+          onToggleLayoutGrid={() => setShowLayoutGrid((value) => !value)}
+          showBaselineGrid={showBaselineGrid}
+          onToggleBaselineGrid={() => setShowBaselineGrid((value) => !value)}
+          onRestoreVariant={(variantId) => void restoreVariant(variantId)}
+          onOpenVariantCompare={(variantId) => void openVariantCompare(variantId)}
+          onMergeVariant={(variantId) => void mergeVariant(variantId)}
+          onRenameVariant={(variantId) => renameVariantById(variantId)}
+          printDpi={printDpi}
+          onPrintDpiChange={setPrintDpi}
+          bleedMm={bleedMm}
+          onBleedMmChange={setBleedMm}
+          showPrintGuides={showPrintGuides}
+          onTogglePrintGuides={() => setShowPrintGuides((value) => !value)}
+          showCmykPreview={showCmykPreview}
+          onToggleCmykPreview={() => toggleCmykPreview(!showCmykPreview)}
+          pdfRegistrationMarks={pdfRegistrationMarks}
+          onPdfRegistrationMarksChange={setPdfRegistrationMarks}
+          onAddArtboard={addNewArtboard}
+          newArtboardPreset={newArtboardPreset}
+          onNewArtboardPresetChange={setNewArtboardPreset}
+          onExportAllArtboards={() => void exportAllArtboards()}
+        />
       </section>
+
     </main>
   )
 }
