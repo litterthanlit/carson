@@ -54,6 +54,7 @@ export type TreatmentType =
   | 'decay'
   | 'distress'
   | 'scatter'
+  | 'cold-wash'
   | 'slice'
   | 'crop'
   | 'tear'
@@ -193,6 +194,8 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Distress·${treatment.params.intensity ?? 70}`
     case 'scatter':
       return `Scatter·#${treatment.seed}`
+    case 'cold-wash':
+      return 'Cold wash'
     case 'slice': {
       const axis = sliceDirectionFromParams(treatment.params) === 'vertical' ? 'V' : 'H'
       return `Slice·${axis}·${treatment.params.pieces ?? 5}`
@@ -231,6 +234,11 @@ export function buildTreatmentFilters(treatments: Treatment[]): filters.BaseFilt
       output.push(new filters.Contrast({ contrast: 0.2 + intensity * 0.5 }))
       output.push(new filters.Noise({ noise: 40 + intensity * 180 }))
       output.push(new filters.Blur({ blur: 0.05 + intensity * 0.12 }))
+    } else if (treatment.type === 'cold-wash') {
+      output.push(new filters.Grayscale())
+      output.push(new filters.Contrast({ contrast: 0.42 }))
+      output.push(new filters.BlendColor({ color: '#2f6f8f', mode: 'tint', alpha: 0.22 }))
+      output.push(new filters.Noise({ noise: 85 }))
     }
   }
   return output
@@ -295,6 +303,8 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
     } else if (treatment.type === 'decay') {
       const profile = getLayerDecayProfile(treatment.params.amount ?? 55)
       object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
+    } else if (treatment.type === 'cold-wash') {
+      object.set({ opacity: 0.92, globalCompositeOperation: 'multiply' })
     }
   }
 

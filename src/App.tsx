@@ -98,6 +98,9 @@ import { LeftRail } from './components/LeftRail'
 import { OnboardingModal } from './components/OnboardingModal'
 import { TopBar } from './components/TopBar'
 import { VariantCompareModal } from './components/VariantCompareModal'
+import { FilterGalleryModal } from './components/FilterGalleryModal'
+import type { FilterPreset } from './lib/filterGallery'
+import { paramsForTreatment } from './lib/filterGallery'
 import { useTreatments } from './hooks/useTreatments'
 import type {
   ExportBackground,
@@ -178,6 +181,7 @@ function App() {
   const [dragLayerId, setDragLayerId] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
   const [commandOpen, setCommandOpen] = useState(false)
+  const [filterGalleryOpen, setFilterGalleryOpen] = useState(false)
   const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(null)
   const [customFonts, setCustomFonts] = useState<string[]>([])
   const [storedAssets, setStoredAssets] = useState<StoredAsset[]>([])
@@ -1652,25 +1656,18 @@ function App() {
     commitHistory('Added layer decay offset')
   }
 
-  function applyColdWashImage() {
-    const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object || object.type !== 'image') return
-    const image = object as FabricImage
+  function applyFilterFromGallery(preset: FilterPreset, params: Record<string, number>) {
+    applyTreatmentToSelection(preset.treatmentType, paramsForTreatment(preset, params), preset.name)
+  }
 
-    image.filters = [
-      new filters.Grayscale(),
-      new filters.Contrast({ contrast: 0.42 }),
-      new filters.BlendColor({ color: '#2f6f8f', mode: 'tint', alpha: 0.22 }),
-      new filters.Noise({ noise: 85 }),
-    ]
-    image.applyFilters()
-    image.set({
-      opacity: 0.92,
-      globalCompositeOperation: 'multiply',
-    })
-    canvas.requestRenderAll()
-    commitHistory('Applied cold wash image treatment')
+  function openFilterGallery() {
+    setFilterGalleryOpen(true)
+  }
+
+  function applyColdWashImage() {
+    const object = activeObject()
+    if (!object || object.type !== 'image') return
+    applyTreatmentToSelection('cold-wash', {}, 'cold wash')
   }
 
   async function applyXeroxToSelected(seed = newSeed()) {
@@ -2420,6 +2417,7 @@ function App() {
   const selectedIsPath = selectedObject?.type === 'path' || selectedObject?.type === 'line'
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
+    { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox'], scope: 'selection', run: openFilterGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', run: () => void applyXeroxToSelected() },
     { id: 'scatter', label: 'Scatter selection', keywords: ['scatter', 'chaos'], scope: 'selection', run: () => scatterSelected() },
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', run: () => void applyLayerDecayToSelected() },
@@ -2445,6 +2443,13 @@ function App() {
           if (variantCompare) void restoreVariant(variantCompare.variantId)
         }}
         onClose={() => setVariantCompare(null)}
+      />
+      <FilterGalleryModal
+        open={filterGalleryOpen}
+        source={selectedObject}
+        selectedIsImage={selectedIsImage}
+        onApply={applyFilterFromGallery}
+        onClose={() => setFilterGalleryOpen(false)}
       />
       <TopBar
         onUndo={() => void undoAsync()}
@@ -2520,6 +2525,7 @@ function App() {
           onAggressiveCrop={(mode) => void aggressiveCropSelected(mode)}
           onCropToPosterEdge={() => void cropToPosterEdge()}
           onOpenLayersPanel={() => setInspectorTab('layers')}
+          onOpenFilterGallery={openFilterGallery}
         />
 
         <EditorCanvas

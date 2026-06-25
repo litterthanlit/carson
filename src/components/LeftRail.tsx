@@ -85,6 +85,7 @@ export type LeftRailProps = {
   onAggressiveCrop: (mode: 'close' | 'edge' | 'off-center') => void
   onCropToPosterEdge: () => void
   onOpenLayersPanel: () => void
+  onOpenFilterGallery: () => void
 }
 
 export function LeftRail({
@@ -152,6 +153,7 @@ export function LeftRail({
   onAggressiveCrop,
   onCropToPosterEdge,
   onOpenLayersPanel,
+  onOpenFilterGallery,
 }: LeftRailProps) {
   return (
     <aside className="rail left-rail glass-panel" aria-label="Tools and layers">
@@ -211,6 +213,15 @@ export function LeftRail({
           >
             <Shuffle size={17} />
             Scatter
+          </button>
+          <button
+            type="button"
+            title="Browse Carson filters with live preview"
+            onClick={onOpenFilterGallery}
+            disabled={!selected}
+          >
+            <Sparkles size={17} />
+            Filters
           </button>
           <button type="button" title="Delete the selected layer (Delete)" onClick={onDeleteSelected} disabled={!selected}>
             <Trash2 size={17} />
@@ -296,6 +307,15 @@ export function LeftRail({
           <div className="panel-section">
             <h2>Manual Effects</h2>
             <div className="preset-row">
+              <button
+                type="button"
+                title="Browse Carson filters with live preview"
+                onClick={onOpenFilterGallery}
+                disabled={!selected}
+              >
+                <Sparkles size={17} />
+                Filter gallery <ScopeSel />
+              </button>
               <button type="button" title="Repeat the selected text as printed strips below it" onClick={onAddTypeStrip} disabled={!selectedIsText}>
                 <Type size={17} />
                 Type strip <ScopeSel />

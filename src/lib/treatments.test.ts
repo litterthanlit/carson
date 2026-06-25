@@ -38,4 +38,11 @@ describe('treatments', () => {
     ])
     expect(filters.length).toBeGreaterThan(2)
   })
+
+  it('builds cold-wash filter stack', () => {
+    const filters = buildTreatmentFilters([
+      { id: '1', type: 'cold-wash', seed: 1, enabled: true, params: {} },
+    ])
+    expect(filters).toHaveLength(4)
+  })
 })
