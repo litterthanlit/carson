@@ -7,11 +7,14 @@ import {
   Gradient,
   Image as FabricImage,
   Line,
+  Path,
   PencilBrush,
+  Point,
   Polygon,
   Rect,
   Textbox,
   filters,
+  util,
 } from 'fabric'
 import {
   applyPosterPreset,
@@ -42,7 +45,7 @@ import {
   saveProject as persistProject,
   type StoredProject,
 } from './lib/storage'
-import { addTreatment, captureTransformBaseline, readTreatments, type Treatment } from './lib/treatments'
+import { addTreatment, captureTransformBaseline, readTreatments, writeTreatments, type Treatment } from './lib/treatments'
 import { cropModeToParam, findCropFragments } from './lib/cropTreatment'
 import { sliceDirectionToParam } from './lib/sliceTreatment'
 import {
@@ -62,16 +65,6 @@ import { contrastRatio } from './lib/color'
 import { alignObjects, baselineGridLines, buildColumnGrid, distributeObjects, type GridOverlay } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
 import {
-  createHistoryState,
-  pushHistoryOp,
-  redoState,
-  snapshotForRedo,
-  snapshotForUndo,
-  undoState,
-  type HistoryState,
-} from './lib/historyLog'
-import { addPosterTreatment, readPosterTreatments } from './lib/posterTreatments'
-import {
   ACCENTS,
   BLEND_MODES,
   HISTORY_PROPS,
@@ -79,6 +72,7 @@ import {
   SNAP_SCREEN_THRESHOLD,
   ZOOM_LEVELS,
 } from './lib/editorConstants'
+import { addPosterTreatment, readPosterTreatments } from './lib/posterTreatments'
 import {
   buildStarPoints,
   readFileAsDataUrl,
@@ -102,6 +96,16 @@ import { FilterGalleryModal } from './components/FilterGalleryModal'
 import type { FilterPreset } from './lib/filterGallery'
 import { paramsForTreatment } from './lib/filterGallery'
 import { useTreatments } from './hooks/useTreatments'
+import { useEditorHistory } from './hooks/useEditorHistory'
+import { createLayerThumbnail } from './lib/layerThumbnail'
+import {
+  applyPathData,
+  getPathAnchorPoints,
+  movePathPoint,
+  pathAnchorWorldPosition,
+  pathPointNear,
+  type PathAnchorPoint,
+} from './lib/pathEditing'
 import type {
   ExportBackground,
   ExportFormat,
@@ -133,8 +137,6 @@ type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 function App() {
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const canvasRef = useRef<Canvas | null>(null)
-  const historyLogRef = useRef<HistoryState>(createHistoryState())
-  const restoringRef = useRef(false)
   const layerIdRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -159,6 +161,7 @@ function App() {
   const [presetId, setPresetId] = useState<PosterPresetId>('a3')
   const [customSize, setCustomSize] = useState({ width: 1200, height: 1600 })
   const [selected, setSelected] = useState<SelectedState | null>(null)
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([])
   const [layers, setLayers] = useState<SelectedState[]>([])
   const [savedProjects, setSavedProjects] = useState<StoredProject[]>([])
   const [projectName, setProjectName] = useState('Untitled poster')
@@ -194,6 +197,7 @@ function App() {
   const [showCmykPreview, setShowCmykPreview] = useState(false)
   const [showInstruments, setShowInstruments] = useState(false)
   const [penMode, setPenMode] = useState(false)
+  const [pathEditMode, setPathEditMode] = useState(false)
   const [penStrokeWidth, setPenStrokeWidth] = useState(3)
   const [penStrokeColor, setPenStrokeColor] = useState('#111111')
   const [newArtboardPreset, setNewArtboardPreset] = useState<PosterPresetId>('instagram')
@@ -207,6 +211,13 @@ function App() {
   } | null>(null)
   const fontInputRef = useRef<HTMLInputElement | null>(null)
   const commitHistoryRef = useRef<(message: string) => void>(() => {})
+  const commitTreatmentHistoryRef = useRef<
+    (objectId: string, label: string, before: string, after: string) => void
+  >(() => {})
+  const refreshTreatmentStackRef = useRef<(object?: FabricObject | null) => Promise<void>>(async () => {})
+  const reconcileArtifactTreatmentsRef = useRef<() => Promise<void>>(async () => {})
+  const refreshPosterTreatmentsRef = useRef<() => Promise<void>>(async () => {})
+  const pathEditDragRef = useRef<{ point: PathAnchorPoint; path: Path } | null>(null)
   const activeObjectRef = useRef<() => FabricObject | null>(() => null)
   const tagObjectRef = useRef<(object: FabricObject, kind: LayerKind, name: string) => void>(() => {})
 
@@ -229,8 +240,35 @@ function App() {
     gridOverlay,
     poster,
     commitHistoryRef,
+    commitTreatmentHistoryRef,
     activeObjectRef,
     tagObjectRef,
+  })
+
+  refreshTreatmentStackRef.current = refreshTreatmentStack
+  reconcileArtifactTreatmentsRef.current = reconcileArtifactTreatments
+  refreshPosterTreatmentsRef.current = refreshPosterTreatments
+
+  const { commitHistory, undoAsync, redo, restoringRef, resetHistory } = useEditorHistory({
+    canvasRef,
+    setStatus,
+    syncSelected: () => syncSelected(),
+    syncLayers: () => syncLayers(),
+    scheduleAutosave,
+    captureStyleBaseline,
+    commitHistoryRef,
+    commitTreatmentHistoryRef,
+    onAfterRestore: async () => {
+      await reconcileArtifactTreatmentsRef.current()
+      await refreshPosterTreatmentsRef.current()
+    },
+    onTreatmentRestore: async (objectId, treatmentsJson) => {
+      const object =
+        canvasRef.current?.getObjects().find((item) => String(readObjectProp(item, 'id') ?? '') === objectId) ?? null
+      if (!object) return
+      writeTreatments(object, JSON.parse(treatmentsJson) as Treatment[])
+      await refreshTreatmentStackRef.current(object)
+    },
   })
 
   const penStrokeColorRef = useRef(penStrokeColor)
@@ -314,6 +352,96 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [penMode, penStrokeColor, penStrokeWidth])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !pathEditMode) {
+      pathEditDragRef.current = null
+      return
+    }
+
+    canvas.selection = false
+    canvas.skipTargetFind = true
+
+    const drawPathHandles = () => {
+      const object = activeObject()
+      if (!object || object.type !== 'path') return
+      const path = object as Path
+      const ctx = canvas.contextTop
+      if (!ctx) return
+      canvas.clearContext(ctx)
+      ctx.save()
+      for (const point of getPathAnchorPoints(path.path as Parameters<typeof getPathAnchorPoints>[0])) {
+        const world = pathAnchorWorldPosition(path, point)
+        ctx.beginPath()
+        ctx.fillStyle = point.role === 'anchor' ? '#e11d48' : '#05b6d4'
+        ctx.arc(world.x, world.y, point.role === 'anchor' ? 5 : 4, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 1
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+
+    const pointerToPathLocal = (path: Path, event: MouseEvent | TouchEvent) => {
+      const pointer = canvas.getScenePoint(event)
+      const local = util.transformPoint(new Point(pointer.x, pointer.y), util.invertTransform(path.calcTransformMatrix()))
+      return {
+        x: local.x + (path.pathOffset?.x ?? 0),
+        y: local.y + (path.pathOffset?.y ?? 0),
+      }
+    }
+
+    const onMouseDown = (event: { e: MouseEvent | TouchEvent }) => {
+      const object = activeObject()
+      if (!object || object.type !== 'path') return
+      const path = object as Path
+      const pointer = canvas.getScenePoint(event.e)
+      const hit = pathPointNear(path, pointer.x, pointer.y, 10 / displayScaleRef.current)
+      if (hit) pathEditDragRef.current = { point: hit, path }
+    }
+
+    const onMouseMove = (event: { e: MouseEvent | TouchEvent }) => {
+      const drag = pathEditDragRef.current
+      if (!drag) return
+      const local = pointerToPathLocal(drag.path, event.e)
+      const next = movePathPoint(
+        drag.path.path as Parameters<typeof movePathPoint>[0],
+        drag.point,
+        local.x,
+        local.y,
+      )
+      applyPathData(drag.path, next)
+      drag.path.setCoords()
+      canvas.requestRenderAll()
+    }
+
+    const onMouseUp = () => {
+      if (!pathEditDragRef.current) return
+      pathEditDragRef.current = null
+      commitHistory('Edited path points')
+    }
+
+    canvas.on('after:render', drawPathHandles)
+    canvas.on('mouse:down', onMouseDown)
+    canvas.on('mouse:move', onMouseMove)
+    canvas.on('mouse:up', onMouseUp)
+    canvas.requestRenderAll()
+
+    return () => {
+      canvas.off('after:render', drawPathHandles)
+      canvas.off('mouse:down', onMouseDown)
+      canvas.off('mouse:move', onMouseMove)
+      canvas.off('mouse:up', onMouseUp)
+      if (!penMode && !spaceDownRef.current) {
+        canvas.selection = true
+        canvas.skipTargetFind = false
+      }
+      canvas.requestRenderAll()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathEditMode, selected?.id, penMode])
 
   useEffect(() => {
     // Fix: previously this also ran on mount, double-committing history.
@@ -849,73 +977,41 @@ function App() {
     }, 2500)
   }
 
-  function commitHistory(message: string) {
-    const canvas = canvasRef.current
-    if (!canvas || restoringRef.current) return
-    const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
-    const lastOp = historyLogRef.current.ops[historyLogRef.current.cursor]
-    if (lastOp?.type === 'snapshot' && lastOp.data === snapshot) {
-      syncSelected()
-      syncLayers()
-      setStatus(message)
-      return
-    }
-    historyLogRef.current = pushHistoryOp(historyLogRef.current, {
-      type: 'snapshot',
-      label: message,
-      data: snapshot,
-    })
-    scheduleAutosave()
-    if (!message.endsWith(' preset')) captureStyleBaseline()
-    syncSelected()
-    syncLayers()
-    setStatus(message)
-  }
-
-  commitHistoryRef.current = commitHistory
-
-  async function restoreSnapshot(snapshot: string, message: string) {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    restoringRef.current = true
-    await canvas.loadFromJSON(JSON.parse(snapshot))
-    restoringRef.current = false
-    await reconcileArtifactTreatments()
-    await refreshPosterTreatments()
-    canvas.requestRenderAll()
-    captureStyleBaseline()
-    syncSelected()
-    syncLayers()
-    setStatus(message)
-  }
-
-  function undoAsync() {
-    const undone = undoState(historyLogRef.current)
-    if (!undone.op) return Promise.resolve()
-    const snapshot = snapshotForUndo(undone.state)
-    historyLogRef.current = undone.state
-    if (!snapshot) return Promise.resolve()
-    return restoreSnapshot(snapshot, `Undo: ${undone.op.label}`)
-  }
-
-  function redo() {
-    const redone = redoState(historyLogRef.current)
-    if (!redone.op) return
-    const snapshot = snapshotForRedo(redone.state)
-    historyLogRef.current = redone.state
-    if (!snapshot) return
-    void restoreSnapshot(snapshot, `Redo: ${redone.op.label}`)
-  }
-
   function syncLayers() {
     const canvas = canvasRef.current
     if (!canvas) return
-    setLayers(canvas.getObjects().map(toSelectedState).reverse())
+    setLayers(
+      canvas
+        .getObjects()
+        .map((object) => ({
+          ...toSelectedState(object),
+          thumbnail: createLayerThumbnail(object, canvas),
+        }))
+        .reverse(),
+    )
   }
 
   function syncSelected() {
-    const object = activeObject()
-    setSelected(object ? toSelectedState(object) : null)
+    const canvas = canvasRef.current
+    if (!canvas) {
+      setSelected(null)
+      setSelectedLayerIds([])
+      return
+    }
+    const active = canvas.getActiveObject()
+    if (!active) {
+      setSelected(null)
+      setSelectedLayerIds([])
+      return
+    }
+    if (active.type === 'activeselection') {
+      const objects = canvas.getActiveObjects()
+      setSelectedLayerIds(objects.map((object) => String(readObjectProp(object, 'id') ?? '')))
+      setSelected(objects[0] ? toSelectedState(objects[0]) : null)
+      return
+    }
+    setSelected(toSelectedState(active))
+    setSelectedLayerIds([String(readObjectProp(active, 'id') ?? '')])
   }
 
   function toSelectedState(object: FabricObject): SelectedState {
@@ -1464,13 +1560,36 @@ function App() {
     commitHistory(direction === 'front' ? 'Moved layer to front' : 'Moved layer to back')
   }
 
-  function selectLayer(id: string) {
+  function selectLayer(id: string, additive = false) {
     const canvas = canvasRef.current
     const object = findObjectById(id)
     if (!canvas || !object) return
-    canvas.setActiveObject(object)
+    if (additive) {
+      const current = canvas.getActiveObjects()
+      const alreadySelected = current.some((item) => readObjectProp(item, 'id') === id)
+      const next = alreadySelected
+        ? current.filter((item) => readObjectProp(item, 'id') !== id)
+        : [...current, object]
+      if (next.length === 0) {
+        canvas.discardActiveObject()
+      } else if (next.length === 1) {
+        canvas.setActiveObject(next[0]!)
+      } else {
+        canvas.setActiveObject(new ActiveSelection(next, { canvas }))
+      }
+    } else {
+      canvas.setActiveObject(object)
+    }
     canvas.requestRenderAll()
     syncSelected()
+  }
+
+  function togglePathEditMode() {
+    setPathEditMode((current) => {
+      const next = !current
+      if (next) setPenMode(false)
+      return next
+    })
   }
 
   function toggleLayerVisibility(id: string) {
@@ -2259,11 +2378,7 @@ function App() {
     await reconcileArtifactTreatments()
     await refreshPosterTreatments()
     canvas.requestRenderAll()
-    historyLogRef.current = pushHistoryOp(createHistoryState(), {
-      type: 'snapshot',
-      label: `Loaded ${project.name}`,
-      data: JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])),
-    })
+    resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), `Loaded ${project.name}`)
     lastChaosRef.current = null
     setLastChaos(null)
     captureStyleBaseline()
@@ -2589,6 +2704,7 @@ function App() {
           onRemoveLayerTreatment={(object, id) => void removeLayerTreatment(object, id)}
           onSaveTreatmentStackAsComponent={() => void saveTreatmentStackAsComponent()}
           layers={layers}
+          selectedLayerIds={selectedLayerIds}
           renamingLayerId={renamingLayerId}
           dragLayerId={dragLayerId}
           onSelectLayer={selectLayer}
@@ -2607,6 +2723,8 @@ function App() {
           selectedIsText={selectedIsText}
           selectedIsImage={selectedIsImage}
           selectedIsPath={selectedIsPath}
+          pathEditMode={pathEditMode}
+          onTogglePathEditMode={togglePathEditMode}
           customFonts={customFonts}
           fontInputRef={fontInputRef}
           onFontFileChange={(file) => {

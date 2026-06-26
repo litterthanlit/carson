@@ -1,5 +1,5 @@
 /**
- * Poster-wide scrape mask treatment — non-destructive white bands with grit (Horizon 2.5).
+ * Poster-wide scrape mask treatment — non-destructive eraser bands with grit (Horizon 2.5).
  */
 import { Rect, type Canvas, type FabricObject } from 'fabric'
 import { createPhotocopyNoise, createScrapeMasks, type PosterPreset } from './editorModel'
@@ -46,9 +46,10 @@ export function renderScrapeTreatment(
       top: mask.top,
       width: mask.width,
       height: mask.height,
-      fill: '#f8f6ef',
+      fill: '#000000',
       opacity: mask.opacity,
       angle: mask.angle,
+      globalCompositeOperation: 'destination-out',
       selectable: false,
       evented: false,
     })
@@ -69,10 +70,10 @@ export function renderScrapeTreatment(
         top: mask.top + chip.top,
         width: chip.kind === 'speck' ? chip.size : chip.width,
         height: chip.kind === 'speck' ? chip.size : chip.height,
-        fill: '#111111',
-        opacity: chip.opacity * 0.42,
+        fill: '#000000',
+        opacity: chip.opacity * 0.55,
         angle: chip.kind === 'speck' ? mask.angle : chip.angle,
-        globalCompositeOperation: 'multiply',
+        globalCompositeOperation: 'destination-out',
         selectable: false,
         evented: false,
       })

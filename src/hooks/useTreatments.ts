@@ -29,6 +29,9 @@ type UseTreatmentsOptions = {
   gridOverlay: GridOverlay
   poster: PosterPreset
   commitHistoryRef: RefObject<(message: string) => void>
+  commitTreatmentHistoryRef: RefObject<
+    (objectId: string, label: string, before: string, after: string) => void
+  >
   activeObjectRef: RefObject<() => FabricObject | null>
   tagObjectRef: RefObject<(object: FabricObject, kind: LayerKind, name: string) => void>
 }
@@ -40,11 +43,17 @@ export function useTreatments({
   gridOverlay,
   poster,
   commitHistoryRef,
+  commitTreatmentHistoryRef,
   activeObjectRef,
   tagObjectRef,
 }: UseTreatmentsOptions) {
   const activeObject = useCallback(() => activeObjectRef.current?.() ?? null, [activeObjectRef])
   const commitHistory = useCallback((message: string) => commitHistoryRef.current?.(message), [commitHistoryRef])
+  const commitTreatmentHistory = useCallback(
+    (objectId: string, label: string, before: string, after: string) =>
+      commitTreatmentHistoryRef.current?.(objectId, label, before, after),
+    [commitTreatmentHistoryRef],
+  )
   const tagObject = useCallback(
     (object: FabricObject, kind: LayerKind, name: string) => tagObjectRef.current?.(object, kind, name),
     [tagObjectRef],
@@ -115,22 +124,26 @@ export function useTreatments({
     async (treatmentId: string) => {
       const object = activeObject()
       if (!object) return
+      const objectId = String(object.get('id') ?? '')
+      const before = JSON.stringify(readTreatments(object))
       updateTreatment(object, treatmentId, { seed: newSeed() })
       await refreshTreatmentStack(object)
-      commitHistory('Re-rolled treatment')
+      commitTreatmentHistory(objectId, 'Re-rolled treatment', before, JSON.stringify(readTreatments(object)))
     },
-    [activeObject, commitHistory, refreshTreatmentStack],
+    [activeObject, commitTreatmentHistory, refreshTreatmentStack],
   )
 
   const reorderLayerTreatment = useCallback(
     async (treatmentId: string, direction: 'up' | 'down') => {
       const object = activeObject()
       if (!object) return
+      const objectId = String(object.get('id') ?? '')
+      const before = JSON.stringify(readTreatments(object))
       reorderTreatment(object, treatmentId, direction)
       await refreshTreatmentStack(object)
-      commitHistory('Reordered treatment')
+      commitTreatmentHistory(objectId, 'Reordered treatment', before, JSON.stringify(readTreatments(object)))
     },
-    [activeObject, commitHistory, refreshTreatmentStack],
+    [activeObject, commitTreatmentHistory, refreshTreatmentStack],
   )
 
   const toggleTreatment = useCallback(
@@ -139,20 +152,29 @@ export function useTreatments({
       if (!object) return
       const treatment = readTreatments(object).find((item) => item.id === treatmentId)
       if (!treatment) return
+      const objectId = String(object.get('id') ?? '')
+      const before = JSON.stringify(readTreatments(object))
       updateTreatment(object, treatmentId, { enabled: !treatment.enabled })
       await refreshTreatmentStack(object)
-      commitHistory(treatment.enabled ? 'Bypassed treatment' : 'Enabled treatment')
+      commitTreatmentHistory(
+        objectId,
+        treatment.enabled ? 'Bypassed treatment' : 'Enabled treatment',
+        before,
+        JSON.stringify(readTreatments(object)),
+      )
     },
-    [activeObject, commitHistory, refreshTreatmentStack],
+    [activeObject, commitTreatmentHistory, refreshTreatmentStack],
   )
 
   const removeLayerTreatment = useCallback(
     async (object: FabricObject, treatmentId: string) => {
+      const objectId = String(object.get('id') ?? '')
+      const before = JSON.stringify(readTreatments(object))
       removeTreatment(object, treatmentId)
       await refreshTreatmentStack(object)
-      commitHistory('Removed treatment')
+      commitTreatmentHistory(objectId, 'Removed treatment', before, JSON.stringify(readTreatments(object)))
     },
-    [commitHistory, refreshTreatmentStack],
+    [commitTreatmentHistory, refreshTreatmentStack],
   )
 
   const rerollPosterTreatment = useCallback(

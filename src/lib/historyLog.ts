@@ -10,6 +10,11 @@ export type HistoryState = {
   cursor: number
 }
 
+export type HistoryRestoreAction =
+  | { kind: 'snapshot'; data: string; label: string }
+  | { kind: 'treatment'; objectId: string; treatmentsJson: string; label: string }
+  | null
+
 const MAX_OPS = 200
 const SNAPSHOT_EVERY = 20
 
@@ -23,9 +28,17 @@ export function pushHistoryOp(state: HistoryState, op: HistoryOp): HistoryState 
   return { ops: next, cursor: next.length - 1 }
 }
 
+export function opsSinceLastSnapshot(state: HistoryState): number {
+  for (let index = state.cursor; index >= 0; index -= 1) {
+    if (state.ops[index]?.type === 'snapshot') {
+      return state.cursor - index
+    }
+  }
+  return state.cursor + 1
+}
+
 export function shouldSnapshot(state: HistoryState): boolean {
-  const sinceSnapshot = state.ops.slice(state.cursor).filter((op) => op.type === 'snapshot').length
-  return state.ops.length === 0 || sinceSnapshot >= SNAPSHOT_EVERY
+  return state.ops.length === 0 || opsSinceLastSnapshot(state) >= SNAPSHOT_EVERY
 }
 
 export function canUndo(state: HistoryState): boolean {
@@ -36,10 +49,18 @@ export function canRedo(state: HistoryState): boolean {
   return state.cursor < state.ops.length - 1
 }
 
+export function snapshotAtCursor(state: HistoryState): string | null {
+  for (let index = state.cursor; index >= 0; index -= 1) {
+    const op = state.ops[index]
+    if (op?.type === 'snapshot') return op.data
+  }
+  return null
+}
+
 export function undoState(state: HistoryState): { state: HistoryState; op: HistoryOp | null } {
   if (!canUndo(state)) return { state, op: null }
   const cursor = state.cursor - 1
-  return { state: { ...state, cursor }, op: state.ops[cursor] ?? null }
+  return { state: { ...state, cursor }, op: state.ops[state.cursor] ?? null }
 }
 
 export function redoState(state: HistoryState): { state: HistoryState; op: HistoryOp | null } {
@@ -49,11 +70,7 @@ export function redoState(state: HistoryState): { state: HistoryState; op: Histo
 }
 
 export function snapshotForUndo(state: HistoryState): string | null {
-  for (let index = state.cursor; index >= 0; index -= 1) {
-    const op = state.ops[index]
-    if (op?.type === 'snapshot') return op.data
-  }
-  return null
+  return snapshotAtCursor(state)
 }
 
 export function snapshotForRedo(state: HistoryState): string | null {
@@ -62,4 +79,36 @@ export function snapshotForRedo(state: HistoryState): string | null {
     if (op?.type === 'snapshot') return op.data
   }
   return null
+}
+
+export function restoreActionForUndo(state: HistoryState): HistoryRestoreAction {
+  if (!canUndo(state)) return null
+  const op = state.ops[state.cursor]
+  if (!op) return null
+  if (op.type === 'treatment') {
+    return {
+      kind: 'treatment',
+      objectId: op.objectId,
+      treatmentsJson: op.before,
+      label: `Undo: ${op.label}`,
+    }
+  }
+  const snapshot = snapshotForUndo({ ...state, cursor: state.cursor - 1 })
+  if (!snapshot) return null
+  return { kind: 'snapshot', data: snapshot, label: `Undo: ${op.label}` }
+}
+
+export function restoreActionForRedo(state: HistoryState): HistoryRestoreAction {
+  if (!canRedo(state)) return null
+  const op = state.ops[state.cursor + 1]
+  if (!op) return null
+  if (op.type === 'treatment') {
+    return {
+      kind: 'treatment',
+      objectId: op.objectId,
+      treatmentsJson: op.after,
+      label: `Redo: ${op.label}`,
+    }
+  }
+  return { kind: 'snapshot', data: op.data, label: `Redo: ${op.label}` }
 }

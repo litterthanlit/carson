@@ -16,6 +16,7 @@ export type SelectedState = {
   scaleY: number
   visible: boolean
   locked: boolean
+  thumbnail?: string | null
   fontFamily?: string
   fontSize?: number
   fontWeight?: string | number

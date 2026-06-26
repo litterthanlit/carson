@@ -370,6 +370,20 @@ input[type='color'] {
   padding-left: 16px;
 }
 
+.layer-thumb {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+.layer-thumb-empty {
+  display: inline-block;
+}
+
 .layer-row {
   display: flex;
   align-items: center;

@@ -6,14 +6,15 @@ export type LayerRow = {
   kind: string
   visible: boolean
   locked: boolean
+  thumbnail?: string | null
 }
 
 type LayersPanelProps = {
   layers: LayerRow[]
-  selectedId: string | null
+  selectedIds: string[]
   renamingLayerId: string | null
   dragLayerId: string | null
-  onSelect: (id: string) => void
+  onSelect: (id: string, additive: boolean) => void
   onToggleVisibility: (id: string) => void
   onToggleLock: (id: string) => void
   onRenameStart: (id: string) => void
@@ -25,7 +26,7 @@ type LayersPanelProps = {
 
 export function LayersPanel({
   layers,
-  selectedId,
+  selectedIds,
   renamingLayerId,
   dragLayerId,
   onSelect,
@@ -41,6 +42,8 @@ export function LayersPanel({
     return <p className="empty">No layers yet.</p>
   }
 
+  const selectedSet = new Set(selectedIds)
+
   return (
     <div className="layer-list" role="list" aria-label="Layers">
       {layers.map((layer) => (
@@ -49,7 +52,7 @@ export function LayersPanel({
           role="listitem"
           className={[
             'layer-row',
-            selectedId === layer.id ? 'active' : '',
+            selectedSet.has(layer.id) ? 'active' : '',
             dragLayerId === layer.id ? 'dragging' : '',
           ]
             .filter(Boolean)
@@ -65,7 +68,16 @@ export function LayersPanel({
           <button type="button" className="layer-grip" aria-label={`Reorder ${layer.name}`} tabIndex={-1}>
             <GripVertical size={13} />
           </button>
-          <button type="button" className="layer-select" onClick={() => onSelect(layer.id)}>
+          {layer.thumbnail ? (
+            <img className="layer-thumb" src={layer.thumbnail} alt="" aria-hidden="true" />
+          ) : (
+            <span className="layer-thumb layer-thumb-empty" aria-hidden="true" />
+          )}
+          <button
+            type="button"
+            className="layer-select"
+            onClick={(event) => onSelect(layer.id, event.shiftKey || event.metaKey || event.ctrlKey)}
+          >
             {renamingLayerId === layer.id ? (
               <input
                 autoFocus

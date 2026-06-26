@@ -70,9 +70,10 @@ export type InspectorPanelProps = {
   onRemoveLayerTreatment: (object: FabricObject, id: string) => void
   onSaveTreatmentStackAsComponent: () => void
   layers: SelectedState[]
+  selectedLayerIds: string[]
   renamingLayerId: string | null
   dragLayerId: string | null
-  onSelectLayer: (id: string) => void
+  onSelectLayer: (id: string, additive?: boolean) => void
   onToggleLayerVisibility: (id: string) => void
   onToggleLayerLock: (id: string) => void
   onRenameLayerStart: (id: string) => void
@@ -83,6 +84,8 @@ export type InspectorPanelProps = {
   selectedIsText: boolean
   selectedIsImage: boolean
   selectedIsPath: boolean
+  pathEditMode: boolean
+  onTogglePathEditMode: () => void
   customFonts: string[]
   fontInputRef: RefObject<HTMLInputElement | null>
   onFontFileChange: (file: File) => void
@@ -175,6 +178,7 @@ export function InspectorPanel({
   onRemoveLayerTreatment,
   onSaveTreatmentStackAsComponent,
   layers,
+  selectedLayerIds,
   renamingLayerId,
   dragLayerId,
   onSelectLayer,
@@ -188,6 +192,8 @@ export function InspectorPanel({
   selectedIsText,
   selectedIsImage,
   selectedIsPath,
+  pathEditMode,
+  onTogglePathEditMode,
   customFonts,
   fontInputRef,
   onFontFileChange,
@@ -443,7 +449,7 @@ export function InspectorPanel({
           <h2>Layers</h2>
           <LayersPanel
             layers={layers}
-            selectedId={selected?.id ?? null}
+            selectedIds={selectedLayerIds}
             renamingLayerId={renamingLayerId}
             dragLayerId={dragLayerId}
             onSelect={onSelectLayer}
@@ -741,6 +747,15 @@ export function InspectorPanel({
                 ) : null}
                 {selectedIsPath ? (
                   <>
+                    <div className="button-row">
+                      <button
+                        type="button"
+                        className={pathEditMode ? 'active' : undefined}
+                        onClick={onTogglePathEditMode}
+                      >
+                        {pathEditMode ? 'Done editing points' : 'Edit points'}
+                      </button>
+                    </div>
                     <label>
                       Stroke color
                       <input
