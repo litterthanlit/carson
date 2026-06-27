@@ -1,7 +1,7 @@
 # Carson — Agent Handoff
 
 **Repo:** https://github.com/litterthanlit/carson  
-**Branch:** `main` · latest: `00c5adb`  
+**Branch:** `main` · latest: `db3643e`  
 **Read first:** [`docs/REIMAGINED.md`](./REIMAGINED.md) (vision + roadmap — source of truth)
 
 ---
@@ -12,19 +12,20 @@ Local poster editor — React 19 + Fabric.js 7. Moat = seeded, non-destructive c
 
 ---
 
-## Shipped since last major handoff
+## Shipped (current main)
 
 | Area | Status |
 |------|--------|
-| **App split** | `LeftRail.tsx`, `InspectorPanel.tsx`, `useTreatments.ts`, `types/editor.ts`, `ScopeBadge.tsx` — `App.tsx` ~2,688 lines (was ~3,780) |
+| **App split** | `LeftRail.tsx`, `InspectorPanel.tsx`, `useTreatments.ts`, `useEditorHistory.ts`, `useCanvasEvents.ts`, `types/editor.ts`, `ScopeBadge.tsx` — **`App.tsx` ~2,695 lines** (was ~3,780) |
 | **Naming** | Dive vocabulary removed (`applyColdWashImage`, `addDiagonalTexture`, `addRedEchoType`) |
 | **Filter Gallery** | `FilterGalleryModal` + `filterGallery.ts` / `filterPreview.ts` — live preview, wired from LeftRail + Cmd+K |
 | **Fundamentals** | Shortcuts, zoom/pan, IndexedDB autosave, snapping, layers (reorder/hide/lock/rename), scope badges |
 | **Treatments** | Non-destructive stacks: xerox, decay, distress, scatter, slice, crop, tear, bad-crop, glyph-break — chip UI + reorder/reroll/bypass |
-| **History** | `useEditorHistory` hook — op-log undo/redo; incremental treatment ops between snapshots |
-| **Typography / color / vectors** | Google Fonts + upload, weight/width sliders, legibility readout, text-on-path, gradients, 16 blend modes, ellipse/line/star/pen + **path point editing** |
-| **Masking (partial)** | Clip-to-shape, brush mask, scrape poster treatment (`destination-out` eraser bands) |
-| **Layers** | Thumbnails + Shift/Cmd multi-select in Layers panel |
+| **History** | `useEditorHistory` — full-canvas snapshot undo + **incremental layer-treatment ops** between snapshots (`historyLog.ts`) |
+| **Typography / color / vectors** | Google Fonts + upload, weight/width sliders, legibility readout, text-on-path, gradients, 16 blend modes, ellipse/line/star/pen |
+| **Path editing (v1)** | Inspector **Edit points** on paths — drag anchors + bezier handles (`pathEditing.ts`) |
+| **Masking** | Clip-to-shape, brush mask (ellipse clip), scrape poster treatment (`destination-out` eraser bands in `scrapeTreatment.ts`) |
+| **Layers v2** | Thumbnails (`layerThumbnail.ts`) + Shift/Cmd/Ctrl multi-select in `LayersPanel.tsx` |
 | **Print (partial)** | CMYK soft-proof, bleed/trim guides, PDF+TIFF, registration marks, custom size to 10k px |
 | **IA** | Tabbed inspector, Instruments toggle, Cmd+K, variants, multi-artboard, onboarding modal |
 
@@ -32,44 +33,110 @@ Local poster editor — React 19 + Fabric.js 7. Moat = seeded, non-destructive c
 
 ---
 
+## What landed in `db3643e` (last session)
+
+1. **`useEditorHistory`** — extracted from `App.tsx`; owns `historyLogRef`, `restoringRef`, `commitHistory`, `undoAsync`, `redo`, `resetHistory`
+2. **Incremental treatment history** — layer treatment reroll/bypass/reorder/remove use `commitTreatmentHistory` (lightweight ops); full snapshots every 20 ops via `shouldSnapshot`
+3. **True scrape eraser** — white overlay bands replaced with `globalCompositeOperation: 'destination-out'`
+4. **Layer thumbnails + multi-select** — canvas sync via `selectedLayerIds` + `ActiveSelection`
+5. **Path point editing** — overlay handles in `App.tsx` path-edit `useEffect`; math in `pathEditing.ts`
+
+---
+
 ## Architecture
 
 ```
-useEditorHistory()                   // commitHistory, undo/redo, treatment ops
-refreshTreatmentStack()              // useTreatments → App.tsx
-  → renderTreatmentStackOnCanvas()   // treatments.ts
-      → applySyncTreatmentStack()
-      → render*Treatment()
+useEditorHistory()                     // hooks/useEditorHistory.ts
+  commitHistory()        → snapshot op (full canvas JSON)
+  commitTreatmentHistory → treatment op OR snapshot if shouldSnapshot
+  undo/redo              → restoreActionForUndo/Redo → snapshot load OR treatment JSON restore
 
-refreshPosterTreatments()            // useTreatments
-  → renderPosterTreatments()         // posterTreatments.ts → scrapeTreatment.ts
+useTreatments()                        // hooks/useTreatments.ts
+  refreshTreatmentStack()              → renderTreatmentStackOnCanvas() in treatments.ts
+  refreshPosterTreatments()            → renderPosterTreatments() → scrapeTreatment.ts
+  reconcileArtifactTreatments()        → re-render slice/crop/tear/bad-crop/glyph artifacts after load
 ```
 
-After `loadFromJSON`: **`reconcileArtifactTreatments()`** + **`refreshPosterTreatments()`**
+**After `loadFromJSON`:** always call **`reconcileArtifactTreatments()`** + **`refreshPosterTreatments()`**
 
-**Serialize keys:** `HISTORY_PROPS` in `editorConstants.ts`
+**Serialize keys:** `HISTORY_PROPS` in `editorConstants.ts` (includes `treatments`, `scrapeTreatmentId`, `scrapeFragment`, etc.)
+
+### Ref pattern (important)
+
+`App.tsx` wires hooks through refs to avoid circular deps:
+
+- `commitHistoryRef` / `commitTreatmentHistoryRef` — set by `useEditorHistory`
+- `refreshTreatmentStackRef` / `reconcileArtifactTreatmentsRef` / `refreshPosterTreatmentsRef` — set after `useTreatments`
+- `onTreatmentRestore` in history hook: `writeTreatments(object, JSON)` + `refreshTreatmentStack(object)`
+
+Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted — `useEditorHistory` can reference them before their line numbers in the file.
+
+---
+
+## Key files (new / recently touched)
+
+| File | Role |
+|------|------|
+| `src/hooks/useEditorHistory.ts` | History state, snapshot + treatment undo/redo |
+| `src/hooks/useTreatments.ts` | Treatment stack refresh, poster treatments, `commitTreatmentHistory` for layer ops |
+| `src/lib/historyLog.ts` | Op types, `shouldSnapshot`, `restoreActionForUndo/Redo` |
+| `src/lib/pathEditing.ts` | Anchor/control extraction, `movePathPoint`, hit testing |
+| `src/lib/layerThumbnail.ts` | Per-object `toDataURL` thumb for layers panel |
+| `src/lib/scrapeTreatment.ts` | Poster-wide `destination-out` scrape bands |
+| `src/components/LayersPanel.tsx` | Thumbs, multi-select, drag reorder |
+| `src/hooks/useCanvasEvents.ts` | Fabric selection, snap, pen path, grid/print overlay listeners |
+| `src/App.tsx` | Still monolith for chaos actions, export, variants, path-edit overlay |
+
+---
+
+## Known gaps & gotchas
+
+### History
+- **Poster treatments** (scrape on artboard / `documentMeta`) still use full `commitHistory` snapshots — not incremental yet
+- Incremental ops only cover **layer** `treatments` JSON on Fabric objects (`useTreatments` handlers)
+- `restoringRef` blocks history commits during `loadFromJSON` — used in `loadProject`, variant restore, merge, etc.
+
+### Path editing (v1)
+- Works on `path` type only (pen strokes); `line` shows stroke controls but not point editor
+- No add/delete point, close path, or handle snapping yet
+- Path-edit mode disables canvas selection (`pathEditMode` effect); turns off pen mode when enabled
+- Coordinate math uses `path.pathOffset` + `util.invertTransform` — test with rotated/scaled paths before extending
+
+### Scrape eraser
+- `destination-out` punches through rendered pixels to canvas background — underlying objects are **not** deleted (non-destructive visually)
+- Scrape fragments tagged `scrapeFragment` / `scrapeTreatmentId` — excluded from normal layer semantics; reconciled via `refreshPosterTreatments`
+
+### Layers
+- Thumbnails regenerate on every `syncLayers()` — fine for now; may need debounce/cache if perf issues on large docs
+- Multi-select: Shift/Cmd/Ctrl in layers panel; canvas marquee selection also updates `selectedLayerIds`
+
+### Code debt (unchanged)
+- `applyPosterStyle` compounds on repeat
+- Export may mutate live canvas background non-atomically
+- `registerCanvasEvents` + ~40 chaos handlers still live in `App.tsx`
 
 ---
 
 ## Next session — recommended order
 
-1. **Further App split** — extract canvas event registration and chaos handlers from `App.tsx`
-2. **Horizon 1 polish** — canvas Tab-cycling, font dropdown in own face, double-click layer → zoom-to-layer
-3. **Poster treatment incremental history** — lightweight undo for scrape reroll/bypass (documentMeta ops)
-4. **Vector booleans** — union/subtract/intersect (Horizon 2)
-5. **Pen tool polish** — add/delete points, close path, snap handles
+1. ~~**Extract `useCanvasEvents` or `registerCanvasEvents`**~~ ✓
+2. **Poster treatment incremental history** — `documentMeta` artboard `posterTreatments` ops (mirror layer-treatment pattern in `historyLog.ts`)
+3. **Horizon 1 polish**
+   - Tab-cycles selection on canvas
+   - Font dropdown in its own inspector face
+   - Double-click layer → zoom-to-layer
+4. **Pen tool polish** — add/delete points, close path, snap handles; consider moving path-edit overlay out of `App.tsx`
+5. **Vector booleans** — union/subtract/intersect (Horizon 2; needs Fabric path API research)
 
 ---
 
 ## Still open from REIMAGINED.md (high level)
 
-- **Horizon 1 polish:** canvas Tab-cycling, font dropdown in own face, double-click layer → zoom-to-layer
 - **Horizon 2 gaps:** OpenType/styles, vector booleans, blend-mode hover preview, component overrides, tiled/CMYK/SVG export, editorial layout, layer groups
 - **§9 UX vision:** six-tool toolbar, floating treatment chips, global Tension dial, scope hover preview, exploration trail replacing status line
 - **Horizon 3:** cloud/CRDT, Serendipity Engine, Press Check, AI assistant, WebGPU, marketplace, native shell
-- **Code debt:** `applyPosterStyle` compounds on repeat; export may mutate live canvas background non-atomically
 
-REIMAGINED is **not done** — it's the 18-month vision. Carson is ~85% Horizon 1, ~50–60% Horizon 2, 0% Horizon 3.
+REIMAGINED is **not done** — it's the 18-month vision. Carson is ~90% Horizon 1, ~55–65% Horizon 2, 0% Horizon 3.
 
 ---
 
@@ -80,10 +147,25 @@ cd "/Users/niki_g/Local Files/workflow/Projects/carson"
 npm test && npm run build && npm run dev
 ```
 
-**Regression template (any treatment):** apply → chip in Treatments → re-roll → bypass → remove → source editable → Cmd+Z → save/reload reconciles.
+### Regression templates
 
-**Constraints:** Don't commit unless asked. Don't commit `.codex/`. Features need a user-facing path to be "complete."
+**Any layer treatment:** apply → chip in Treatments → re-roll → bypass → remove → source editable → Cmd+Z (fast undo between snapshots) → save/reload reconciles
+
+**Scrape:** LeftRail → White scrapes → content erases to poster background → chip in poster treatments → re-roll/bypass → Cmd+Z
+
+**Layers:** thumbnails visible → Shift+click multi-select → delete/align works on selection
+
+**Path edit:** pen stroke → select → Inspector → Edit points → drag red/cyan handles → Cmd+Z
 
 ---
 
-*Updated 2026-06-26*
+## Constraints
+
+- Don't commit unless asked
+- Don't commit `.codex/`
+- Features need a **user-facing path** to be "complete" (backend-only doesn't count)
+- Read `docs/REIMAGINED.md` before claiming a feature is done
+
+---
+
+*Updated 2026-06-26 · main @ db3643e*
