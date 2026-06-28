@@ -604,6 +604,13 @@ function App() {
 
       if (isTypingContext(event.target)) return
 
+      const canvasFocused = document.activeElement?.closest('.canvas-scroll') != null
+      if (event.key === 'Tab' && canvasFocused) {
+        event.preventDefault()
+        cycleCanvasSelection(event.shiftKey)
+        return
+      }
+
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
         actions.delete()
@@ -1447,6 +1454,68 @@ function App() {
     if (direction === 'front') canvas.bringObjectToFront(object)
     else canvas.sendObjectToBack(object)
     commitHistory(direction === 'front' ? 'Moved layer to front' : 'Moved layer to back')
+  }
+
+  function getSelectableLayerObjects(): FabricObject[] {
+    const canvas = canvasRef.current
+    if (!canvas) return []
+    return canvas
+      .getObjects()
+      .filter((object) => {
+        if (object.visible === false || object.selectable === false || object.evented === false) return false
+        if (readObjectProp(object, 'scrapeFragment')) return false
+        return true
+      })
+      .reverse()
+  }
+
+  function cycleCanvasSelection(reverse = false) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const objects = getSelectableLayerObjects()
+    if (objects.length === 0) return
+
+    const active = canvas.getActiveObject()
+    let currentIndex = -1
+    if (active?.type === 'activeselection') {
+      const ids = new Set(canvas.getActiveObjects().map((object) => String(readObjectProp(object, 'id') ?? '')))
+      currentIndex = objects.findIndex((object) => ids.has(String(readObjectProp(object, 'id') ?? '')))
+    } else if (active) {
+      currentIndex = objects.findIndex((object) => readObjectProp(object, 'id') === readObjectProp(active, 'id'))
+    }
+
+    const nextIndex =
+      currentIndex < 0 ? 0 : reverse ? (currentIndex - 1 + objects.length) % objects.length : (currentIndex + 1) % objects.length
+    const next = objects[nextIndex]
+    if (!next) return
+    canvas.setActiveObject(next)
+    canvas.requestRenderAll()
+    syncSelected()
+    setStatus(`Selected ${String(readObjectProp(next, 'name') ?? 'layer')}`)
+  }
+
+  function zoomToLayer(id: string) {
+    const canvas = canvasRef.current
+    const object = findObjectById(id)
+    const scroller = scrollRef.current
+    if (!canvas || !object || !scroller) return
+
+    selectLayer(id)
+    object.setCoords()
+    const bounds = object.getBoundingRect()
+    const padding = 48
+    const viewW = Math.max(160, scroller.clientWidth - padding * 2)
+    const viewH = Math.max(160, scroller.clientHeight - padding * 2)
+    const nextScale = clampZoom(Math.min(viewW / Math.max(bounds.width, 1), viewH / Math.max(bounds.height, 1), 4))
+    setZoom(nextScale)
+
+    window.requestAnimationFrame(() => {
+      const centerX = (bounds.left + bounds.width / 2) * nextScale
+      const centerY = (bounds.top + bounds.height / 2) * nextScale
+      scroller.scrollLeft = Math.max(0, centerX - scroller.clientWidth / 2)
+      scroller.scrollTop = Math.max(0, centerY - scroller.clientHeight / 2)
+    })
+    setStatus(`Zoomed to ${String(readObjectProp(object, 'name') ?? 'layer')}`)
   }
 
   function selectLayer(id: string, additive = false) {
@@ -2609,6 +2678,7 @@ function App() {
             if (dragLayerId && dragLayerId !== id) reorderLayer(dragLayerId, id)
           }}
           onDragLayerEnd={() => setDragLayerId(null)}
+          onZoomToLayer={zoomToLayer}
           selectedIsText={selectedIsText}
           selectedIsImage={selectedIsImage}
           selectedIsPath={selectedIsPath}

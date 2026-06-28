@@ -19,7 +19,6 @@ import type { DocumentMeta } from '../lib/document'
 import type { StoredAsset } from '../lib/assets'
 import type { StoredProject } from '../lib/storage'
 import type { GridOverlay } from '../lib/grid'
-import { GOOGLE_FONTS } from '../lib/fonts'
 import { BLEND_MODES, FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
 import { legibilityBand } from '../lib/color'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
@@ -32,6 +31,7 @@ import type {
   StrokeDashPreset,
 } from '../types/editor'
 import { LayersPanel } from './LayersPanel'
+import { FontPicker } from './FontPicker'
 import { Slider } from './Slider'
 import { ScopeSel } from './ScopeBadge'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
@@ -81,6 +81,7 @@ export type InspectorPanelProps = {
   onDragLayerStart: (id: string) => void
   onDragLayerOver: (id: string) => void
   onDragLayerEnd: () => void
+  onZoomToLayer: (id: string) => void
   selectedIsText: boolean
   selectedIsImage: boolean
   selectedIsPath: boolean
@@ -189,6 +190,7 @@ export function InspectorPanel({
   onDragLayerStart,
   onDragLayerOver,
   onDragLayerEnd,
+  onZoomToLayer,
   selectedIsText,
   selectedIsImage,
   selectedIsPath,
@@ -460,6 +462,7 @@ export function InspectorPanel({
             onDragStart={onDragLayerStart}
             onDragOver={onDragLayerOver}
             onDragEnd={onDragLayerEnd}
+            onZoomToLayer={onZoomToLayer}
           />
         </div>
       ) : null}
@@ -501,104 +504,85 @@ export function InspectorPanel({
                         onBlur={() => onFinalizeActive('Edited text')}
                       />
                     </label>
-                    <label>
-                      Font
-                      <select
-                        value={selected.fontFamily ?? FONT_STACKS[0]}
-                        onChange={(event) => {
-                          void onLoadGoogleFont(event.target.value).finally(() => {
-                            onUpdateActive({ fontFamily: event.target.value })
+                    <div className="typography-face panel-section nested">
+                      <div className="panel-title">
+                        <h3>Typography</h3>
+                      </div>
+                      <label className="font-picker-label">
+                        Typeface
+                        <FontPicker
+                          value={selected.fontFamily ?? FONT_STACKS[0]}
+                          customFonts={customFonts}
+                          onLoadGoogleFont={onLoadGoogleFont}
+                          onChange={(family) => {
+                            onUpdateActive({ fontFamily: family })
                             onFinalizeActive('Changed font')
-                          })
+                          }}
+                        />
+                      </label>
+                      <button type="button" title="Upload a font file (.ttf, .otf, .woff)" onClick={() => fontInputRef.current?.click()}>
+                        Upload font
+                      </button>
+                      <input
+                        ref={fontInputRef}
+                        className="visually-hidden"
+                        type="file"
+                        accept=".ttf,.otf,.woff,.woff2"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0]
+                          if (file) onFontFileChange(file)
+                          event.currentTarget.value = ''
                         }}
-                      >
-                        <optgroup label="System">
-                          {FONT_STACKS.map((font) => (
-                            <option key={font} value={font} style={{ fontFamily: font }}>
-                              {font}
-                            </option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Google Fonts">
-                          {GOOGLE_FONTS.map((font) => (
-                            <option key={font.family} value={font.family} style={{ fontFamily: font.family }}>
-                              {font.family}
-                            </option>
-                          ))}
-                        </optgroup>
-                        {customFonts.length > 0 ? (
-                          <optgroup label="Uploaded">
-                            {customFonts.map((font) => (
-                              <option key={font} value={font} style={{ fontFamily: font }}>
-                                {font}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ) : null}
-                      </select>
-                    </label>
-                    <button type="button" title="Upload a font file" onClick={() => fontInputRef.current?.click()}>
-                      Upload font
-                    </button>
-                    <input
-                      ref={fontInputRef}
-                      className="visually-hidden"
-                      type="file"
-                      accept=".ttf,.otf,.woff,.woff2"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0]
-                        if (file) onFontFileChange(file)
-                        event.currentTarget.value = ''
-                      }}
-                    />
-                    <Slider
-                      label="Weight axis"
-                      value={Number(selected.fontWeight) || 700}
-                      min={100}
-                      max={900}
-                      onChange={(value) => onUpdateActive({ fontWeight: value })}
-                      onCommit={() => onFinalizeActive('Changed weight')}
-                    />
-                    <Slider
-                      label="Width axis"
-                      value={fontStretch}
-                      min={50}
-                      max={200}
-                      format={formatPercent}
-                      onChange={(value) => {
-                        onFontStretchChange(value)
-                        onUpdateActive({ scaleX: value / 100 })
-                      }}
-                      onCommit={() => onFinalizeActive('Changed width axis')}
-                    />
-                    <p className="hint legibility-readout">
-                      Legibility: {legibilityBand(textContrast)} · contrast {textContrast ? textContrast.toFixed(1) : '—'}:1
-                    </p>
-                    <Slider
-                      label="Size"
-                      value={selected.fontSize ?? 80}
-                      min={12}
-                      max={360}
-                      onChange={(value) => onUpdateActive({ fontSize: value })}
-                      onCommit={() => onFinalizeActive('Changed type size')}
-                    />
-                    <Slider
-                      label="Spacing"
-                      value={selected.charSpacing ?? 0}
-                      min={-120}
-                      max={260}
-                      onChange={(value) => onUpdateActive({ charSpacing: value })}
-                      onCommit={() => onFinalizeActive('Changed spacing')}
-                    />
-                    <Slider
-                      label="Line"
-                      value={Math.round((selected.lineHeight ?? 1) * 100)}
-                      min={50}
-                      max={180}
-                      format={formatLineHeight}
-                      onChange={(value) => onUpdateActive({ lineHeight: value / 100 })}
-                      onCommit={() => onFinalizeActive('Changed line height')}
-                    />
+                      />
+                      <Slider
+                        label="Weight axis"
+                        value={Number(selected.fontWeight) || 700}
+                        min={100}
+                        max={900}
+                        onChange={(value) => onUpdateActive({ fontWeight: value })}
+                        onCommit={() => onFinalizeActive('Changed weight')}
+                      />
+                      <Slider
+                        label="Width axis"
+                        value={fontStretch}
+                        min={50}
+                        max={200}
+                        format={formatPercent}
+                        onChange={(value) => {
+                          onFontStretchChange(value)
+                          onUpdateActive({ scaleX: value / 100 })
+                        }}
+                        onCommit={() => onFinalizeActive('Changed width axis')}
+                      />
+                      <p className="hint legibility-readout">
+                        Legibility: {legibilityBand(textContrast)} · contrast {textContrast ? textContrast.toFixed(1) : '—'}:1
+                      </p>
+                      <Slider
+                        label="Size"
+                        value={selected.fontSize ?? 80}
+                        min={12}
+                        max={360}
+                        onChange={(value) => onUpdateActive({ fontSize: value })}
+                        onCommit={() => onFinalizeActive('Changed type size')}
+                      />
+                      <Slider
+                        label="Spacing"
+                        value={selected.charSpacing ?? 0}
+                        min={-120}
+                        max={260}
+                        onChange={(value) => onUpdateActive({ charSpacing: value })}
+                        onCommit={() => onFinalizeActive('Changed spacing')}
+                      />
+                      <Slider
+                        label="Line"
+                        value={Math.round((selected.lineHeight ?? 1) * 100)}
+                        min={50}
+                        max={180}
+                        format={formatLineHeight}
+                        onChange={(value) => onUpdateActive({ lineHeight: value / 100 })}
+                        onCommit={() => onFinalizeActive('Changed line height')}
+                      />
+                    </div>
                   </>
                 ) : null}
 
@@ -858,6 +842,9 @@ export function InspectorPanel({
               </li>
               <li>
                 <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant
+              </li>
+              <li>
+                <kbd>Tab</kbd> Cycle layers (canvas focused) · <kbd>Shift+Tab</kbd> Reverse
               </li>
               <li>
                 <kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10

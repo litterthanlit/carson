@@ -725,6 +725,11 @@ input[type='color'] {
   place-items: center;
   padding: 8px 8px 16px;
   border-radius: var(--radius-xl);
+  outline: none;
+}
+
+.canvas-scroll:focus-visible {
+  box-shadow: inset 0 0 0 2px #52525b;
 }
 
 .canvas-shell {
@@ -1306,4 +1311,101 @@ input[type='color'] {
   .filter-gallery-preview {
     min-height: 240px;
   }
+}
+
+.typography-face.nested {
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgb(255 255 255 / 0.35);
+}
+
+.typography-face .panel-title {
+  margin-bottom: 8px;
+}
+
+.typography-face .panel-title h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.font-picker-label {
+  display: grid;
+  gap: 6px;
+}
+
+.font-picker {
+  position: relative;
+}
+
+.font-picker-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--glass-bg-strong);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.font-picker-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.font-picker-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.font-picker-group + .font-picker-group {
+  border-top: 1px solid var(--border);
+}
+
+.font-picker-group-label {
+  margin: 0;
+  padding: 8px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.font-picker-option {
+  width: 100%;
+  display: block;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.font-picker-option:hover,
+.font-picker-option.active {
+  background: var(--accent-soft);
 }

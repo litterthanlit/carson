@@ -125,7 +125,13 @@ export function EditorCanvas({
       <div
         ref={scrollRef}
         className={isPanMode ? 'canvas-scroll panning' : 'canvas-scroll'}
-        onMouseDown={onPanMouseDown}
+        tabIndex={0}
+        role="application"
+        aria-label="Poster canvas workspace. Tab cycles layers. Arrow keys nudge the selection."
+        onMouseDown={(event) => {
+          scrollRef.current?.focus({ preventScroll: true })
+          onPanMouseDown(event)
+        }}
         onMouseMove={onPanMouseMove}
         onMouseUp={onPanMouseUp}
         onMouseLeave={onPanMouseUp}

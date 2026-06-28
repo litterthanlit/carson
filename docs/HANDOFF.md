@@ -1,7 +1,7 @@
 # Carson — Agent Handoff
 
 **Repo:** https://github.com/litterthanlit/carson  
-**Branch:** `main` · latest: `db3643e`  
+**Branch:** `main` · latest: `86b4bb5`  
 **Read first:** [`docs/REIMAGINED.md`](./REIMAGINED.md) (vision + roadmap — source of truth)
 
 ---
@@ -28,12 +28,20 @@ Local poster editor — React 19 + Fabric.js 7. Moat = seeded, non-destructive c
 | **Layers v2** | Thumbnails (`layerThumbnail.ts`) + Shift/Cmd/Ctrl multi-select in `LayersPanel.tsx` |
 | **Print (partial)** | CMYK soft-proof, bleed/trim guides, PDF+TIFF, registration marks, custom size to 10k px |
 | **IA** | Tabbed inspector, Instruments toggle, Cmd+K, variants, multi-artboard, onboarding modal |
+| **Horizon 1** | **Complete** — Tab-cycle layers, FontPicker face, zoom-to-layer, a11y contrast + canvas focus, tooltips |
 
 **64 tests** · `npm test && npm run build`
 
 ---
 
-## What landed in `db3643e` (last session)
+## What landed in latest session (Horizon 1 finish)
+
+1. **`FontPicker`** — custom typeface menu; each font renders in its own face; dedicated Typography inspector card
+2. **Tab-cycle selection** — when canvas workspace is focused, Tab / Shift+Tab cycles layers
+3. **Zoom-to-layer** — double-click a layer row to fit and center it in view
+4. **Accessibility** — darker muted text (≥4.5:1), canvas `tabIndex` + focus ring, layer tooltips
+
+## Prior session (`db3643e`)
 
 1. **`useEditorHistory`** — extracted from `App.tsx`; owns `historyLogRef`, `restoringRef`, `commitHistory`, `undoAsync`, `redo`, `resetHistory`
 2. **Incremental treatment history** — layer treatment reroll/bypass/reorder/remove use `commitTreatmentHistory` (lightweight ops); full snapshots every 20 ops via `shouldSnapshot`
@@ -83,7 +91,8 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 | `src/lib/pathEditing.ts` | Anchor/control extraction, `movePathPoint`, hit testing |
 | `src/lib/layerThumbnail.ts` | Per-object `toDataURL` thumb for layers panel |
 | `src/lib/scrapeTreatment.ts` | Poster-wide `destination-out` scrape bands |
-| `src/components/LayersPanel.tsx` | Thumbs, multi-select, drag reorder |
+| `src/components/LayersPanel.tsx` | Thumbs, multi-select, drag reorder, double-click zoom |
+| `src/components/FontPicker.tsx` | Typeface picker with per-font preview |
 | `src/hooks/useCanvasEvents.ts` | Fabric selection, snap, pen path, grid/print overlay listeners |
 | `src/App.tsx` | Still monolith for chaos actions, export, variants, path-edit overlay |
 
@@ -113,20 +122,16 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 ### Code debt (unchanged)
 - `applyPosterStyle` compounds on repeat
 - Export may mutate live canvas background non-atomically
-- `registerCanvasEvents` + ~40 chaos handlers still live in `App.tsx`
+- ~40 chaos handlers still live in `App.tsx`
 
 ---
 
 ## Next session — recommended order
 
-1. ~~**Extract `useCanvasEvents` or `registerCanvasEvents`**~~ ✓
-2. **Poster treatment incremental history** — `documentMeta` artboard `posterTreatments` ops (mirror layer-treatment pattern in `historyLog.ts`)
-3. **Horizon 1 polish**
-   - Tab-cycles selection on canvas
-   - Font dropdown in its own inspector face
-   - Double-click layer → zoom-to-layer
-4. **Pen tool polish** — add/delete points, close path, snap handles; consider moving path-edit overlay out of `App.tsx`
-5. **Vector booleans** — union/subtract/intersect (Horizon 2; needs Fabric path API research)
+1. **Poster treatment incremental history** — `documentMeta` artboard `posterTreatments` ops (mirror layer-treatment pattern in `historyLog.ts`)
+2. **Pen tool polish** — add/delete points, close path, snap handles; move path-edit overlay out of `App.tsx`
+3. **Vector booleans** — union/subtract/intersect (Horizon 2; needs Fabric path API research)
+4. **Horizon 2 depth** — OpenType/styles, blend-mode hover preview, component overrides, tiled/CMYK/SVG export
 
 ---
 
@@ -136,7 +141,7 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 - **§9 UX vision:** six-tool toolbar, floating treatment chips, global Tension dial, scope hover preview, exploration trail replacing status line
 - **Horizon 3:** cloud/CRDT, Serendipity Engine, Press Check, AI assistant, WebGPU, marketplace, native shell
 
-REIMAGINED is **not done** — it's the 18-month vision. Carson is ~90% Horizon 1, ~55–65% Horizon 2, 0% Horizon 3.
+REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, ~55–65% Horizon 2, 0% Horizon 3.
 
 ---
 
@@ -168,4 +173,4 @@ npm test && npm run build && npm run dev
 
 ---
 
-*Updated 2026-06-26 · main @ db3643e*
+*Updated 2026-06-27 · main @ Horizon 1 complete*
