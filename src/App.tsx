@@ -70,7 +70,7 @@ import {
   ONBOARDING_KEY,
   ZOOM_LEVELS,
 } from './lib/editorConstants'
-import { addPosterTreatment, readPosterTreatments } from './lib/posterTreatments'
+import { addPosterTreatment, readPosterTreatments, writePosterTreatments } from './lib/posterTreatments'
 import {
   buildStarPoints,
   readFileAsDataUrl,
@@ -213,9 +213,12 @@ function App() {
   const commitTreatmentHistoryRef = useRef<
     (objectId: string, label: string, before: string, after: string) => void
   >(() => {})
+  const commitPosterTreatmentHistoryRef = useRef<
+    (artboardId: string, label: string, before: string, after: string) => void
+  >(() => {})
   const refreshTreatmentStackRef = useRef<(object?: FabricObject | null) => Promise<void>>(async () => {})
   const reconcileArtifactTreatmentsRef = useRef<() => Promise<void>>(async () => {})
-  const refreshPosterTreatmentsRef = useRef<() => Promise<void>>(async () => {})
+  const refreshPosterTreatmentsRef = useRef<(treatmentsOverride?: Treatment[]) => Promise<void>>(async () => {})
   const pathEditDragRef = useRef<{ point: PathAnchorPoint; path: Path } | null>(null)
   const activeObjectRef = useRef<() => FabricObject | null>(() => null)
   const tagObjectRef = useRef<(object: FabricObject, kind: LayerKind, name: string) => void>(() => {})
@@ -238,8 +241,8 @@ function App() {
     setDocumentMeta,
     gridOverlay,
     poster,
-    commitHistoryRef,
     commitTreatmentHistoryRef,
+    commitPosterTreatmentHistoryRef,
     activeObjectRef,
     tagObjectRef,
   })
@@ -257,6 +260,7 @@ function App() {
     captureStyleBaseline,
     commitHistoryRef,
     commitTreatmentHistoryRef,
+    commitPosterTreatmentHistoryRef,
     onAfterRestore: async () => {
       await reconcileArtifactTreatmentsRef.current()
       await refreshPosterTreatmentsRef.current()
@@ -267,6 +271,19 @@ function App() {
       if (!object) return
       writeTreatments(object, JSON.parse(treatmentsJson) as Treatment[])
       await refreshTreatmentStackRef.current(object)
+    },
+    onPosterTreatmentRestore: async (artboardId, treatmentsJson) => {
+      const treatments = JSON.parse(treatmentsJson) as Treatment[]
+      setDocumentMeta((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          artboards: prev.artboards.map((item) =>
+            item.id === artboardId ? writePosterTreatments(item, treatments) : item,
+          ),
+        }
+      })
+      await refreshPosterTreatmentsRef.current(treatments)
     },
   })
 

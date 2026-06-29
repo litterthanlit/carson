@@ -20,9 +20,13 @@ type UseEditorHistoryOptions = {
   captureStyleBaseline: () => void
   onAfterRestore: () => Promise<void>
   onTreatmentRestore: (objectId: string, treatmentsJson: string) => Promise<void>
+  onPosterTreatmentRestore: (artboardId: string, treatmentsJson: string) => Promise<void>
   commitHistoryRef: RefObject<(message: string) => void>
   commitTreatmentHistoryRef: RefObject<
     (objectId: string, label: string, before: string, after: string) => void
+  >
+  commitPosterTreatmentHistoryRef: RefObject<
+    (artboardId: string, label: string, before: string, after: string) => void
   >
 }
 
@@ -35,8 +39,10 @@ export function useEditorHistory({
   captureStyleBaseline,
   onAfterRestore,
   onTreatmentRestore,
+  onPosterTreatmentRestore,
   commitHistoryRef,
   commitTreatmentHistoryRef,
+  commitPosterTreatmentHistoryRef,
 }: UseEditorHistoryOptions) {
   const historyLogRef = useRef<HistoryState>(createHistoryState())
   const restoringRef = useRef(false)
@@ -64,6 +70,17 @@ export function useEditorHistory({
         await restoreSnapshot(action.data, action.label)
         return
       }
+      if (action.kind === 'posterTreatment') {
+        restoringRef.current = true
+        await onPosterTreatmentRestore(action.artboardId, action.treatmentsJson)
+        restoringRef.current = false
+        const canvas = canvasRef.current
+        canvas?.requestRenderAll()
+        syncSelected()
+        syncLayers()
+        setStatus(action.label)
+        return
+      }
       restoringRef.current = true
       await onTreatmentRestore(action.objectId, action.treatmentsJson)
       restoringRef.current = false
@@ -73,7 +90,7 @@ export function useEditorHistory({
       syncLayers()
       setStatus(action.label)
     },
-    [canvasRef, onTreatmentRestore, restoreSnapshot, setStatus, syncLayers, syncSelected],
+    [canvasRef, onPosterTreatmentRestore, onTreatmentRestore, restoreSnapshot, setStatus, syncLayers, syncSelected],
   )
 
   const commitHistory = useCallback(
@@ -133,6 +150,37 @@ export function useEditorHistory({
     [canvasRef, scheduleAutosave, setStatus, syncLayers, syncSelected],
   )
 
+  const commitPosterTreatmentHistory = useCallback(
+    (artboardId: string, label: string, before: string, after: string) => {
+      const canvas = canvasRef.current
+      if (!canvas || restoringRef.current) return
+      if (before === after) return
+
+      if (shouldSnapshot(historyLogRef.current)) {
+        const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
+        historyLogRef.current = pushHistoryOp(historyLogRef.current, {
+          type: 'snapshot',
+          label,
+          data: snapshot,
+        })
+      } else {
+        historyLogRef.current = pushHistoryOp(historyLogRef.current, {
+          type: 'posterTreatment',
+          label,
+          artboardId,
+          before,
+          after,
+        })
+      }
+
+      scheduleAutosave()
+      syncSelected()
+      syncLayers()
+      setStatus(label)
+    },
+    [canvasRef, scheduleAutosave, setStatus, syncLayers, syncSelected],
+  )
+
   const undoAsync = useCallback(async () => {
     const action = restoreActionForUndo(historyLogRef.current)
     if (!action) return
@@ -163,12 +211,14 @@ export function useEditorHistory({
 
   commitHistoryRef.current = commitHistory
   commitTreatmentHistoryRef.current = commitTreatmentHistory
+  commitPosterTreatmentHistoryRef.current = commitPosterTreatmentHistory
 
   return {
     historyLogRef,
     restoringRef,
     commitHistory,
     commitTreatmentHistory,
+    commitPosterTreatmentHistory,
     restoreSnapshot,
     undoAsync,
     redo,

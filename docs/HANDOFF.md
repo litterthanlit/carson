@@ -1,8 +1,9 @@
 # Carson — Agent Handoff
 
 **Repo:** https://github.com/litterthanlit/carson  
-**Branch:** `main` · latest: `86b4bb5`  
-**Read first:** [`docs/REIMAGINED.md`](./REIMAGINED.md) (vision + roadmap — source of truth)
+**Branch:** `main` · latest: `fbd2606`  
+**Read first:** [`docs/REIMAGINED.md`](./REIMAGINED.md) (vision + roadmap — source of truth)  
+**Horizon 2 work:** [`docs/HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md) ← **start here for next agent**
 
 ---
 
@@ -126,12 +127,11 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 
 ---
 
-## Next session — recommended order
+## Next session — Horizon 2
 
-1. **Poster treatment incremental history** — `documentMeta` artboard `posterTreatments` ops (mirror layer-treatment pattern in `historyLog.ts`)
-2. **Pen tool polish** — add/delete points, close path, snap handles; move path-edit overlay out of `App.tsx`
-3. **Vector booleans** — union/subtract/intersect (Horizon 2; needs Fabric path API research)
-4. **Horizon 2 depth** — OpenType/styles, blend-mode hover preview, component overrides, tiled/CMYK/SVG export
+See **[`docs/HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md)** for full scorecard, phases, and first-PR scope.
+
+**Quick start:** Poster treatment incremental history (`historyLog.ts` + `useTreatments.ts`).
 
 ---
 

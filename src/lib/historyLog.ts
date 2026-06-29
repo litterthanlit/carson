@@ -4,6 +4,7 @@
 export type HistoryOp =
   | { type: 'snapshot'; label: string; data: string }
   | { type: 'treatment'; label: string; objectId: string; before: string; after: string }
+  | { type: 'posterTreatment'; label: string; artboardId: string; before: string; after: string }
 
 export type HistoryState = {
   ops: HistoryOp[]
@@ -13,6 +14,7 @@ export type HistoryState = {
 export type HistoryRestoreAction =
   | { kind: 'snapshot'; data: string; label: string }
   | { kind: 'treatment'; objectId: string; treatmentsJson: string; label: string }
+  | { kind: 'posterTreatment'; artboardId: string; treatmentsJson: string; label: string }
   | null
 
 const MAX_OPS = 200
@@ -93,6 +95,14 @@ export function restoreActionForUndo(state: HistoryState): HistoryRestoreAction 
       label: `Undo: ${op.label}`,
     }
   }
+  if (op.type === 'posterTreatment') {
+    return {
+      kind: 'posterTreatment',
+      artboardId: op.artboardId,
+      treatmentsJson: op.before,
+      label: `Undo: ${op.label}`,
+    }
+  }
   const snapshot = snapshotForUndo({ ...state, cursor: state.cursor - 1 })
   if (!snapshot) return null
   return { kind: 'snapshot', data: snapshot, label: `Undo: ${op.label}` }
@@ -106,6 +116,14 @@ export function restoreActionForRedo(state: HistoryState): HistoryRestoreAction 
     return {
       kind: 'treatment',
       objectId: op.objectId,
+      treatmentsJson: op.after,
+      label: `Redo: ${op.label}`,
+    }
+  }
+  if (op.type === 'posterTreatment') {
+    return {
+      kind: 'posterTreatment',
+      artboardId: op.artboardId,
       treatmentsJson: op.after,
       label: `Redo: ${op.label}`,
     }

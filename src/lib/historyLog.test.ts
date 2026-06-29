@@ -77,4 +77,44 @@ describe('historyLog', () => {
       label: 'Redo: Bypass',
     })
   })
+
+  it('restores poster treatment ops incrementally', () => {
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{"a":1}' })
+    state = pushHistoryOp(state, {
+      type: 'posterTreatment',
+      label: 'Re-roll poster treatment',
+      artboardId: 'board-1',
+      before: '[{"id":"s1","seed":1}]',
+      after: '[{"id":"s1","seed":2}]',
+    })
+    const action = restoreActionForUndo(state)
+    expect(action).toEqual({
+      kind: 'posterTreatment',
+      artboardId: 'board-1',
+      treatmentsJson: '[{"id":"s1","seed":1}]',
+      label: 'Undo: Re-roll poster treatment',
+    })
+    const redoAction = restoreActionForRedo({ ...state, cursor: 0 })
+    expect(redoAction).toEqual({
+      kind: 'posterTreatment',
+      artboardId: 'board-1',
+      treatmentsJson: '[{"id":"s1","seed":2}]',
+      label: 'Redo: Re-roll poster treatment',
+    })
+  })
+
+  it('counts poster treatment ops toward snapshot threshold', () => {
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{}' })
+    state = pushHistoryOp(state, {
+      type: 'posterTreatment',
+      label: 'Bypass poster treatment',
+      artboardId: 'board-1',
+      before: '[]',
+      after: '[{"enabled":false}]',
+    })
+    expect(opsSinceLastSnapshot(state)).toBe(1)
+    expect(shouldSnapshot(state)).toBe(false)
+  })
 })

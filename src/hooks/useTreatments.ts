@@ -17,6 +17,7 @@ import {
   renderTreatmentStackOnCanvas,
   reorderTreatment,
   updateTreatment,
+  type Treatment,
 } from '../lib/treatments'
 import { cropModeFromParams } from '../lib/cropTreatment'
 import type { LayerKind } from '../types/editor'
@@ -28,9 +29,11 @@ type UseTreatmentsOptions = {
   setDocumentMeta: React.Dispatch<React.SetStateAction<DocumentMeta | null>>
   gridOverlay: GridOverlay
   poster: PosterPreset
-  commitHistoryRef: RefObject<(message: string) => void>
   commitTreatmentHistoryRef: RefObject<
     (objectId: string, label: string, before: string, after: string) => void
+  >
+  commitPosterTreatmentHistoryRef: RefObject<
+    (artboardId: string, label: string, before: string, after: string) => void
   >
   activeObjectRef: RefObject<() => FabricObject | null>
   tagObjectRef: RefObject<(object: FabricObject, kind: LayerKind, name: string) => void>
@@ -42,17 +45,21 @@ export function useTreatments({
   setDocumentMeta,
   gridOverlay,
   poster,
-  commitHistoryRef,
   commitTreatmentHistoryRef,
+  commitPosterTreatmentHistoryRef,
   activeObjectRef,
   tagObjectRef,
 }: UseTreatmentsOptions) {
   const activeObject = useCallback(() => activeObjectRef.current?.() ?? null, [activeObjectRef])
-  const commitHistory = useCallback((message: string) => commitHistoryRef.current?.(message), [commitHistoryRef])
   const commitTreatmentHistory = useCallback(
     (objectId: string, label: string, before: string, after: string) =>
       commitTreatmentHistoryRef.current?.(objectId, label, before, after),
     [commitTreatmentHistoryRef],
+  )
+  const commitPosterTreatmentHistory = useCallback(
+    (artboardId: string, label: string, before: string, after: string) =>
+      commitPosterTreatmentHistoryRef.current?.(artboardId, label, before, after),
+    [commitPosterTreatmentHistoryRef],
   )
   const tagObject = useCallback(
     (object: FabricObject, kind: LayerKind, name: string) => tagObjectRef.current?.(object, kind, name),
@@ -112,13 +119,17 @@ export function useTreatments({
     }
   }, [canvasRef, refreshTreatmentStack])
 
-  const refreshPosterTreatments = useCallback(async () => {
-    const canvas = canvasRef.current
-    const board = documentMeta ? getActiveArtboard(documentMeta) : undefined
-    if (!canvas || !board) return
-    renderPosterTreatments(canvas, readPosterTreatments(board), poster, tagPosterFragment)
-    canvas.requestRenderAll()
-  }, [canvasRef, documentMeta, poster, tagPosterFragment])
+  const refreshPosterTreatments = useCallback(
+    async (treatmentsOverride?: Treatment[]) => {
+      const canvas = canvasRef.current
+      const board = documentMeta ? getActiveArtboard(documentMeta) : undefined
+      if (!canvas || !board) return
+      const treatments = treatmentsOverride ?? readPosterTreatments(board)
+      renderPosterTreatments(canvas, treatments, poster, tagPosterFragment)
+      canvas.requestRenderAll()
+    },
+    [canvasRef, documentMeta, poster, tagPosterFragment],
+  )
 
   const rerollTreatment = useCallback(
     async (treatmentId: string) => {
@@ -182,15 +193,17 @@ export function useTreatments({
       if (!documentMeta) return
       const board = getActiveArtboard(documentMeta)
       if (!board) return
+      const before = JSON.stringify(readPosterTreatments(board))
       const nextBoard = updatePosterTreatment(board, treatmentId, { seed: newSeed() })
+      const after = JSON.stringify(readPosterTreatments(nextBoard))
       setDocumentMeta({
         ...documentMeta,
         artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
       })
-      await refreshPosterTreatments()
-      commitHistory('Re-rolled poster treatment')
+      await refreshPosterTreatments(readPosterTreatments(nextBoard))
+      commitPosterTreatmentHistory(board.id, 'Re-rolled poster treatment', before, after)
     },
-    [commitHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
+    [commitPosterTreatmentHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
   )
 
   const togglePosterTreatment = useCallback(
@@ -200,15 +213,22 @@ export function useTreatments({
       if (!board) return
       const treatment = readPosterTreatments(board).find((item) => item.id === treatmentId)
       if (!treatment) return
+      const before = JSON.stringify(readPosterTreatments(board))
       const nextBoard = updatePosterTreatment(board, treatmentId, { enabled: !treatment.enabled })
+      const after = JSON.stringify(readPosterTreatments(nextBoard))
       setDocumentMeta({
         ...documentMeta,
         artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
       })
-      await refreshPosterTreatments()
-      commitHistory(treatment.enabled ? 'Bypassed poster treatment' : 'Enabled poster treatment')
+      await refreshPosterTreatments(readPosterTreatments(nextBoard))
+      commitPosterTreatmentHistory(
+        board.id,
+        treatment.enabled ? 'Bypassed poster treatment' : 'Enabled poster treatment',
+        before,
+        after,
+      )
     },
-    [commitHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
+    [commitPosterTreatmentHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
   )
 
   const removePosterTreatmentAction = useCallback(
@@ -216,15 +236,17 @@ export function useTreatments({
       if (!documentMeta) return
       const board = getActiveArtboard(documentMeta)
       if (!board) return
+      const before = JSON.stringify(readPosterTreatments(board))
       const nextBoard = removePosterTreatment(board, treatmentId)
+      const after = JSON.stringify(readPosterTreatments(nextBoard))
       setDocumentMeta({
         ...documentMeta,
         artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
       })
-      await refreshPosterTreatments()
-      commitHistory('Removed poster treatment')
+      await refreshPosterTreatments(readPosterTreatments(nextBoard))
+      commitPosterTreatmentHistory(board.id, 'Removed poster treatment', before, after)
     },
-    [commitHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
+    [commitPosterTreatmentHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
   )
 
   const reorderPosterTreatmentAction = useCallback(
@@ -232,15 +254,17 @@ export function useTreatments({
       if (!documentMeta) return
       const board = getActiveArtboard(documentMeta)
       if (!board) return
+      const before = JSON.stringify(readPosterTreatments(board))
       const nextBoard = reorderPosterTreatment(board, treatmentId, direction)
+      const after = JSON.stringify(readPosterTreatments(nextBoard))
       setDocumentMeta({
         ...documentMeta,
         artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
       })
-      await refreshPosterTreatments()
-      commitHistory('Reordered poster treatment')
+      await refreshPosterTreatments(readPosterTreatments(nextBoard))
+      commitPosterTreatmentHistory(board.id, 'Reordered poster treatment', before, after)
     },
-    [commitHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
+    [commitPosterTreatmentHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
   )
 
   return {
