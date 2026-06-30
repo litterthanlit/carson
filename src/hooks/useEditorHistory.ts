@@ -2,12 +2,15 @@ import { useCallback, useRef } from 'react'
 import type { Canvas } from 'fabric'
 import type { MutableRefObject, RefObject } from 'react'
 import { HISTORY_PROPS } from '../lib/editorConstants'
+import { readObjectProp } from '../lib/canvasUtils'
+import { applyLayerOrder, applyObjectPatch } from '../lib/historyObject'
 import {
   createHistoryState,
   pushHistoryOp,
   restoreActionForRedo,
   restoreActionForUndo,
   shouldSnapshot,
+  type HistoryOp,
   type HistoryState,
 } from '../lib/historyLog'
 
@@ -28,6 +31,10 @@ type UseEditorHistoryOptions = {
   commitPosterTreatmentHistoryRef: RefObject<
     (artboardId: string, label: string, before: string, after: string) => void
   >
+  commitObjectPatchHistoryRef: RefObject<
+    (objectId: string, label: string, before: string, after: string) => void
+  >
+  commitLayerOrderHistoryRef: RefObject<(label: string, before: string, after: string) => void>
 }
 
 export function useEditorHistory({
@@ -43,6 +50,8 @@ export function useEditorHistory({
   commitHistoryRef,
   commitTreatmentHistoryRef,
   commitPosterTreatmentHistoryRef,
+  commitObjectPatchHistoryRef,
+  commitLayerOrderHistoryRef,
 }: UseEditorHistoryOptions) {
   const historyLogRef = useRef<HistoryState>(createHistoryState())
   const restoringRef = useRef(false)
@@ -78,6 +87,35 @@ export function useEditorHistory({
         canvas?.requestRenderAll()
         syncSelected()
         syncLayers()
+        setStatus(action.label)
+        return
+      }
+      if (action.kind === 'objectPatch') {
+        const canvas = canvasRef.current
+        const object =
+          canvas?.getObjects().find((item) => String(readObjectProp(item, 'id') ?? '') === action.objectId) ??
+          null
+        if (object) {
+          restoringRef.current = true
+          applyObjectPatch(object, action.patchJson)
+          restoringRef.current = false
+          canvas?.requestRenderAll()
+          syncSelected()
+          syncLayers()
+        }
+        setStatus(action.label)
+        return
+      }
+      if (action.kind === 'layerOrder') {
+        const canvas = canvasRef.current
+        if (canvas) {
+          restoringRef.current = true
+          applyLayerOrder(canvas, action.orderJson)
+          restoringRef.current = false
+          canvas.requestRenderAll()
+          syncSelected()
+          syncLayers()
+        }
         setStatus(action.label)
         return
       }
@@ -119,11 +157,11 @@ export function useEditorHistory({
     [canvasRef, captureStyleBaseline, scheduleAutosave, setStatus, syncLayers, syncSelected],
   )
 
-  const commitTreatmentHistory = useCallback(
-    (objectId: string, label: string, before: string, after: string) => {
+  const pushIncrementalOp = useCallback(
+    (op: Exclude<HistoryOp, { type: 'snapshot' }>, label: string) => {
       const canvas = canvasRef.current
       if (!canvas || restoringRef.current) return
-      if (before === after) return
+      if ('before' in op && 'after' in op && op.before === op.after) return
 
       if (shouldSnapshot(historyLogRef.current)) {
         const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
@@ -133,13 +171,7 @@ export function useEditorHistory({
           data: snapshot,
         })
       } else {
-        historyLogRef.current = pushHistoryOp(historyLogRef.current, {
-          type: 'treatment',
-          label,
-          objectId,
-          before,
-          after,
-        })
+        historyLogRef.current = pushHistoryOp(historyLogRef.current, op)
       }
 
       scheduleAutosave()
@@ -150,35 +182,32 @@ export function useEditorHistory({
     [canvasRef, scheduleAutosave, setStatus, syncLayers, syncSelected],
   )
 
+  const commitTreatmentHistory = useCallback(
+    (objectId: string, label: string, before: string, after: string) => {
+      pushIncrementalOp({ type: 'treatment', label, objectId, before, after }, label)
+    },
+    [pushIncrementalOp],
+  )
+
   const commitPosterTreatmentHistory = useCallback(
     (artboardId: string, label: string, before: string, after: string) => {
-      const canvas = canvasRef.current
-      if (!canvas || restoringRef.current) return
-      if (before === after) return
-
-      if (shouldSnapshot(historyLogRef.current)) {
-        const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
-        historyLogRef.current = pushHistoryOp(historyLogRef.current, {
-          type: 'snapshot',
-          label,
-          data: snapshot,
-        })
-      } else {
-        historyLogRef.current = pushHistoryOp(historyLogRef.current, {
-          type: 'posterTreatment',
-          label,
-          artboardId,
-          before,
-          after,
-        })
-      }
-
-      scheduleAutosave()
-      syncSelected()
-      syncLayers()
-      setStatus(label)
+      pushIncrementalOp({ type: 'posterTreatment', label, artboardId, before, after }, label)
     },
-    [canvasRef, scheduleAutosave, setStatus, syncLayers, syncSelected],
+    [pushIncrementalOp],
+  )
+
+  const commitObjectPatchHistory = useCallback(
+    (objectId: string, label: string, before: string, after: string) => {
+      pushIncrementalOp({ type: 'objectPatch', label, objectId, before, after }, label)
+    },
+    [pushIncrementalOp],
+  )
+
+  const commitLayerOrderHistory = useCallback(
+    (label: string, before: string, after: string) => {
+      pushIncrementalOp({ type: 'layerOrder', label, before, after }, label)
+    },
+    [pushIncrementalOp],
   )
 
   const undoAsync = useCallback(async () => {
@@ -212,6 +241,8 @@ export function useEditorHistory({
   commitHistoryRef.current = commitHistory
   commitTreatmentHistoryRef.current = commitTreatmentHistory
   commitPosterTreatmentHistoryRef.current = commitPosterTreatmentHistory
+  commitObjectPatchHistoryRef.current = commitObjectPatchHistory
+  commitLayerOrderHistoryRef.current = commitLayerOrderHistory
 
   return {
     historyLogRef,
@@ -219,6 +250,8 @@ export function useEditorHistory({
     commitHistory,
     commitTreatmentHistory,
     commitPosterTreatmentHistory,
+    commitObjectPatchHistory,
+    commitLayerOrderHistory,
     restoreSnapshot,
     undoAsync,
     redo,

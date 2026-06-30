@@ -5,6 +5,8 @@ export type HistoryOp =
   | { type: 'snapshot'; label: string; data: string }
   | { type: 'treatment'; label: string; objectId: string; before: string; after: string }
   | { type: 'posterTreatment'; label: string; artboardId: string; before: string; after: string }
+  | { type: 'objectPatch'; label: string; objectId: string; before: string; after: string }
+  | { type: 'layerOrder'; label: string; before: string; after: string }
 
 export type HistoryState = {
   ops: HistoryOp[]
@@ -15,6 +17,8 @@ export type HistoryRestoreAction =
   | { kind: 'snapshot'; data: string; label: string }
   | { kind: 'treatment'; objectId: string; treatmentsJson: string; label: string }
   | { kind: 'posterTreatment'; artboardId: string; treatmentsJson: string; label: string }
+  | { kind: 'objectPatch'; objectId: string; patchJson: string; label: string }
+  | { kind: 'layerOrder'; orderJson: string; label: string }
   | null
 
 const MAX_OPS = 200
@@ -103,6 +107,21 @@ export function restoreActionForUndo(state: HistoryState): HistoryRestoreAction 
       label: `Undo: ${op.label}`,
     }
   }
+  if (op.type === 'objectPatch') {
+    return {
+      kind: 'objectPatch',
+      objectId: op.objectId,
+      patchJson: op.before,
+      label: `Undo: ${op.label}`,
+    }
+  }
+  if (op.type === 'layerOrder') {
+    return {
+      kind: 'layerOrder',
+      orderJson: op.before,
+      label: `Undo: ${op.label}`,
+    }
+  }
   const snapshot = snapshotForUndo({ ...state, cursor: state.cursor - 1 })
   if (!snapshot) return null
   return { kind: 'snapshot', data: snapshot, label: `Undo: ${op.label}` }
@@ -125,6 +144,21 @@ export function restoreActionForRedo(state: HistoryState): HistoryRestoreAction 
       kind: 'posterTreatment',
       artboardId: op.artboardId,
       treatmentsJson: op.after,
+      label: `Redo: ${op.label}`,
+    }
+  }
+  if (op.type === 'objectPatch') {
+    return {
+      kind: 'objectPatch',
+      objectId: op.objectId,
+      patchJson: op.after,
+      label: `Redo: ${op.label}`,
+    }
+  }
+  if (op.type === 'layerOrder') {
+    return {
+      kind: 'layerOrder',
+      orderJson: op.after,
       label: `Redo: ${op.label}`,
     }
   }

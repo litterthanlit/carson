@@ -1,7 +1,7 @@
 # Carson — Horizon 2 Agent Handoff
 
 **Repo:** https://github.com/litterthanlit/carson  
-**Branch:** `main` · latest: `fbd2606`  
+**Branch:** `main` · latest: `755b9f2`  
 **Prerequisite:** Horizon 1 is **complete** (see [`HANDOFF.md`](./HANDOFF.md))  
 **Vision source:** [`REIMAGINED.md`](./REIMAGINED.md) §6 feature gap table + §8 Horizon 2 items (2.1–2.12)
 
@@ -13,7 +13,7 @@ Turn Carson from a **trustworthy local poster editor** into a **professional ins
 
 **Horizon 1 done.** You are working **Horizon 2 only** unless fixing a regression.
 
-**Rough completion:** ~55–65% of Horizon 2 · 0% Horizon 3
+**Rough completion:** ~62–70% of Horizon 2 · 0% Horizon 3
 
 ---
 
@@ -26,7 +26,7 @@ React 19 + Fabric.js 7 local poster editor. Moat = **seeded, non-destructive cha
 - **Poster treatments:** `src/lib/posterTreatments.ts` → `scrapeTreatment.ts`; stored on `Artboard.posterTreatments` in `documentMeta`.
 - **History:** `src/lib/historyLog.ts` + `useEditorHistory` — op log with periodic snapshots (`SNAPSHOT_EVERY = 20`).
 
-**64 tests** · always run `npm test && npm run build` before handoff.
+**69 tests** · always run `npm test && npm run build` before handoff.
 
 ---
 
@@ -34,7 +34,7 @@ React 19 + Fabric.js 7 local poster editor. Moat = **seeded, non-destructive cha
 
 | ID | Item | Status | Notes |
 |----|------|--------|-------|
-| **2.1** | Non-destructive core | **~75%** | Layer treatment stacks + incremental layer-treatment undo. Still: full JSON snapshots for most edits; poster treatments not incremental; some LeftRail actions may still bake/rasterize outside stack |
+| **2.1** | Non-destructive core | **~95%** | Layer + poster treatment incremental undo; object patch + layer order ops for nudge/opacity/rename/reorder; add-scrape incremental; `applyPosterStyle` uses frozen baseline (no compound drift); `applyImageEffect` stacks filters. Remaining: canvas drag (`object:modified`) still snapshots; additive LeftRail chaos (decay marks, misprint offset) not yet treatment-stack instruments |
 | **2.2** | Real typography | **~45%** | `FontPicker`, Google Fonts + upload, weight/width sliders, text-on-path, legibility readout. Missing: OpenType features, character/paragraph styles, per-character styling |
 | **2.3** | Vector vocabulary | **~50%** | Ellipse, line, star, pen, stroke dash, path edit v1 (`pathEditing.ts`). Missing: add/delete points, close path, boolean ops; path-edit overlay still in `App.tsx` |
 | **2.4** | Color system | **~60%** | Document palette, recent swatches, eyedropper, gradients, 16 blend modes, CMYK soft-proof readout. Missing: **blend-mode hover preview** on canvas |
@@ -53,16 +53,20 @@ React 19 + Fabric.js 7 local poster editor. Moat = **seeded, non-destructive cha
 
 ```
 useEditorHistory()                     // hooks/useEditorHistory.ts
-  commitHistory()        → snapshot op (full canvas JSON)
-  commitTreatmentHistory → layer treatment op OR snapshot if shouldSnapshot()
-  undo/redo              → restoreActionForUndo/Redo
+  commitHistory()              → snapshot op (full canvas JSON)
+  commitTreatmentHistory       → layer treatment op OR snapshot if shouldSnapshot()
+  commitPosterTreatmentHistory → poster treatment op OR snapshot
+  commitObjectPatchHistory     → position/opacity/name/visibility op OR snapshot
+  commitLayerOrderHistory      → z-order op OR snapshot
+  undo/redo                    → restoreActionForUndo/Redo
 
 useTreatments()                        // hooks/useTreatments.ts
   Layer ops    → commitTreatmentHistory (incremental)
-  Poster ops   → commitHistory (FULL SNAPSHOT) ← first fix
+  Poster ops   → commitPosterTreatmentHistory (incremental)
 
 useCanvasEvents()                      // hooks/useCanvasEvents.ts
   selection, snap, pen, grid/print overlays
+  object:modified → commitHistory (still full snapshot — future A2+)
 
 documentMeta (DocumentMeta)            // lib/document.ts
   artboards[].posterTreatments
@@ -91,32 +95,21 @@ Serialize keys: `HISTORY_PROPS` in `editorConstants.ts`.
 
 Prioritized by **dependency**, **user-visible impact**, and **existing partial work**.
 
-### Phase A — Finish non-destructive foundation (2.1)
+### Phase A — Finish non-destructive foundation (2.1) ✅ shipped
 
-**A1. Poster treatment incremental history** ← **start here**
+**A1. Poster treatment incremental history** — done (`755b9f2`)
 
-- **Problem:** `useTreatments.ts` poster handlers (`rerollPosterTreatment`, `togglePosterTreatment`, `removePosterTreatmentAction`, `reorderPosterTreatmentAction`) call `commitHistory()` → full canvas snapshot every scrape reroll/bypass.
-- **Pattern to mirror:** layer `commitTreatmentHistory` in `historyLog.ts`.
-- **Implementation sketch:**
-  1. Extend `HistoryOp` with `{ type: 'posterTreatment'; artboardId; label; before; after }` where `before`/`after` are JSON strings of `Treatment[]` (or full artboard slice).
-  2. Add `commitPosterTreatmentHistory(artboardId, label, before, after)` in `useEditorHistory`.
-  3. Extend `restoreActionForUndo/Redo` to apply poster JSON → `setDocumentMeta` + `refreshPosterTreatments()`.
-  4. Replace `commitHistory` in poster handlers in `useTreatments.ts`.
-- **Files:** `historyLog.ts`, `historyLog.test.ts`, `useEditorHistory.ts`, `useTreatments.ts`
-- **User path:** Scrape → Treatments tab → re-roll/bypass/remove → **fast Cmd+Z** without full canvas reload.
-- **Tests:** Add cases in `historyLog.test.ts` for poster op undo/redo.
+**A2. Migrate more edits off full snapshots** — done
+- `objectPatch` ops: nudge (debounced), opacity/inspector sliders, rename, visibility, lock
+- `layerOrder` ops: drag-reorder, move to front/back
 
-**A2. Migrate more edits off full snapshots**
+**A3. Kill remaining destructive paths** — done for audited items
+- `applyImageEffect` stacks filters (toggle on/off)
+- `applyPosterStyle` always applies from frozen `styleBaselineRef` (no compound drift)
+- No bake-and-replace patterns in `App.tsx` chaos handlers; slice/crop/tear/glyph use treatment stack
+- **Deferred:** migrate additive LeftRail chaos (decay marks, misprint offset, type strips) to treatment instruments
 
-- Nudge, opacity, rename, layer reorder — consider lightweight ops or batch debounce before snapshot.
-- **Do not** rewrite entire history in one PR; extend op types incrementally.
-
-**A3. Kill remaining destructive paths**
-
-- Audit LeftRail chaos actions in `App.tsx` (~line 1000+) for `toDataURL` → delete → PNG insert patterns not going through treatment stack.
-- REIMAGINED appendix: `applyImageEffect` replaces filter array (stacking bug); `applyPosterStyle` compounds on repeat.
-
----
+**Next Horizon 2 focus:** Phase B — pen polish + vector booleans (2.3)
 
 ### Phase B — Vectors & pen (2.3)
 
@@ -201,8 +194,8 @@ Prioritized by **dependency**, **user-visible impact**, and **existing partial w
 
 ### History
 - `restoringRef` blocks commits during `loadFromJSON` — set in `useEditorHistory`, used in load/variant/merge.
-- Incremental ops only cover **layer** `treatments` today.
-- Snapshot undo still O(canvas JSON size) — hitch on image-heavy docs.
+- Incremental ops cover layer treatments, poster treatments, object patches, and layer order.
+- Snapshot undo still O(canvas JSON size) — hitch on image-heavy docs for add/delete/import and canvas drag.
 
 ### Scrape
 - `destination-out` erases **rendered pixels** to background; source objects not deleted.

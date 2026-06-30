@@ -131,7 +131,7 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 
 See **[`docs/HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md)** for full scorecard, phases, and first-PR scope.
 
-**Quick start:** Poster treatment incremental history (`historyLog.ts` + `useTreatments.ts`).
+**Quick start:** Phase B — pen tool polish + path-edit overlay extraction (see [`HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md)).
 
 ---
 

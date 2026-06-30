@@ -71,6 +71,7 @@ import {
   ZOOM_LEVELS,
 } from './lib/editorConstants'
 import { addPosterTreatment, readPosterTreatments, writePosterTreatments } from './lib/posterTreatments'
+import { captureLayerOrder, captureObjectPatch } from './lib/historyObject'
 import {
   buildStarPoints,
   readFileAsDataUrl,
@@ -216,6 +217,12 @@ function App() {
   const commitPosterTreatmentHistoryRef = useRef<
     (artboardId: string, label: string, before: string, after: string) => void
   >(() => {})
+  const commitObjectPatchHistoryRef = useRef<
+    (objectId: string, label: string, before: string, after: string) => void
+  >(() => {})
+  const commitLayerOrderHistoryRef = useRef<(label: string, before: string, after: string) => void>(() => {})
+  const objectEditSessionRef = useRef<{ objectId: string; before: string } | null>(null)
+  const nudgeSessionRef = useRef<{ objectId: string; before: string } | null>(null)
   const refreshTreatmentStackRef = useRef<(object?: FabricObject | null) => Promise<void>>(async () => {})
   const reconcileArtifactTreatmentsRef = useRef<() => Promise<void>>(async () => {})
   const refreshPosterTreatmentsRef = useRef<(treatmentsOverride?: Treatment[]) => Promise<void>>(async () => {})
@@ -261,6 +268,8 @@ function App() {
     commitHistoryRef,
     commitTreatmentHistoryRef,
     commitPosterTreatmentHistoryRef,
+    commitObjectPatchHistoryRef,
+    commitLayerOrderHistoryRef,
     onAfterRestore: async () => {
       await reconcileArtifactTreatmentsRef.current()
       await refreshPosterTreatmentsRef.current()
@@ -552,12 +561,23 @@ function App() {
       const canvas = canvasRef.current
       const object = canvas?.getActiveObject()
       if (!canvas || !object) return false
+      const objectId = String(readObjectProp(object, 'id') ?? '')
+      if (!nudgeSessionRef.current || nudgeSessionRef.current.objectId !== objectId) {
+        nudgeSessionRef.current = { objectId, before: captureObjectPatch(object) }
+      }
       object.set({ left: (object.left ?? 0) + dx, top: (object.top ?? 0) + dy })
       object.setCoords()
       canvas.requestRenderAll()
       syncSelected()
       if (nudgeTimerRef.current) window.clearTimeout(nudgeTimerRef.current)
-      nudgeTimerRef.current = window.setTimeout(() => commitHistory('Nudged layer'), 350)
+      nudgeTimerRef.current = window.setTimeout(() => {
+        const session = nudgeSessionRef.current
+        nudgeSessionRef.current = null
+        if (!session) return
+        const after = captureObjectPatch(object)
+        if (session.before === after) return
+        commitObjectPatchHistoryRef.current(session.objectId, 'Nudged layer', session.before, after)
+      }, 350)
       return true
     }
 
@@ -955,10 +975,45 @@ function App() {
     }
   }
 
+  function beginObjectEditSession(object: FabricObject) {
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    if (objectEditSessionRef.current?.objectId === objectId) return
+    objectEditSessionRef.current = { objectId, before: captureObjectPatch(object) }
+  }
+
+  function commitObjectEditSession(label: string) {
+    const session = objectEditSessionRef.current
+    const object = activeObject()
+    if (!session || !object) {
+      commitHistory(label)
+      objectEditSessionRef.current = null
+      return
+    }
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    if (objectId !== session.objectId) {
+      objectEditSessionRef.current = null
+      commitHistory(label)
+      return
+    }
+    const after = captureObjectPatch(object)
+    objectEditSessionRef.current = null
+    if (session.before === after) return
+    commitObjectPatchHistoryRef.current(objectId, label, session.before, after)
+  }
+
+  function commitLayerOrderChange(label: string, before: string) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const after = captureLayerOrder(canvas)
+    if (before === after) return
+    commitLayerOrderHistoryRef.current(label, before, after)
+  }
+
   function updateActive(values: Partial<SelectedState>) {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object) return
+    beginObjectEditSession(object)
     const patch = { ...values } as Partial<FabricObject>
     if (values.blendMode !== undefined) {
       patch.globalCompositeOperation = values.blendMode as GlobalCompositeOperation
@@ -974,7 +1029,7 @@ function App() {
   function finalizeActive(message: string) {
     activeObject()?.setCoords()
     canvasRef.current?.requestRenderAll()
-    commitHistory(message)
+    commitObjectEditSession(message)
   }
 
   function findObjectById(id: string) {
@@ -1468,9 +1523,13 @@ function App() {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object) return
+    const before = captureLayerOrder(canvas)
     if (direction === 'front') canvas.bringObjectToFront(object)
     else canvas.sendObjectToBack(object)
-    commitHistory(direction === 'front' ? 'Moved layer to front' : 'Moved layer to back')
+    commitLayerOrderChange(
+      direction === 'front' ? 'Moved layer to front' : 'Moved layer to back',
+      before,
+    )
   }
 
   function getSelectableLayerObjects(): FabricObject[] {
@@ -1570,29 +1629,38 @@ function App() {
   function toggleLayerVisibility(id: string) {
     const object = findObjectById(id)
     if (!object) return
+    const before = captureObjectPatch(object)
     object.set({ visible: object.visible === false })
     canvasRef.current?.requestRenderAll()
-    commitHistory(object.visible === false ? 'Hid layer' : 'Showed layer')
+    const message = object.visible === false ? 'Hid layer' : 'Showed layer'
+    commitObjectPatchHistoryRef.current(id, message, before, captureObjectPatch(object))
   }
 
   function toggleLayerLock(id: string) {
     const canvas = canvasRef.current
     const object = findObjectById(id)
     if (!canvas || !object) return
+    const before = captureObjectPatch(object)
     const locking = object.selectable !== false
     object.set({ selectable: !locking, evented: !locking })
     if (locking && canvas.getActiveObject() === object) {
       canvas.discardActiveObject()
     }
     canvas.requestRenderAll()
-    commitHistory(locking ? 'Locked layer' : 'Unlocked layer')
+    commitObjectPatchHistoryRef.current(
+      id,
+      locking ? 'Locked layer' : 'Unlocked layer',
+      before,
+      captureObjectPatch(object),
+    )
   }
 
   function renameLayer(id: string, name: string) {
     const object = findObjectById(id)
     if (!object) return
+    const before = captureObjectPatch(object)
     object.set({ name } as Partial<FabricObject>)
-    commitHistory('Renamed layer')
+    commitObjectPatchHistoryRef.current(id, 'Renamed layer', before, captureObjectPatch(object))
   }
 
   function reorderLayer(draggedId: string, targetId: string) {
@@ -1600,10 +1668,11 @@ function App() {
     const dragged = findObjectById(draggedId)
     const target = findObjectById(targetId)
     if (!canvas || !dragged || !target || dragged === target) return
+    const before = captureLayerOrder(canvas)
     const targetIndex = canvas.getObjects().indexOf(target)
     canvas.moveObjectTo(dragged, targetIndex)
     canvas.requestRenderAll()
-    commitHistory('Reordered layers')
+    commitLayerOrderChange('Reordered layers', before)
   }
 
   function handlePresetChange(nextPresetId: PosterPresetId) {
@@ -2164,15 +2233,17 @@ function App() {
     if (!documentMeta) return
     const board = getActiveArtboard(documentMeta)
     if (!board) return
+    const before = JSON.stringify(readPosterTreatments(board))
     const { artboard: nextBoard } = addPosterTreatment(board, 'scrape', { count: 7 }, seed)
+    const after = JSON.stringify(readPosterTreatments(nextBoard))
     setDocumentMeta({
       ...documentMeta,
       artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
     })
-    await refreshPosterTreatments()
+    await refreshPosterTreatments(readPosterTreatments(nextBoard))
     setInspectorTab('treatments')
     trackChaos('White scrapes', seed, [], (next) => addWhiteScrapes(next))
-    commitHistory(`Added scrape mask treatment #${seed}`)
+    commitPosterTreatmentHistoryRef.current(board.id, `Added scrape mask treatment #${seed}`, before, after)
   }
 
   function addRedEchoType() {
@@ -2268,7 +2339,7 @@ function App() {
   function applyPosterStyle(style: 'magazine' | 'type' | 'image' | 'minimal') {
     const canvas = canvasRef.current
     if (!canvas) return
-    captureStyleBaseline()
+    if (styleBaselineRef.current.size === 0) captureStyleBaseline()
     const baseline = styleBaselineRef.current
 
     if (style === 'minimal') {

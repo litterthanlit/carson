@@ -117,4 +117,44 @@ describe('historyLog', () => {
     expect(opsSinceLastSnapshot(state)).toBe(1)
     expect(shouldSnapshot(state)).toBe(false)
   })
+
+  it('restores object patch ops incrementally', () => {
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{}' })
+    state = pushHistoryOp(state, {
+      type: 'objectPatch',
+      label: 'Changed opacity',
+      objectId: 'layer-1',
+      before: '{"opacity":1}',
+      after: '{"opacity":0.5}',
+    })
+    expect(restoreActionForUndo(state)).toEqual({
+      kind: 'objectPatch',
+      objectId: 'layer-1',
+      patchJson: '{"opacity":1}',
+      label: 'Undo: Changed opacity',
+    })
+    expect(restoreActionForRedo({ ...state, cursor: 0 })).toEqual({
+      kind: 'objectPatch',
+      objectId: 'layer-1',
+      patchJson: '{"opacity":0.5}',
+      label: 'Redo: Changed opacity',
+    })
+  })
+
+  it('restores layer order ops incrementally', () => {
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{}' })
+    state = pushHistoryOp(state, {
+      type: 'layerOrder',
+      label: 'Reordered layers',
+      before: '["a","b"]',
+      after: '["b","a"]',
+    })
+    expect(restoreActionForUndo(state)).toEqual({
+      kind: 'layerOrder',
+      orderJson: '["a","b"]',
+      label: 'Undo: Reordered layers',
+    })
+  })
 })
