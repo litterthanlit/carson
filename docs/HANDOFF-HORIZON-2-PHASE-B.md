@@ -84,7 +84,9 @@ Vectors must stay in the treatment pipeline. **Do not** add `toDataURL` → dele
 
 Prioritized by **dependency**, **risk reduction**, and **user-visible path**.
 
-### B0. Baseline QA (30 min)
+### B0. Baseline QA (30 min) ✅
+
+**Done 2026-07-01** — see [`QA-HORIZON-2-PHASE-B0.md`](./QA-HORIZON-2-PHASE-B0.md). Automated regressions in `src/lib/pathBaseline.test.ts` (73 tests green).
 
 Confirm current path + treatment behavior before editing:
 
@@ -98,7 +100,7 @@ File bugs if treatment stack breaks on `type === 'path'`.
 
 ---
 
-### B1. Extract path-edit overlay ← **start here**
+### B1. Extract path-edit overlay ← **start here (next)**
 
 **Problem:** Path edit UI + listeners live inside `App.tsx` (~398–486). Blocks pen polish and testability.
 
