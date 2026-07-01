@@ -109,20 +109,16 @@ Prioritized by **dependency**, **user-visible impact**, and **existing partial w
 - No bake-and-replace patterns in `App.tsx` chaos handlers; slice/crop/tear/glyph use treatment stack
 - **Deferred:** migrate additive LeftRail chaos (decay marks, misprint offset, type strips) to treatment instruments
 
-**Next Horizon 2 focus:** Phase B — pen polish + vector booleans (2.3)
+**Next Horizon 2 focus:** Phase B — vectors & pen (2.3) → [`HANDOFF-HORIZON-2-PHASE-B.md`](./HANDOFF-HORIZON-2-PHASE-B.md)
 
 ### Phase B — Vectors & pen (2.3)
 
-**B1. Pen tool polish**
+See **[`HANDOFF-HORIZON-2-PHASE-B.md`](./HANDOFF-HORIZON-2-PHASE-B.md)** for full audit, PR sequence, and acceptance criteria.
 
-- Add/delete anchor, close path, handle snapping.
-- **Move path-edit overlay** out of `App.tsx` (`useEffect` ~line 374) → `hooks/usePathEditing.ts` or `components/PathEditOverlay.tsx`.
-- **Gotcha:** `path.pathOffset` + `util.invertTransform`; test rotated/scaled paths.
-
-**B2. Vector booleans**
-
-- Research Fabric 7 path boolean APIs (union/subtract/intersect).
-- Likely new treatment or command — vectors must keep treatment stack compatibility per 2.3.
+**B1. Extract `usePathEditing`** ← start here  
+**B2. Add/delete/close path + snap + incremental undo**  
+**B3. Pen polish (`P` shortcut, optional simplify)**  
+**B4. Boolean union/subtract (paper.js or clipper spike)**
 
 ---
 

@@ -3,7 +3,7 @@
 **Repo:** https://github.com/litterthanlit/carson  
 **Branch:** `main` · latest: `fbd2606`  
 **Read first:** [`docs/REIMAGINED.md`](./REIMAGINED.md) (vision + roadmap — source of truth)  
-**Horizon 2 work:** [`docs/HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md) ← **start here for next agent**
+**Horizon 2 work:** [`HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md) · **Phase B:** [`HANDOFF-HORIZON-2-PHASE-B.md`](./HANDOFF-HORIZON-2-PHASE-B.md) ← **start here**
 
 ---
 
@@ -131,7 +131,7 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 
 See **[`docs/HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md)** for full scorecard, phases, and first-PR scope.
 
-**Quick start:** Phase B — pen tool polish + path-edit overlay extraction (see [`HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md)).
+**Quick start:** Phase B — vectors & pen → [`HANDOFF-HORIZON-2-PHASE-B.md`](./HANDOFF-HORIZON-2-PHASE-B.md) (extract `usePathEditing` first).
 
 ---
 
