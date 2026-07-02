@@ -100,42 +100,11 @@ File bugs if treatment stack breaks on `type === 'path'`.
 
 ---
 
-### B1. Extract path-edit overlay ← **start here (next)**
+### B1. Extract path-edit overlay ✅
 
-**Problem:** Path edit UI + listeners live inside `App.tsx` (~398–486). Blocks pen polish and testability.
+**Done 2026-07-02** — path-edit listeners moved to `src/hooks/usePathEditing.ts`; `App.tsx` wires `pathEditMode` + `togglePathEditMode` only.
 
-**Target structure (pick one, prefer hook):**
-
-```
-src/hooks/usePathEditing.ts     // registers canvas listeners, owns pathEditDragRef
-  OR
-src/components/PathEditOverlay.tsx  // thin wrapper if you need React tree
-```
-
-**Move out of App.tsx:**
-
-- `drawPathHandles` (contextTop anchor/control dots)
-- `pointerToPathLocal` (`util.invertTransform` + `pathOffset`)
-- `onMouseDown` / `onMouseMove` / `onMouseUp` drag loop
-- `pathEditDragRef`
-
-**Keep in App.tsx:**
-
-- `pathEditMode` state
-- `togglePathEditMode()` (disables pen when entering edit)
-- Wire hook: `usePathEditing({ canvasRef, pathEditMode, displayScaleRef, ... })`
-
-**Acceptance:**
-
-- [ ] Edit points behavior unchanged on rotated/scaled paths
-- [ ] `App.tsx` loses path-edit `useEffect` block
-- [ ] No new linter suppressions
-
-**Files:** `App.tsx`, new `usePathEditing.ts`, optional `pathEditing.ts` helpers if overlay logic grows
-
----
-
-### B2. Path edit v2 — add / delete / close / snap
+### B2. Path edit v2 — add / delete / close / snap ← **start here (next)**
 
 Extend **`pathEditing.ts`** (pure functions + unit tests first).
 

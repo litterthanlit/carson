@@ -7,14 +7,11 @@ import {
   Gradient,
   Image as FabricImage,
   Line,
-  Path,
   PencilBrush,
-  Point,
   Polygon,
   Rect,
   Textbox,
   filters,
-  util,
 } from 'fabric'
 import {
   applyPosterPreset,
@@ -95,17 +92,10 @@ import { FilterGalleryModal } from './components/FilterGalleryModal'
 import type { FilterPreset } from './lib/filterGallery'
 import { paramsForTreatment } from './lib/filterGallery'
 import { useCanvasEvents } from './hooks/useCanvasEvents'
+import { usePathEditing } from './hooks/usePathEditing'
 import { useTreatments } from './hooks/useTreatments'
 import { useEditorHistory } from './hooks/useEditorHistory'
 import { createLayerThumbnail } from './lib/layerThumbnail'
-import {
-  applyPathData,
-  getPathAnchorPoints,
-  movePathPoint,
-  pathAnchorWorldPosition,
-  pathPointNear,
-  type PathAnchorPoint,
-} from './lib/pathEditing'
 import type {
   ExportBackground,
   ExportFormat,
@@ -226,8 +216,8 @@ function App() {
   const refreshTreatmentStackRef = useRef<(object?: FabricObject | null) => Promise<void>>(async () => {})
   const reconcileArtifactTreatmentsRef = useRef<() => Promise<void>>(async () => {})
   const refreshPosterTreatmentsRef = useRef<(treatmentsOverride?: Treatment[]) => Promise<void>>(async () => {})
-  const pathEditDragRef = useRef<{ point: PathAnchorPoint; path: Path } | null>(null)
   const activeObjectRef = useRef<() => FabricObject | null>(() => null)
+  const restoreCanvasSelectionRef = useRef<() => void>(() => {})
   const tagObjectRef = useRef<(object: FabricObject, kind: LayerKind, name: string) => void>(() => {})
 
   const {
@@ -318,6 +308,17 @@ function App() {
     tagObject,
   })
 
+  usePathEditing({
+    canvasRef,
+    pathEditMode,
+    selectedId: selected?.id,
+    penMode,
+    displayScaleRef,
+    activeObjectRef,
+    commitHistoryRef,
+    restoreCanvasSelectionRef,
+  })
+
   showPrintGuidesRef.current = showPrintGuides
   showLayoutGridRef.current = showLayoutGrid
   showBaselineGridRef.current = showBaselineGrid
@@ -394,96 +395,6 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [penMode, penStrokeColor, penStrokeWidth])
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !pathEditMode) {
-      pathEditDragRef.current = null
-      return
-    }
-
-    canvas.selection = false
-    canvas.skipTargetFind = true
-
-    const drawPathHandles = () => {
-      const object = activeObject()
-      if (!object || object.type !== 'path') return
-      const path = object as Path
-      const ctx = canvas.contextTop
-      if (!ctx) return
-      canvas.clearContext(ctx)
-      ctx.save()
-      for (const point of getPathAnchorPoints(path.path as Parameters<typeof getPathAnchorPoints>[0])) {
-        const world = pathAnchorWorldPosition(path, point)
-        ctx.beginPath()
-        ctx.fillStyle = point.role === 'anchor' ? '#e11d48' : '#05b6d4'
-        ctx.arc(world.x, world.y, point.role === 'anchor' ? 5 : 4, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.strokeStyle = '#ffffff'
-        ctx.lineWidth = 1
-        ctx.stroke()
-      }
-      ctx.restore()
-    }
-
-    const pointerToPathLocal = (path: Path, event: MouseEvent | TouchEvent) => {
-      const pointer = canvas.getScenePoint(event)
-      const local = util.transformPoint(new Point(pointer.x, pointer.y), util.invertTransform(path.calcTransformMatrix()))
-      return {
-        x: local.x + (path.pathOffset?.x ?? 0),
-        y: local.y + (path.pathOffset?.y ?? 0),
-      }
-    }
-
-    const onMouseDown = (event: { e: MouseEvent | TouchEvent }) => {
-      const object = activeObject()
-      if (!object || object.type !== 'path') return
-      const path = object as Path
-      const pointer = canvas.getScenePoint(event.e)
-      const hit = pathPointNear(path, pointer.x, pointer.y, 10 / displayScaleRef.current)
-      if (hit) pathEditDragRef.current = { point: hit, path }
-    }
-
-    const onMouseMove = (event: { e: MouseEvent | TouchEvent }) => {
-      const drag = pathEditDragRef.current
-      if (!drag) return
-      const local = pointerToPathLocal(drag.path, event.e)
-      const next = movePathPoint(
-        drag.path.path as Parameters<typeof movePathPoint>[0],
-        drag.point,
-        local.x,
-        local.y,
-      )
-      applyPathData(drag.path, next)
-      drag.path.setCoords()
-      canvas.requestRenderAll()
-    }
-
-    const onMouseUp = () => {
-      if (!pathEditDragRef.current) return
-      pathEditDragRef.current = null
-      commitHistory('Edited path points')
-    }
-
-    canvas.on('after:render', drawPathHandles)
-    canvas.on('mouse:down', onMouseDown)
-    canvas.on('mouse:move', onMouseMove)
-    canvas.on('mouse:up', onMouseUp)
-    canvas.requestRenderAll()
-
-    return () => {
-      canvas.off('after:render', drawPathHandles)
-      canvas.off('mouse:down', onMouseDown)
-      canvas.off('mouse:move', onMouseMove)
-      canvas.off('mouse:up', onMouseUp)
-      if (!penMode && !spaceDownRef.current) {
-        canvas.selection = true
-        canvas.skipTargetFind = false
-      }
-      canvas.requestRenderAll()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathEditMode, selected?.id, penMode])
 
   useEffect(() => {
     // Fix: previously this also ran on mount, double-committing history.
@@ -874,6 +785,13 @@ function App() {
   }
 
   activeObjectRef.current = activeObject
+
+  restoreCanvasSelectionRef.current = () => {
+    const canvas = canvasRef.current
+    if (!canvas || penMode || spaceDownRef.current) return
+    canvas.selection = true
+    canvas.skipTargetFind = false
+  }
 
   function captureStyleBaseline() {
     const canvas = canvasRef.current
