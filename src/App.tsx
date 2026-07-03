@@ -69,6 +69,8 @@ import {
 } from './lib/editorConstants'
 import { addPosterTreatment, readPosterTreatments, writePosterTreatments } from './lib/posterTreatments'
 import { captureLayerOrder, captureObjectPatch } from './lib/historyObject'
+import type { PathEditActions } from './hooks/usePathEditing'
+import { isPathClosed, type PathData } from './lib/pathEditing'
 import {
   buildStarPoints,
   readFileAsDataUrl,
@@ -188,6 +190,8 @@ function App() {
   const [showInstruments, setShowInstruments] = useState(false)
   const [penMode, setPenMode] = useState(false)
   const [pathEditMode, setPathEditMode] = useState(false)
+  const [pathAddPointMode, setPathAddPointMode] = useState(false)
+  const [pathGeometryTick, setPathGeometryTick] = useState(0)
   const [penStrokeWidth, setPenStrokeWidth] = useState(3)
   const [penStrokeColor, setPenStrokeColor] = useState('#111111')
   const [newArtboardPreset, setNewArtboardPreset] = useState<PosterPresetId>('instagram')
@@ -218,6 +222,13 @@ function App() {
   const refreshPosterTreatmentsRef = useRef<(treatmentsOverride?: Treatment[]) => Promise<void>>(async () => {})
   const activeObjectRef = useRef<() => FabricObject | null>(() => null)
   const restoreCanvasSelectionRef = useRef<() => void>(() => {})
+  const pathEditActionsRef = useRef<PathEditActions>({
+    deleteSelectedAnchor: () => false,
+    closePath: () => false,
+    isPathClosed: () => false,
+  })
+  const selectedPathAnchorRef = useRef<import('./lib/pathEditing').PathAnchorPoint | null>(null)
+  const notifyPathGeometryChangeRef = useRef(() => setPathGeometryTick((tick) => tick + 1))
   const tagObjectRef = useRef<(object: FabricObject, kind: LayerKind, name: string) => void>(() => {})
 
   const {
@@ -311,12 +322,17 @@ function App() {
   usePathEditing({
     canvasRef,
     pathEditMode,
+    pathAddPointMode,
     selectedId: selected?.id,
     penMode,
     displayScaleRef,
+    guidesRef,
     activeObjectRef,
-    commitHistoryRef,
+    commitObjectPatchHistoryRef,
     restoreCanvasSelectionRef,
+    pathEditActionsRef,
+    selectedPathAnchorRef,
+    notifyPathGeometryChangeRef,
   })
 
   showPrintGuidesRef.current = showPrintGuides
@@ -560,6 +576,10 @@ function App() {
       }
 
       if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (!isTypingContext(event.target) && pathEditMode && pathEditActionsRef.current.deleteSelectedAnchor()) {
+          event.preventDefault()
+          return
+        }
         event.preventDefault()
         actions.delete()
       } else if (event.key === 'Escape') {
@@ -1539,9 +1559,20 @@ function App() {
   function togglePathEditMode() {
     setPathEditMode((current) => {
       const next = !current
-      if (next) setPenMode(false)
+      if (next) {
+        setPenMode(false)
+        setPathAddPointMode(false)
+      } else {
+        setPathAddPointMode(false)
+        selectedPathAnchorRef.current = null
+      }
       return next
     })
+  }
+
+  function closeSelectedPath() {
+    pathEditActionsRef.current.closePath()
+    setPathAddPointMode(false)
   }
 
   function toggleLayerVisibility(id: string) {
@@ -2494,6 +2525,11 @@ function App() {
   const activeBoard = documentMeta ? getActiveArtboard(documentMeta) : undefined
   const posterTreatments = readPosterTreatments(activeBoard)
   const selectedIsPath = selectedObject?.type === 'path' || selectedObject?.type === 'line'
+  const pathIsClosed =
+    selectedObject?.type === 'path'
+      ? isPathClosed((selectedObject as import('fabric').Path).path as PathData)
+      : false
+  void pathGeometryTick
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox'], scope: 'selection', run: openFilterGallery },
@@ -2689,7 +2725,11 @@ function App() {
           selectedIsImage={selectedIsImage}
           selectedIsPath={selectedIsPath}
           pathEditMode={pathEditMode}
+          pathAddPointMode={pathAddPointMode}
+          pathIsClosed={pathIsClosed}
           onTogglePathEditMode={togglePathEditMode}
+          onTogglePathAddPointMode={() => setPathAddPointMode((current) => !current)}
+          onClosePath={closeSelectedPath}
           customFonts={customFonts}
           fontInputRef={fontInputRef}
           onFontFileChange={(file) => {

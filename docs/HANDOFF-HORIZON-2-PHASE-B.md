@@ -104,41 +104,11 @@ File bugs if treatment stack breaks on `type === 'path'`.
 
 **Done 2026-07-02** — path-edit listeners moved to `src/hooks/usePathEditing.ts`; `App.tsx` wires `pathEditMode` + `togglePathEditMode` only.
 
-### B2. Path edit v2 — add / delete / close / snap ← **start here (next)**
+### B2. Path edit v2 — add / delete / close / snap ✅
 
-Extend **`pathEditing.ts`** (pure functions + unit tests first).
+**Done 2026-07-03** — add/delete/close path points, anchor snap, incremental `objectPatch` history with `pathData`.
 
-| Feature | Sketch |
-|---------|--------|
-| **Add point** | Click on segment (L or C) → split command → insert anchor |
-| **Delete point** | Select anchor → Delete/Backspace (when `pathEditMode` && not typing) → remove command, merge neighbors |
-| **Close path** | If first ≠ last, append `Z` or `L` to first anchor; Inspector button **Close path** |
-| **Snap** | In `pointerToPathLocal` or move handler: reuse `computeSnap` from `snapping.ts` for anchor drag; optional snap to other objects’ bounds |
-
-**UI (Inspector, `selectedIsPath`):**
-
-- **Add point** — click segment on canvas (mode flag) or **+ Point** after selecting segment
-- **Delete point** — keyboard when anchor selected (track `selectedAnchorRef`)
-- **Close path** — button, disabled when already closed
-
-**History:** Store path data as incremental op:
-
-```typescript
-// Extend objectPatch OR add pathData op:
-{ type: 'objectPatch', objectId, before, after }
-// before/after includes serialized path command array + left/top/angle if needed
-```
-
-Use `commitObjectPatchHistoryRef` — capture full patch via `captureObjectPatch` + path JSON field, or add `capturePathState(path)` helper.
-
-**Acceptance:**
-
-- [ ] Add/delete/close work on rotated path
-- [ ] Cmd+Z restores path geometry without full canvas reload
-- [ ] `pathEditing.test.ts` covers add/delete/close helpers
-- [ ] User path: draw pen stroke → Edit points → add point → close → undo
-
----
+### B3. Pen tool polish ← **start here (next)**
 
 ### B3. Pen tool polish
 

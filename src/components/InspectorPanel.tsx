@@ -86,7 +86,11 @@ export type InspectorPanelProps = {
   selectedIsImage: boolean
   selectedIsPath: boolean
   pathEditMode: boolean
+  pathAddPointMode: boolean
+  pathIsClosed: boolean
   onTogglePathEditMode: () => void
+  onTogglePathAddPointMode: () => void
+  onClosePath: () => void
   customFonts: string[]
   fontInputRef: RefObject<HTMLInputElement | null>
   onFontFileChange: (file: File) => void
@@ -195,7 +199,11 @@ export function InspectorPanel({
   selectedIsImage,
   selectedIsPath,
   pathEditMode,
+  pathAddPointMode,
+  pathIsClosed,
   onTogglePathEditMode,
+  onTogglePathAddPointMode,
+  onClosePath,
   customFonts,
   fontInputRef,
   onFontFileChange,
@@ -739,6 +747,20 @@ export function InspectorPanel({
                       >
                         {pathEditMode ? 'Done editing points' : 'Edit points'}
                       </button>
+                      {pathEditMode ? (
+                        <button
+                          type="button"
+                          className={pathAddPointMode ? 'active' : undefined}
+                          onClick={onTogglePathAddPointMode}
+                        >
+                          {pathAddPointMode ? 'Adding points' : '+ Point'}
+                        </button>
+                      ) : null}
+                      {pathEditMode ? (
+                        <button type="button" disabled={pathIsClosed} onClick={onClosePath}>
+                          Close path
+                        </button>
+                      ) : null}
                     </div>
                     <label>
                       Stroke color

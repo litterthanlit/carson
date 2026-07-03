@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { Rect } from 'fabric'
-import { applyObjectPatch, captureObjectPatch } from './historyObject'
+import { Path, Rect } from 'fabric'
+import { applyObjectPatch, captureObjectPatch, capturePathEditPatch } from './historyObject'
 
 describe('historyObject', () => {
   it('round-trips object patches', () => {
@@ -13,5 +13,30 @@ describe('historyObject', () => {
     expect(object.top).toBe(20)
     expect(object.opacity).toBe(0.8)
     expect((object as unknown as { name: string }).name).toBe('Block')
+  })
+
+  it('round-trips path geometry in path edit patches', () => {
+    const path = new Path('M 0 0 L 80 20 L 120 60', {
+      left: 10,
+      top: 20,
+      angle: 15,
+      stroke: '#111',
+      fill: '',
+    })
+    path.set({ name: 'Pen stroke' } as Partial<Path>)
+    const before = capturePathEditPatch(path)
+    path._setPath(
+      [
+        ['M', 0, 0],
+        ['L', 90, 25],
+        ['L', 120, 60],
+      ],
+      true,
+    )
+    path.set({ left: 40, angle: 30 } as Partial<Path>)
+    applyObjectPatch(path, before)
+    expect(path.left).toBe(10)
+    expect(path.angle).toBe(15)
+    expect(path.path[1]).toEqual(['L', 80, 20])
   })
 })

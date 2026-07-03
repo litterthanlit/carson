@@ -1,17 +1,23 @@
 /**
  * Lightweight history payloads for object property and z-order edits (Horizon 2.1).
  */
+import type { Path as FabricPath } from 'fabric'
 import type { Canvas, FabricObject } from 'fabric'
+import { applyPathData, type PathData } from './pathEditing'
 import { readObjectProp } from './canvasUtils'
 
 export type ObjectPatch = {
   left: number
   top: number
+  angle?: number
+  scaleX?: number
+  scaleY?: number
   opacity: number
   name: string
   visible: boolean
   selectable: boolean
   evented: boolean
+  pathData?: PathData
 }
 
 export function captureObjectPatch(object: FabricObject): string {
@@ -27,11 +33,30 @@ export function captureObjectPatch(object: FabricObject): string {
   return JSON.stringify(patch)
 }
 
+export function capturePathEditPatch(object: FabricObject): string {
+  const patch = JSON.parse(captureObjectPatch(object)) as ObjectPatch
+  if (object.type !== 'path') return JSON.stringify(patch)
+  const path = object as FabricPath
+  return JSON.stringify({
+    ...patch,
+    angle: path.angle ?? 0,
+    scaleX: path.scaleX ?? 1,
+    scaleY: path.scaleY ?? 1,
+    pathData: JSON.parse(JSON.stringify(path.path)) as PathData,
+  })
+}
+
 export function applyObjectPatch(object: FabricObject, patchJson: string): void {
   const patch = JSON.parse(patchJson) as ObjectPatch
+  if (patch.pathData && object.type === 'path') {
+    applyPathData(object as FabricPath, patch.pathData)
+  }
   object.set({
     left: patch.left,
     top: patch.top,
+    angle: patch.angle ?? object.angle ?? 0,
+    scaleX: patch.scaleX ?? object.scaleX ?? 1,
+    scaleY: patch.scaleY ?? object.scaleY ?? 1,
     opacity: patch.opacity,
     name: patch.name,
     visible: patch.visible,
