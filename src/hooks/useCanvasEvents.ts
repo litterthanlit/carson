@@ -1,10 +1,11 @@
 import { useCallback } from 'react'
-import type { Canvas, FabricObject } from 'fabric'
+import type { Canvas, FabricObject, Path as FabricPath } from 'fabric'
 import type { MutableRefObject } from 'react'
 import { SNAP_SCREEN_THRESHOLD } from '../lib/editorConstants'
 import { baselineGridLines, buildColumnGrid, type GridOverlay } from '../lib/grid'
 import { buildPrintGuides } from '../lib/print'
 import { computeSnap } from '../lib/snapping'
+import { applyPathData, simplifyPathData, type PathData } from '../lib/pathEditing'
 import type { LayerKind } from '../types/editor'
 
 type UseCanvasEventsOptions = {
@@ -55,8 +56,12 @@ export function useCanvasEvents({
       canvas.on('object:removed', syncLayers)
 
       canvas.on('path:created', (event) => {
-        const path = event.path
+        const path = event.path as FabricPath | undefined
         if (!path) return
+        const pathData = path.path as PathData | undefined
+        if (pathData) {
+          applyPathData(path, simplifyPathData(pathData))
+        }
         tagObject(path, 'shape', 'Pen stroke')
         path.set({
           stroke: penStrokeColorRef.current,

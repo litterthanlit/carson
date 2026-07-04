@@ -7,6 +7,7 @@ import {
   isPathClosed,
   movePathPoint,
   segmentHitInPathLocal,
+  simplifyPathData,
   type PathData,
 } from './pathEditing'
 
@@ -99,6 +100,32 @@ describe('pathEditing', () => {
       ['L', 0, 0],
     ])
     expect(isPathClosed(closePath(path))).toBe(true)
+  })
+
+  it('simplifies a noisy straight stroke', () => {
+    const noisy: PathData = [
+      ['M', 0, 0],
+      ['L', 50, 1],
+      ['L', 51, 2],
+      ['L', 52, 1],
+      ['L', 53, 0],
+      ['L', 100, 0],
+    ]
+
+    const simplified = simplifyPathData(noisy, 2)
+    const anchors = getPathAnchorPoints(simplified).filter((point) => point.role === 'anchor')
+
+    expect(anchors.length).toBeLessThan(noisy.length - 1)
+    expect(simplified[0]).toEqual(['M', 0, 0])
+    expect(simplified[simplified.length - 1]).toEqual(['L', 100, 0])
+  })
+
+  it('leaves short paths unchanged when simplify would not help', () => {
+    const path: PathData = [
+      ['M', 0, 0],
+      ['L', 100, 0],
+    ]
+    expect(simplifyPathData(path)).toEqual(path)
   })
 
   it('finds the nearest segment in local space', () => {

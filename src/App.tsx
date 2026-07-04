@@ -474,6 +474,7 @@ function App() {
     reroll: () => void rerollLast(),
     commandPalette: () => setCommandOpen(true),
     forkVariant: () => void forkVariation(),
+    togglePen: () => setPenMode((value) => !value),
   }
 
   useEffect(() => {
@@ -596,8 +597,8 @@ function App() {
         actions.addText()
       } else if (event.key.toLowerCase() === 'b') {
         actions.addShape()
-      } else if (event.key.toLowerCase() === 'p') {
-        setPenMode((value) => !value)
+      } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
+        actions.togglePen()
       } else if (event.key.toLowerCase() === 'r') {
         actions.reroll()
       }

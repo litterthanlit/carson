@@ -872,7 +872,7 @@ export function InspectorPanel({
                 <kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10
               </li>
               <li>
-                <kbd>T</kbd> Text · <kbd>B</kbd> Block · <kbd>R</kbd> Re-roll
+                <kbd>T</kbd> Text · <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>R</kbd> Re-roll
               </li>
               <li>
                 <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom

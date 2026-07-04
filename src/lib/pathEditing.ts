@@ -434,3 +434,58 @@ export function applyPathData(path: FabricPath, pathData: PathData) {
 export function pathAnchorWorldPosition(path: FabricPath, point: PathAnchorPoint) {
   return pathLocalToWorld(path, point.x, point.y)
 }
+
+function perpendicularDistance(point: XY, lineStart: XY, lineEnd: XY) {
+  const dx = lineEnd.x - lineStart.x
+  const dy = lineEnd.y - lineStart.y
+  const len2 = dx * dx + dy * dy
+  if (len2 === 0) return Math.hypot(point.x - lineStart.x, point.y - lineStart.y)
+  const t = Math.max(0, Math.min(1, ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / len2))
+  return Math.hypot(point.x - (lineStart.x + t * dx), point.y - (lineStart.y + t * dy))
+}
+
+function douglasPeucker(points: XY[], tolerance: number): XY[] {
+  if (points.length <= 2) return points
+
+  const start = points[0]
+  const end = points[points.length - 1]
+  let maxDistance = 0
+  let maxIndex = 0
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const distance = perpendicularDistance(points[index], start, end)
+    if (distance > maxDistance) {
+      maxDistance = distance
+      maxIndex = index
+    }
+  }
+
+  if (maxDistance > tolerance) {
+    const left = douglasPeucker(points.slice(0, maxIndex + 1), tolerance)
+    const right = douglasPeucker(points.slice(maxIndex), tolerance)
+    return [...left.slice(0, -1), ...right]
+  }
+
+  return [start, end]
+}
+
+/** Reduce noisy freehand pen strokes while preserving shape. */
+export function simplifyPathData(pathData: PathData, tolerance = 2): PathData {
+  const anchors = getPathAnchorPoints(pathData).filter((point) => point.role === 'anchor')
+  if (anchors.length <= 2) return pathData
+
+  const simplified = douglasPeucker(
+    anchors.map((anchor) => ({ x: anchor.x, y: anchor.y })),
+    tolerance,
+  )
+  if (simplified.length >= anchors.length) return pathData
+
+  const next: PathData = [['M', simplified[0].x, simplified[0].y]]
+  for (let index = 1; index < simplified.length; index += 1) {
+    next.push(['L', simplified[index].x, simplified[index].y])
+  }
+  if (pathData.some((command) => command[0] === 'Z') || isPathClosed(pathData)) {
+    next.push(['Z'])
+  }
+  return next
+}
