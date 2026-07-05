@@ -85,6 +85,10 @@ export type InspectorPanelProps = {
   selectedIsText: boolean
   selectedIsImage: boolean
   selectedIsPath: boolean
+  canBooleanUnion: boolean
+  canBooleanSubtract: boolean
+  onBooleanUnion: () => void
+  onBooleanSubtract: () => void
   pathEditMode: boolean
   pathAddPointMode: boolean
   pathIsClosed: boolean
@@ -198,6 +202,10 @@ export function InspectorPanel({
   selectedIsText,
   selectedIsImage,
   selectedIsPath,
+  canBooleanUnion,
+  canBooleanSubtract,
+  onBooleanUnion,
+  onBooleanSubtract,
   pathEditMode,
   pathAddPointMode,
   pathIsClosed,
@@ -737,6 +745,26 @@ export function InspectorPanel({
                     </button>
                   </div>
                 ) : null}
+                {canBooleanUnion || canBooleanSubtract ? (
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      title="Union selected shapes into one path"
+                      disabled={!canBooleanUnion}
+                      onClick={onBooleanUnion}
+                    >
+                      Combine <ScopeSel />
+                    </button>
+                    <button
+                      type="button"
+                      title="Second selected shape punches the first"
+                      disabled={!canBooleanSubtract}
+                      onClick={onBooleanSubtract}
+                    >
+                      Subtract <ScopeSel />
+                    </button>
+                  </div>
+                ) : null}
                 {selectedIsPath ? (
                   <>
                     <div className="button-row">
@@ -876,6 +904,9 @@ export function InspectorPanel({
               </li>
               <li>
                 <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom
+              </li>
+              <li>
+                <kbd>Cmd+K</kbd> Combine / Subtract shapes
               </li>
               <li>
                 <kbd>Space+Drag</kbd> Pan · <kbd>Cmd+Drag</kbd> No snapping

@@ -7,6 +7,7 @@ import {
   Gradient,
   Image as FabricImage,
   Line,
+  Path,
   PencilBrush,
   Polygon,
   Rect,
@@ -70,7 +71,13 @@ import {
 import { addPosterTreatment, readPosterTreatments, writePosterTreatments } from './lib/posterTreatments'
 import { captureLayerOrder, captureObjectPatch } from './lib/historyObject'
 import type { PathEditActions } from './hooks/usePathEditing'
-import { isPathClosed, type PathData } from './lib/pathEditing'
+import { applyPathData, isPathClosed, type PathData } from './lib/pathEditing'
+import {
+  booleanSubtractObjects,
+  booleanUnionObjects,
+  isBooleanCapable,
+  multiPolygonToPathData,
+} from './lib/pathBoolean'
 import {
   buildStarPoints,
   readFileAsDataUrl,
@@ -1132,6 +1139,84 @@ function App() {
     content.set({ clipPath: clip })
     canvas.requestRenderAll()
     commitHistory('Applied clipping mask')
+  }
+
+  async function combineSelectedBoolean(mode: 'union' | 'subtract') {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const active = activeObject()
+    if (!active) {
+      setStatus('Select shapes to combine (Shift+click)')
+      return
+    }
+    const objects =
+      active.type === 'activeselection'
+        ? canvas.getActiveObjects().filter(isBooleanCapable)
+        : isBooleanCapable(active)
+          ? [active]
+          : []
+    if (mode === 'union' && objects.length < 2) {
+      setStatus('Select two or more shapes to combine')
+      return
+    }
+    if (mode === 'subtract' && objects.length !== 2) {
+      setStatus('Select exactly two shapes to subtract')
+      return
+    }
+
+    let multiPolygon
+    try {
+      multiPolygon =
+        mode === 'union'
+          ? booleanUnionObjects(objects)
+          : booleanSubtractObjects(objects[0], objects[1])
+    } catch {
+      setStatus('Combine needs closed shapes — lines and open paths cannot boolean')
+      return
+    }
+
+    if (multiPolygon.length === 0) {
+      setStatus('Boolean left nothing — adjust the selection')
+      return
+    }
+
+    const { pathData, left, top } = multiPolygonToPathData(multiPolygon)
+    if (pathData.length === 0) {
+      setStatus('Boolean left nothing — adjust the selection')
+      return
+    }
+
+    const primary = objects[objects.length - 1]
+    setPathEditMode(false)
+    setPathAddPointMode(false)
+    setPenMode(false)
+
+    const combined = new Path('M 0 0', {
+      left,
+      top,
+      fill: String(readObjectProp(primary, 'fill') ?? '#111111'),
+      stroke: readObjectProp(primary, 'stroke') as string | undefined,
+      strokeWidth: readObjectProp(primary, 'strokeWidth') as number | undefined,
+      opacity: primary.opacity ?? 1,
+      fillRule: 'evenodd',
+      globalCompositeOperation: (readObjectProp(primary, 'globalCompositeOperation') ??
+        'source-over') as GlobalCompositeOperation,
+    })
+    applyPathData(combined, pathData)
+    writeTreatments(combined, readTreatments(primary))
+    tagObject(combined, 'shape', mode === 'union' ? 'Combined shape' : 'Subtracted shape')
+
+    for (const object of objects) {
+      canvas.remove(object)
+    }
+    canvas.add(combined)
+    canvas.setActiveObject(combined)
+    await refreshTreatmentStack(combined)
+    canvas.requestRenderAll()
+    syncSelected()
+    syncLayers()
+    commitHistory(mode === 'union' ? 'Combined shapes' : 'Subtracted shapes')
+    setStatus(mode === 'union' ? 'Combined shapes' : 'Subtracted shapes')
   }
 
   async function saveSelectionAsComponent() {
@@ -2526,6 +2611,14 @@ function App() {
   const activeBoard = documentMeta ? getActiveArtboard(documentMeta) : undefined
   const posterTreatments = readPosterTreatments(activeBoard)
   const selectedIsPath = selectedObject?.type === 'path' || selectedObject?.type === 'line'
+  const booleanSelection =
+    selectedObject?.type === 'activeselection'
+      ? (canvasRef.current?.getActiveObjects().filter(isBooleanCapable) ?? [])
+      : selectedObject && isBooleanCapable(selectedObject)
+        ? [selectedObject]
+        : []
+  const canBooleanUnion = booleanSelection.length >= 2
+  const canBooleanSubtract = booleanSelection.length === 2
   const pathIsClosed =
     selectedObject?.type === 'path'
       ? isPathClosed((selectedObject as import('fabric').Path).path as PathData)
@@ -2543,6 +2636,20 @@ function App() {
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', run: () => void clipSelectionToShape() },
+    {
+      id: 'boolean-union',
+      label: 'Combine shapes (union)',
+      keywords: ['boolean', 'union', 'combine', 'merge', 'path'],
+      scope: 'selection',
+      run: () => void combineSelectedBoolean('union'),
+    },
+    {
+      id: 'boolean-subtract',
+      label: 'Subtract shapes',
+      keywords: ['boolean', 'subtract', 'punch', 'path'],
+      scope: 'selection',
+      run: () => void combineSelectedBoolean('subtract'),
+    },
     { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns'], scope: 'canvas', run: () => setShowLayoutGrid((value) => !value) },
     { id: 'print-guides', label: 'Toggle print guides', keywords: ['bleed', 'trim', 'print'], scope: 'canvas', run: () => setShowPrintGuides((value) => !value) },
   ]
@@ -2725,6 +2832,10 @@ function App() {
           selectedIsText={selectedIsText}
           selectedIsImage={selectedIsImage}
           selectedIsPath={selectedIsPath}
+          canBooleanUnion={canBooleanUnion}
+          canBooleanSubtract={canBooleanSubtract}
+          onBooleanUnion={() => void combineSelectedBoolean('union')}
+          onBooleanSubtract={() => void combineSelectedBoolean('subtract')}
           pathEditMode={pathEditMode}
           pathAddPointMode={pathAddPointMode}
           pathIsClosed={pathIsClosed}
