@@ -4,6 +4,17 @@ export type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'lay
 export type StrokeDashPreset = 'solid' | 'dashed' | 'dotted'
 export type ExportBackground = 'paper' | 'white' | 'transparent'
 
+export type OpenTypeFeatures = {
+  kern: boolean
+  liga: boolean
+  smcp: boolean
+}
+
+export type TextSelectionRange = {
+  start: number
+  end: number
+}
+
 export type SelectedState = {
   id: string
   kind: LayerKind
@@ -29,4 +40,8 @@ export type SelectedState = {
   blendMode?: string
   stroke?: string
   strokeWidth?: number
+  textAlign?: 'left' | 'center' | 'right' | 'justify'
+  fontStyle?: '' | 'normal' | 'italic' | 'oblique'
+  underline?: boolean
+  openTypeFeatures?: OpenTypeFeatures
 }

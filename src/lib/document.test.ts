@@ -5,6 +5,7 @@ import {
   findVariant,
   forkVariant,
   mergeVariantCanvas,
+  normalizeDocumentMeta,
   renameVariant,
   type DocumentMeta,
 } from './document'
@@ -55,5 +56,13 @@ describe('document variants', () => {
     const id = doc.variants[0]!.id
     const next = renameVariant(doc, id, 'Client A')
     expect(findVariant(next, id)?.name).toBe('Client A')
+  })
+
+  it('normalizeDocumentMeta fills missing style arrays for legacy docs', () => {
+    const doc = sampleDoc()
+    const legacy = { ...doc, characterStyles: undefined, paragraphStyles: undefined } as unknown as DocumentMeta
+    const normalized = normalizeDocumentMeta(legacy)
+    expect(normalized.characterStyles).toEqual([])
+    expect(normalized.paragraphStyles).toEqual([])
   })
 })

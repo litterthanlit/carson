@@ -55,6 +55,7 @@ import {
   switchArtboard,
   addArtboard,
   updateArtboardPreset,
+  normalizeDocumentMeta,
   type DocumentMeta,
 } from './lib/document'
 import { loadFontFile, loadGoogleFont } from './lib/fonts'
@@ -105,13 +106,27 @@ import { usePathEditing } from './hooks/usePathEditing'
 import { useTreatments } from './hooks/useTreatments'
 import { useEditorHistory } from './hooks/useEditorHistory'
 import { createLayerThumbnail } from './lib/layerThumbnail'
+import {
+  applyCharacterStyleToText,
+  applyParagraphStyleToText,
+  applySelectionCharacterPatch,
+  createCharacterStyleFromText,
+  createParagraphStyleFromText,
+} from './lib/textStyles'
+import {
+  DEFAULT_OPEN_TYPE_FEATURES,
+  normalizeOpenTypeFeatures,
+  readOpenTypeFeatures,
+} from './lib/textTypography'
 import type {
   ExportBackground,
   ExportFormat,
   InspectorTab,
   LayerKind,
+  OpenTypeFeatures,
   SelectedState,
   StrokeDashPreset,
+  TextSelectionRange,
 } from './types/editor'
 import './App.css'
 
@@ -189,6 +204,7 @@ function App() {
   const [storedAssets, setStoredAssets] = useState<StoredAsset[]>([])
   const [documentPalette, setDocumentPalette] = useState<string[]>(['#111111', '#e11d48', '#05b6d4', '#f6f1e6'])
   const [fontStretch, setFontStretch] = useState(100)
+  const [textSelection, setTextSelection] = useState<TextSelectionRange | null>(null)
   const [gridOverlay, setGridOverlay] = useState<GridOverlay>({ columns: 4, rows: 8, margin: 48, gutter: 16, tension: 0 })
   const [showLayoutGrid, setShowLayoutGrid] = useState(false)
   const [showBaselineGrid, setShowBaselineGrid] = useState(false)
@@ -324,6 +340,7 @@ function App() {
     syncLayers,
     commitHistory,
     tagObject,
+    onTextSelectionChange: setTextSelection,
   })
 
   usePathEditing({
@@ -918,6 +935,10 @@ function App() {
       blendMode: String(readObjectProp(object, 'globalCompositeOperation') ?? 'source-over'),
       stroke: readObjectProp(object, 'stroke') as string | undefined,
       strokeWidth: readObjectProp(object, 'strokeWidth') as number | undefined,
+      textAlign: readObjectProp(object, 'textAlign') as SelectedState['textAlign'],
+      fontStyle: readObjectProp(object, 'fontStyle') as SelectedState['fontStyle'],
+      underline: Boolean(readObjectProp(object, 'underline')),
+      openTypeFeatures: readOpenTypeFeatures(object),
     }
   }
 
@@ -1421,6 +1442,93 @@ function App() {
     canvas.add(curved)
     canvas.setActiveObject(curved)
     commitHistory('Applied text on path')
+  }
+
+  function updateOpenTypeFeatures(patch: Partial<OpenTypeFeatures>) {
+    const object = activeObject()
+    if (!object || object.type !== 'textbox') return
+    const next = normalizeOpenTypeFeatures({ ...readOpenTypeFeatures(object), ...patch })
+    updateActive({ openTypeFeatures: next })
+    finalizeActive('Changed OpenType features')
+  }
+
+  function saveCharacterStyleAction() {
+    const object = activeObject()
+    if (!object || object.type !== 'textbox') return
+    const name = window.prompt('Character style name', 'Accent')
+    if (!name?.trim()) return
+    const style = createCharacterStyleFromText(name.trim(), object, textSelection)
+    setDocumentMeta((current) => {
+      const base = normalizeDocumentMeta(current ?? createDefaultDocument(poster, {}))
+      return {
+        ...base,
+        characterStyles: [style, ...base.characterStyles].slice(0, 24),
+      }
+    })
+    setStatus(`Saved character style “${name.trim()}”`)
+  }
+
+  function saveParagraphStyleAction() {
+    const object = activeObject()
+    if (!object || object.type !== 'textbox') return
+    const name = window.prompt('Paragraph style name', 'Body')
+    if (!name?.trim()) return
+    const style = createParagraphStyleFromText(name.trim(), object)
+    setDocumentMeta((current) => {
+      const base = normalizeDocumentMeta(current ?? createDefaultDocument(poster, {}))
+      return {
+        ...base,
+        paragraphStyles: [style, ...base.paragraphStyles].slice(0, 24),
+      }
+    })
+    setStatus(`Saved paragraph style “${name.trim()}”`)
+  }
+
+  function applyCharacterStyleAction(styleId: string) {
+    const object = activeObject()
+    if (!object || !documentMeta) return
+    const style = documentMeta.characterStyles.find((item) => item.id === styleId)
+    if (!style) return
+    applyCharacterStyleToText(object, style, textSelection)
+    canvasRef.current?.requestRenderAll()
+    syncSelected()
+    finalizeActive(`Applied character style “${style.name}”`)
+  }
+
+  function applyParagraphStyleAction(styleId: string) {
+    const object = activeObject()
+    if (!object || !documentMeta) return
+    const style = documentMeta.paragraphStyles.find((item) => item.id === styleId)
+    if (!style) return
+    applyParagraphStyleToText(object, style)
+    canvasRef.current?.requestRenderAll()
+    syncSelected()
+    finalizeActive(`Applied paragraph style “${style.name}”`)
+  }
+
+  function styleSelectionAccent() {
+    const object = activeObject()
+    if (!object || !textSelection) return
+    const accent = documentPalette[1] ?? ACCENTS[0]
+    applySelectionCharacterPatch(object, { fill: accent }, textSelection)
+    canvasRef.current?.requestRenderAll()
+    finalizeActive('Styled selection')
+  }
+
+  function styleSelectionBold() {
+    const object = activeObject()
+    if (!object || !textSelection) return
+    applySelectionCharacterPatch(object, { fontWeight: 900 }, textSelection)
+    canvasRef.current?.requestRenderAll()
+    finalizeActive('Bold selection')
+  }
+
+  function styleSelectionItalic() {
+    const object = activeObject()
+    if (!object || !textSelection) return
+    applySelectionCharacterPatch(object, { fontStyle: 'italic' }, textSelection)
+    canvasRef.current?.requestRenderAll()
+    finalizeActive('Italic selection')
   }
 
   function applyStrokeDash(preset: StrokeDashPreset) {
@@ -2448,7 +2556,7 @@ function App() {
     setProjectName(project.name)
     if (options.keepId) setProjectId(project.id)
     if (project.document) {
-      setDocumentMeta(project.document)
+      setDocumentMeta(normalizeDocumentMeta(project.document))
       setDocumentPalette(project.document.palette)
       setPrintDpi(project.document.dpi)
       setBleedMm(project.document.bleedMm)
@@ -2857,6 +2965,16 @@ function App() {
           onUpdateActive={updateActive}
           onFinalizeActive={finalizeActive}
           onLoadGoogleFont={loadGoogleFont}
+          openTypeFeatures={selected?.openTypeFeatures ?? DEFAULT_OPEN_TYPE_FEATURES}
+          onOpenTypeChange={updateOpenTypeFeatures}
+          textSelection={textSelection}
+          onSaveCharacterStyle={saveCharacterStyleAction}
+          onSaveParagraphStyle={saveParagraphStyleAction}
+          onApplyCharacterStyle={applyCharacterStyleAction}
+          onApplyParagraphStyle={applyParagraphStyleAction}
+          onStyleSelectionAccent={styleSelectionAccent}
+          onStyleSelectionBold={styleSelectionBold}
+          onStyleSelectionItalic={styleSelectionItalic}
           documentPalette={documentPalette}
           onUpdatePaletteSwatch={updatePaletteSwatch}
           recentColors={recentColors}

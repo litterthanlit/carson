@@ -6,7 +6,7 @@ import { baselineGridLines, buildColumnGrid, type GridOverlay } from '../lib/gri
 import { buildPrintGuides } from '../lib/print'
 import { computeSnap } from '../lib/snapping'
 import { applyPathData, simplifyPathData, type PathData } from '../lib/pathEditing'
-import type { LayerKind } from '../types/editor'
+import type { LayerKind, TextSelectionRange } from '../types/editor'
 
 type UseCanvasEventsOptions = {
   guidesRef: MutableRefObject<{ v: number[]; h: number[] }>
@@ -23,6 +23,7 @@ type UseCanvasEventsOptions = {
   syncLayers: () => void
   commitHistory: (message: string) => void
   tagObject: (object: FabricObject, kind: LayerKind, name: string) => void
+  onTextSelectionChange?: (range: TextSelectionRange | null) => void
 }
 
 export function useCanvasEvents({
@@ -40,6 +41,7 @@ export function useCanvasEvents({
   syncLayers,
   commitHistory,
   tagObject,
+  onTextSelectionChange,
 }: UseCanvasEventsOptions) {
   const registerCanvasEvents = useCallback(
     (canvas: Canvas) => {
@@ -54,6 +56,25 @@ export function useCanvasEvents({
       canvas.on('object:modified', () => commitHistory('Changed layer'))
       canvas.on('object:added', syncLayers)
       canvas.on('object:removed', syncLayers)
+
+      const syncTextSelection = (event: { target?: FabricObject }) => {
+        const target = event.target
+        if (!target || target.type !== 'textbox') {
+          onTextSelectionChange?.(null)
+          return
+        }
+        const text = target as FabricObject & { selectionStart?: number; selectionEnd?: number; isEditing?: boolean }
+        if (!text.isEditing) {
+          onTextSelectionChange?.(null)
+          return
+        }
+        const start = text.selectionStart ?? 0
+        const end = text.selectionEnd ?? 0
+        onTextSelectionChange?.(end > start ? { start, end } : null)
+      }
+
+      canvas.on('text:selection:changed', syncTextSelection)
+      canvas.on('text:editing:exited', () => onTextSelectionChange?.(null))
 
       canvas.on('path:created', (event) => {
         const path = event.path as FabricPath | undefined
@@ -191,6 +212,7 @@ export function useCanvasEvents({
       syncLayers,
       syncSelected,
       tagObject,
+      onTextSelectionChange,
     ],
   )
 

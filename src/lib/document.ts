@@ -4,6 +4,7 @@
 import type { PosterPreset, PosterPresetId } from './editorModel'
 import { applyPosterPreset } from './editorModel'
 import type { Treatment } from './treatments'
+import type { CharacterStyleDef, ParagraphStyleDef } from './textStyles'
 
 export type Artboard = {
   id: string
@@ -36,6 +37,8 @@ export type DocumentMeta = {
   activeArtboardId: string
   variants: DocumentVariant[]
   components: SavedComponent[]
+  characterStyles: CharacterStyleDef[]
+  paragraphStyles: ParagraphStyleDef[]
 }
 
 export function newArtboardId(): string {
@@ -60,6 +63,16 @@ export function createDefaultDocument(preset: PosterPreset, canvas: Record<strin
     activeArtboardId: id,
     variants: [],
     components: [],
+    characterStyles: [],
+    paragraphStyles: [],
+  }
+}
+
+export function normalizeDocumentMeta(doc: DocumentMeta): DocumentMeta {
+  return {
+    ...doc,
+    characterStyles: doc.characterStyles ?? [],
+    paragraphStyles: doc.paragraphStyles ?? [],
   }
 }
 

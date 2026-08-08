@@ -27,8 +27,10 @@ import type {
   ExportBackground,
   ExportFormat,
   InspectorTab,
+  OpenTypeFeatures,
   SelectedState,
   StrokeDashPreset,
+  TextSelectionRange,
 } from '../types/editor'
 import { LayersPanel } from './LayersPanel'
 import { FontPicker } from './FontPicker'
@@ -104,6 +106,16 @@ export type InspectorPanelProps = {
   onUpdateActive: (values: Partial<SelectedState>) => void
   onFinalizeActive: (message: string) => void
   onLoadGoogleFont: (family: string) => Promise<void>
+  openTypeFeatures: OpenTypeFeatures
+  onOpenTypeChange: (features: Partial<OpenTypeFeatures>) => void
+  textSelection: TextSelectionRange | null
+  onSaveCharacterStyle: () => void
+  onSaveParagraphStyle: () => void
+  onApplyCharacterStyle: (styleId: string) => void
+  onApplyParagraphStyle: (styleId: string) => void
+  onStyleSelectionAccent: () => void
+  onStyleSelectionBold: () => void
+  onStyleSelectionItalic: () => void
   documentPalette: string[]
   onUpdatePaletteSwatch: (index: number, color: string) => void
   recentColors: string[]
@@ -221,6 +233,16 @@ export function InspectorPanel({
   onUpdateActive,
   onFinalizeActive,
   onLoadGoogleFont,
+  openTypeFeatures,
+  onOpenTypeChange,
+  textSelection,
+  onSaveCharacterStyle,
+  onSaveParagraphStyle,
+  onApplyCharacterStyle,
+  onApplyParagraphStyle,
+  onStyleSelectionAccent,
+  onStyleSelectionBold,
+  onStyleSelectionItalic,
   documentPalette,
   onUpdatePaletteSwatch,
   recentColors,
@@ -598,6 +620,117 @@ export function InspectorPanel({
                         onChange={(value) => onUpdateActive({ lineHeight: value / 100 })}
                         onCommit={() => onFinalizeActive('Changed line height')}
                       />
+                      <label>
+                        Alignment
+                        <select
+                          value={selected.textAlign ?? 'left'}
+                          onChange={(event) => {
+                            onUpdateActive({ textAlign: event.target.value as SelectedState['textAlign'] })
+                            onFinalizeActive('Changed text alignment')
+                          }}
+                        >
+                          <option value="left">Left</option>
+                          <option value="center">Center</option>
+                          <option value="right">Right</option>
+                          <option value="justify">Justify</option>
+                        </select>
+                      </label>
+                      <div className="opentype-toggles">
+                        <p className="property-kicker">OpenType</p>
+                        <label className="toggle-row">
+                          <input
+                            type="checkbox"
+                            checked={openTypeFeatures.kern}
+                            onChange={(event) => onOpenTypeChange({ kern: event.target.checked })}
+                          />
+                          Kerning
+                        </label>
+                        <label className="toggle-row">
+                          <input
+                            type="checkbox"
+                            checked={openTypeFeatures.liga}
+                            onChange={(event) => onOpenTypeChange({ liga: event.target.checked })}
+                          />
+                          Ligatures
+                        </label>
+                        <label className="toggle-row">
+                          <input
+                            type="checkbox"
+                            checked={openTypeFeatures.smcp}
+                            onChange={(event) => onOpenTypeChange({ smcp: event.target.checked })}
+                          />
+                          Small caps
+                        </label>
+                      </div>
+                      <div className="text-styles panel-section nested">
+                        <p className="property-kicker">Styles</p>
+                        {textSelection ? (
+                          <p className="hint">
+                            Selection {textSelection.start}–{textSelection.end} · double-click text to edit
+                          </p>
+                        ) : (
+                          <p className="hint">Double-click text to select characters for inline styling.</p>
+                        )}
+                        {textSelection ? (
+                          <div className="button-row">
+                            <button type="button" title="Apply accent color to selection" onClick={onStyleSelectionAccent}>
+                              Accent selection
+                            </button>
+                            <button type="button" title="Bold selected characters" onClick={onStyleSelectionBold}>
+                              Bold selection
+                            </button>
+                            <button type="button" title="Italic selected characters" onClick={onStyleSelectionItalic}>
+                              Italic selection
+                            </button>
+                          </div>
+                        ) : null}
+                        <div className="button-row">
+                          <button type="button" title="Save character style from selection or layer" onClick={onSaveCharacterStyle}>
+                            Save character style
+                          </button>
+                          <button type="button" title="Save paragraph style from this text layer" onClick={onSaveParagraphStyle}>
+                            Save paragraph style
+                          </button>
+                        </div>
+                        {documentMeta && documentMeta.characterStyles.length > 0 ? (
+                          <label>
+                            Character style
+                            <select
+                              defaultValue=""
+                              onChange={(event) => {
+                                if (event.target.value) onApplyCharacterStyle(event.target.value)
+                                event.currentTarget.value = ''
+                              }}
+                            >
+                              <option value="">Apply character style…</option>
+                              {documentMeta.characterStyles.map((style) => (
+                                <option key={style.id} value={style.id}>
+                                  {style.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        {documentMeta && documentMeta.paragraphStyles.length > 0 ? (
+                          <label>
+                            Paragraph style
+                            <select
+                              defaultValue=""
+                              onChange={(event) => {
+                                if (event.target.value) onApplyParagraphStyle(event.target.value)
+                                event.currentTarget.value = ''
+                              }}
+                            >
+                              <option value="">Apply paragraph style…</option>
+                              {documentMeta.paragraphStyles.map((style) => (
+                                <option key={style.id} value={style.id}>
+                                  {style.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                      </div>
                     </div>
                   </>
                 ) : null}

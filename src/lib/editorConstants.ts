@@ -26,6 +26,11 @@ export const HISTORY_PROPS = [
   'scrapeFragment',
   'path',
   'originalFill',
+  'openTypeFeatures',
+  'styles',
+  'textAlign',
+  'fontStyle',
+  'underline',
 ] as const
 
 export const FONT_STACKS = [
