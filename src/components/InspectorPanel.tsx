@@ -23,6 +23,7 @@ import { BLEND_MODES, FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorCo
 import { legibilityBand } from '../lib/color'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
+import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
 import type {
   ExportBackground,
   ExportFormat,
@@ -70,6 +71,8 @@ export type InspectorPanelProps = {
   onRerollLayerTreatment: (id: string) => void
   onToggleLayerTreatment: (id: string) => void
   onRemoveLayerTreatment: (object: FabricObject, id: string) => void
+  onPreviewLayerTreatmentParams: (id: string, params: Record<string, number>) => void
+  onUpdateLayerTreatmentParams: (id: string, params: Record<string, number>) => void
   onSaveTreatmentStackAsComponent: () => void
   layers: SelectedState[]
   selectedLayerIds: string[]
@@ -197,6 +200,8 @@ export function InspectorPanel({
   onRerollLayerTreatment,
   onToggleLayerTreatment,
   onRemoveLayerTreatment,
+  onPreviewLayerTreatmentParams,
+  onUpdateLayerTreatmentParams,
   onSaveTreatmentStackAsComponent,
   layers,
   selectedLayerIds,
@@ -468,6 +473,58 @@ export function InspectorPanel({
                         <Trash2 size={12} />
                       </button>
                     </span>
+                    {treatment.type === 'copy-machine' ? (
+                      <div className="treatment-params nested">
+                        <Slider
+                          label="Wobble"
+                          value={treatment.params.wobble ?? COPY_MACHINE_DEFAULTS.wobble}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { wobble: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Drag"
+                          value={treatment.params.drag ?? COPY_MACHINE_DEFAULTS.drag}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { drag: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Grain"
+                          value={treatment.params.grain ?? COPY_MACHINE_DEFAULTS.grain}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { grain: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Contrast"
+                          value={treatment.params.contrast ?? COPY_MACHINE_DEFAULTS.contrast}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { contrast: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Bands"
+                          value={treatment.params.bands ?? COPY_MACHINE_DEFAULTS.bands}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { bands: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Voids"
+                          value={treatment.params.voids ?? COPY_MACHINE_DEFAULTS.voids}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { voids: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>

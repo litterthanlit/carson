@@ -48,6 +48,12 @@ import {
   renderTearTreatment,
   type TearFragmentTagger,
 } from './tearTreatment'
+import {
+  findCopyMachineRender,
+  removeCopyMachineRender,
+  renderCopyMachineTreatment,
+  restoreCopyMachineSource,
+} from './copyMachineTreatment'
 
 export type TreatmentType =
   | 'xerox'
@@ -61,6 +67,7 @@ export type TreatmentType =
   | 'bad-crop'
   | 'glyph-break'
   | 'scrape'
+  | 'copy-machine'
 
 export type Treatment = {
   id: string
@@ -210,6 +217,8 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Glyphs·${treatment.params.intensity ?? 70}`
     case 'scrape':
       return `Scrape·${treatment.params.count ?? 7}`
+    case 'copy-machine':
+      return `Copy·#${treatment.seed}`
     default:
       return treatment.type
   }
@@ -270,7 +279,7 @@ export function renderTreatmentStack(object: FabricObject, tensionScale = 1) {
 
 function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
   const stack = readTreatments(object).filter((item) => item.enabled && !ARTIFACT_TYPES.has(item.type))
-  const filterTreatments = stack.filter((item) => item.type !== 'scatter')
+  const filterTreatments = stack.filter((item) => item.type !== 'scatter' && item.type !== 'copy-machine')
   const scatter = stack.find((item) => item.type === 'scatter')
 
   const baseline = readTransformBaseline(object)
@@ -309,6 +318,16 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
   }
 
   object.setCoords()
+}
+
+function cleanupOrphanedCopyMachineRenders(canvas: Canvas, source: FabricObject) {
+  const sourceId = String((source as unknown as Record<string, unknown>).id ?? '')
+  const hasCopyMachine = readTreatments(source).some((item) => item.type === 'copy-machine')
+  const render = findCopyMachineRender(canvas, sourceId)
+  if (render && !hasCopyMachine) {
+    canvas.remove(render)
+    restoreCopyMachineSource(source)
+  }
 }
 
 function cleanupOrphanedArtifactFragments(canvas: Canvas, source: FabricObject) {
@@ -358,6 +377,7 @@ export async function renderTreatmentStackOnCanvas(
   const enabledArtifacts = treatments.some((item) => ARTIFACT_TYPES.has(item.type) && item.enabled)
 
   cleanupOrphanedArtifactFragments(canvas, object)
+  cleanupOrphanedCopyMachineRenders(canvas, object)
 
   for (const treatment of treatments.filter((item) => item.type === 'slice')) {
     if (treatment.enabled) await renderSliceTreatment(canvas, object, treatment, taggers.slice)
@@ -378,6 +398,15 @@ export async function renderTreatmentStackOnCanvas(
   for (const treatment of treatments.filter((item) => item.type === 'glyph-break')) {
     if (treatment.enabled) renderGlyphBreakTreatment(canvas, object, treatment, taggers.glyph)
     else removeGlyphFragments(canvas, treatment.id)
+  }
+
+  const copyMachineTreatments = treatments.filter((item) => item.type === 'copy-machine')
+  if (copyMachineTreatments.length > 0) {
+    await renderCopyMachineTreatment(canvas, object, copyMachineTreatments)
+  } else {
+    const sourceId = String((object as unknown as Record<string, unknown>).id ?? '')
+    removeCopyMachineRender(canvas, sourceId)
+    restoreCopyMachineSource(object)
   }
 
   if (!enabledArtifacts) {

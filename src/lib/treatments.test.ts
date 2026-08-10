@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addTreatment, buildTreatmentFilters, readTreatments } from './treatments'
+import { addTreatment, buildTreatmentFilters, readTreatments, treatmentLabel } from './treatments'
 
 describe('treatments', () => {
   it('stores treatments on a plain object bag', () => {
@@ -44,5 +44,17 @@ describe('treatments', () => {
       { id: '1', type: 'cold-wash', seed: 1, enabled: true, params: {} },
     ])
     expect(filters).toHaveLength(4)
+  })
+
+  it('labels copy-machine treatments with seed identity', () => {
+    expect(
+      treatmentLabel({
+        id: '1',
+        type: 'copy-machine',
+        seed: 4719,
+        enabled: true,
+        params: {},
+      }),
+    ).toBe('Copy·#4719')
   })
 })

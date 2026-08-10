@@ -4,8 +4,11 @@ import {
   applyDisplacement,
   applyDrag,
   applySpatialPasses,
+  applyTonalPasses,
   buildDisplacementField,
   COPY_MACHINE_DEFAULTS,
+  copyMachineParamsFromRecord,
+  renderCopyMachinePass,
 } from './copyMachine'
 
 const FIXTURE_SIZE = 64
@@ -156,5 +159,27 @@ describe('copyMachine CM-0', () => {
 
     expect(samples).toEqual([255, 255, 144, 0, 54])
     expect(imageDataDigest(result.data)).toBe('6c53b600')
+  })
+
+  it('maps treatment params with defaults', () => {
+    expect(copyMachineParamsFromRecord({ wobble: 80 })).toMatchObject({
+      wobble: 80,
+      drag: COPY_MACHINE_DEFAULTS.drag,
+    })
+  })
+
+  it('applies tonal passes deterministically', () => {
+    const source = createCheckerboard(FIXTURE_SIZE)
+    const random = createSeededRandom(FIXTURE_SEED)
+    const first = applyTonalPasses(source, COPY_MACHINE_DEFAULTS, random)
+    const second = applyTonalPasses(source, COPY_MACHINE_DEFAULTS, createSeededRandom(FIXTURE_SEED))
+    expect(Array.from(first.data)).toEqual(Array.from(second.data))
+    expect(imageDataDigest(first.data)).not.toBe(imageDataDigest(source.data))
+  })
+
+  it('renders a full copy machine pass', () => {
+    const source = createCheckerboard(FIXTURE_SIZE)
+    const result = renderCopyMachinePass(source, COPY_MACHINE_DEFAULTS, createSeededRandom(FIXTURE_SEED))
+    expect(imageDataDigest(result.data)).not.toBe(imageDataDigest(source.data))
   })
 })

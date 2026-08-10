@@ -914,13 +914,21 @@ input[type='color'] {
 }
 
 .treatment-stack li {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 12px;
+}
+
+.treatment-stack .treatment-params {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
 }
 
 .treatment-stack li.bypassed {

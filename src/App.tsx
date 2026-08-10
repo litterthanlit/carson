@@ -87,6 +87,7 @@ import {
   safeFileName,
 } from './lib/canvasUtils'
 import { legibilityToParam } from './lib/glyphBreakTreatment'
+import { COPY_MACHINE_DEFAULTS, copyMachineParamsToRecord } from './lib/copyMachine'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
@@ -262,6 +263,8 @@ function App() {
     reorderLayerTreatment,
     toggleTreatment,
     removeLayerTreatment,
+    updateLayerTreatmentParams,
+    previewLayerTreatmentParams,
     rerollPosterTreatment,
     togglePosterTreatment,
     removePosterTreatmentAction,
@@ -995,6 +998,10 @@ function App() {
 
   function finalizeActive(message: string) {
     activeObject()?.setCoords()
+    const object = activeObject()
+    if (object && readTreatments(object).some((item) => item.type === 'copy-machine')) {
+      void refreshTreatmentStack(object)
+    }
     canvasRef.current?.requestRenderAll()
     commitObjectEditSession(message)
   }
@@ -1980,6 +1987,15 @@ function App() {
     applyTreatmentToSelection('xerox', { generation: xeroxGeneration }, 'xerox copy', seed)
   }
 
+  async function applyCopyMachineToSelected(seed = newSeed()) {
+    applyTreatmentToSelection(
+      'copy-machine',
+      copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS),
+      'copy machine',
+      seed,
+    )
+  }
+
   async function addMisprintDuplicate() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -2736,6 +2752,13 @@ function App() {
   const commands: CommandAction[] = [
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox'], scope: 'selection', run: openFilterGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', run: () => void applyXeroxToSelected() },
+    {
+      id: 'copy-machine',
+      label: 'Copy machine',
+      keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier'],
+      scope: 'selection',
+      run: () => void applyCopyMachineToSelected(),
+    },
     { id: 'scatter', label: 'Scatter selection', keywords: ['scatter', 'chaos'], scope: 'selection', run: () => scatterSelected() },
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', run: () => void applyLayerDecayToSelected() },
     { id: 'distress', label: 'Distress selection', keywords: ['distress', 'grunge'], scope: 'selection', run: () => void distressSelected() },
@@ -2839,6 +2862,7 @@ function App() {
           onBreakSelectedType={() => breakSelectedType()}
           onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
           onApplyXerox={() => void applyXeroxToSelected()}
+          onApplyCopyMachine={() => void applyCopyMachineToSelected()}
           onAddMisprintDuplicate={() => void addMisprintDuplicate()}
           onAddPrintScanSurface={() => addPrintScanSurface()}
           onApplyLayerDecay={() => void applyLayerDecayToSelected()}
@@ -2918,6 +2942,8 @@ function App() {
           onRerollLayerTreatment={(id) => void rerollTreatment(id)}
           onToggleLayerTreatment={(id) => void toggleTreatment(id)}
           onRemoveLayerTreatment={(object, id) => void removeLayerTreatment(object, id)}
+          onPreviewLayerTreatmentParams={(id, params) => void previewLayerTreatmentParams(id, params)}
+          onUpdateLayerTreatmentParams={(id, params) => void updateLayerTreatmentParams(id, params)}
           onSaveTreatmentStackAsComponent={() => void saveTreatmentStackAsComponent()}
           layers={layers}
           selectedLayerIds={selectedLayerIds}
@@ -3004,7 +3030,7 @@ function App() {
             const canvas = canvasRef.current
             if (!canvas) return
             for (const object of canvas.getObjects()) {
-              if (readTreatments(object).some((item) => item.type === 'scatter')) {
+              if (readTreatments(object).some((item) => item.type === 'scatter' || item.type === 'copy-machine')) {
                 void refreshTreatmentStack(object)
               }
             }

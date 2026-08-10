@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Canvas, FabricObject } from 'fabric'
 import type { MutableRefObject, RefObject } from 'react'
 import { getActiveArtboard, type DocumentMeta } from '../lib/document'
@@ -75,6 +75,7 @@ export function useTreatments({
       evented: false,
     } as Partial<FabricObject>)
   }, [])
+  const treatmentParamBeforeRef = useRef<string | null>(null)
 
   const refreshTreatmentStack = useCallback(
     async (object?: FabricObject | null) => {
@@ -111,7 +112,7 @@ export function useTreatments({
   const reconcileArtifactTreatments = useCallback(async () => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
+    const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'copy-machine'])
     for (const object of canvas.getObjects()) {
       if (readTreatments(object).some((item) => artifactTypes.has(item.type))) {
         await refreshTreatmentStack(object)
@@ -186,6 +187,37 @@ export function useTreatments({
       commitTreatmentHistory(objectId, 'Removed treatment', before, JSON.stringify(readTreatments(object)))
     },
     [commitTreatmentHistory, refreshTreatmentStack],
+  )
+
+  const updateLayerTreatmentParams = useCallback(
+    async (treatmentId: string, params: Record<string, number>) => {
+      const object = activeObject()
+      if (!object) return
+      const treatment = readTreatments(object).find((item) => item.id === treatmentId)
+      if (!treatment) return
+      const objectId = String(object.get('id') ?? '')
+      const before = treatmentParamBeforeRef.current ?? JSON.stringify(readTreatments(object))
+      updateTreatment(object, treatmentId, { params: { ...treatment.params, ...params } })
+      await refreshTreatmentStack(object)
+      commitTreatmentHistory(objectId, 'Updated treatment', before, JSON.stringify(readTreatments(object)))
+      treatmentParamBeforeRef.current = null
+    },
+    [activeObject, commitTreatmentHistory, refreshTreatmentStack],
+  )
+
+  const previewLayerTreatmentParams = useCallback(
+    async (treatmentId: string, params: Record<string, number>) => {
+      const object = activeObject()
+      if (!object) return
+      const treatment = readTreatments(object).find((item) => item.id === treatmentId)
+      if (!treatment) return
+      if (!treatmentParamBeforeRef.current) {
+        treatmentParamBeforeRef.current = JSON.stringify(readTreatments(object))
+      }
+      updateTreatment(object, treatmentId, { params: { ...treatment.params, ...params } })
+      await refreshTreatmentStack(object)
+    },
+    [activeObject, refreshTreatmentStack],
   )
 
   const rerollPosterTreatment = useCallback(
@@ -275,6 +307,8 @@ export function useTreatments({
     reorderLayerTreatment,
     toggleTreatment,
     removeLayerTreatment,
+    updateLayerTreatmentParams,
+    previewLayerTreatmentParams,
     rerollPosterTreatment,
     togglePosterTreatment,
     removePosterTreatmentAction,

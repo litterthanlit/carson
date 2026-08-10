@@ -68,6 +68,7 @@ export type LeftRailProps = {
   onBreakSelectedType: () => void
   onCloneTypeAsTexture: () => void
   onApplyXerox: () => void
+  onApplyCopyMachine: () => void
   onAddMisprintDuplicate: () => void
   onAddPrintScanSurface: () => void
   onApplyLayerDecay: () => void
@@ -136,6 +137,7 @@ export function LeftRail({
   onBreakSelectedType,
   onCloneTypeAsTexture,
   onApplyXerox,
+  onApplyCopyMachine,
   onAddMisprintDuplicate,
   onAddPrintScanSurface,
   onApplyLayerDecay,
@@ -358,6 +360,21 @@ export function LeftRail({
               <button type="button" title="Bury a ghost copy of the selected text behind the layout" onClick={onCloneTypeAsTexture} disabled={!selectedIsText}>
                 <Layers size={17} />
                 Bury type <ScopeSel />
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <h2>Treatments</h2>
+            <div className="preset-row">
+              <button
+                type="button"
+                title="Photocopy warp — wobble, drag, grain; source stays editable in Treatments"
+                onClick={onApplyCopyMachine}
+                disabled={!selected}
+              >
+                <ScanLine size={17} />
+                Copy machine <ScopeSel />
               </button>
             </div>
           </div>
