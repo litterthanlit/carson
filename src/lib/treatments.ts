@@ -49,8 +49,9 @@ import {
   type TearFragmentTagger,
 } from './tearTreatment'
 import {
+  findCopyMachineGhost,
   findCopyMachineRender,
-  removeCopyMachineRender,
+  removeCopyMachineCompanions,
   renderCopyMachineTreatment,
   restoreCopyMachineSource,
 } from './copyMachineTreatment'
@@ -324,8 +325,9 @@ function cleanupOrphanedCopyMachineRenders(canvas: Canvas, source: FabricObject)
   const sourceId = String((source as unknown as Record<string, unknown>).id ?? '')
   const hasCopyMachine = readTreatments(source).some((item) => item.type === 'copy-machine')
   const render = findCopyMachineRender(canvas, sourceId)
-  if (render && !hasCopyMachine) {
-    canvas.remove(render)
+  const ghost = findCopyMachineGhost(canvas, sourceId)
+  if (!hasCopyMachine && (render || ghost)) {
+    removeCopyMachineCompanions(canvas, sourceId)
     restoreCopyMachineSource(source)
   }
 }
@@ -404,8 +406,8 @@ export async function renderTreatmentStackOnCanvas(
   if (copyMachineTreatments.length > 0) {
     await renderCopyMachineTreatment(canvas, object, copyMachineTreatments)
   } else {
-    const sourceId = String((object as unknown as Record<string, unknown>).id ?? '')
-    removeCopyMachineRender(canvas, sourceId)
+    const copySourceId = String((object as unknown as Record<string, unknown>).id ?? '')
+    removeCopyMachineCompanions(canvas, copySourceId)
     restoreCopyMachineSource(object)
   }
 

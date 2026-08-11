@@ -523,6 +523,22 @@ export function InspectorPanel({
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { voids: value })}
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
+                        <Slider
+                          label="Ghost"
+                          value={treatment.params.ghost ?? COPY_MACHINE_DEFAULTS.ghost}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { ghost: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Ghost offset"
+                          value={treatment.params.ghostOffset ?? COPY_MACHINE_DEFAULTS.ghostOffset}
+                          min={0}
+                          max={24}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { ghostOffset: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
                       </div>
                     ) : null}
                   </li>

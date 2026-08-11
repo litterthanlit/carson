@@ -410,3 +410,44 @@ export function renderCopyMachinePass(
   const spatial = applySpatialPasses(imageData, params, random)
   return applyTonalPasses(spatial, params, random)
 }
+
+/** Ghost companion — tonal only (the other drum pass), no spatial warp. */
+export function renderCopyMachineGhostPass(
+  imageData: ImageData,
+  params: Pick<CopyMachineParams, 'contrast' | 'grain' | 'bands' | 'voids'>,
+  random: () => number,
+): ImageData {
+  return applyTonalPasses(imageData, params, random)
+}
+
+/** ghost 0..100 → companion opacity (0 when off). */
+export function copyMachineGhostOpacity(ghost: number): number {
+  return paramUnit(ghost) * 0.4
+}
+
+/** Pixel offset for the misregistration echo (right + slightly up). */
+export function copyMachineGhostDelta(ghostOffset: number): { dx: number; dy: number } {
+  const offset = Math.max(0, ghostOffset)
+  return {
+    dx: offset,
+    dy: -offset * 0.45,
+  }
+}
+
+/** Shared misprint/ghost placement for one-shot actions and treatment companions. */
+export function misprintCompanionPose(options: {
+  left: number
+  top: number
+  angle: number
+  offset: number
+  opacity: number
+}) {
+  const { dx, dy } = copyMachineGhostDelta(options.offset)
+  return {
+    left: options.left + dx,
+    top: options.top + dy,
+    angle: options.angle - options.offset * 0.18,
+    opacity: options.opacity,
+    globalCompositeOperation: 'multiply' as const,
+  }
+}

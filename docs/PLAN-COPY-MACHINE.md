@@ -117,8 +117,8 @@ Prove the spatial warp in isolation before any UI.
 - **Acceptance:** select text → apply Copy Machine → edge wobble + grain visible → drag slider changes it live → re-roll → bypass → remove → source text still editable → Cmd+Z.
 
 ### Phase CM-2 — Misregistration ghost (companion layer)
-- `ghost > 0` spawns a low-opacity, offset clone behind the source — generalize the existing `addMisprintDuplicate` (`App.tsx` ~1983) from a one-shot action into a **parameterized, treatment-owned companion** that re-renders on param change and cleans up on treatment remove.
-- Ghost inherits the tonal pass, not the spatial pass (the ghost is the *other* pass of the drum).
+- [x] `ghost > 0` spawns a low-opacity, offset clone behind the source — generalize the existing `addMisprintDuplicate` (`App.tsx`) from a one-shot action into a **parameterized, treatment-owned companion** that re-renders on param change and cleans up on treatment remove.
+- [x] Ghost inherits the tonal pass, not the spatial pass (the ghost is the *other* pass of the drum).
 - **Acceptance:** ghost on → drag `ghostOffset` → echo moves → remove treatment → ghost layer removed → undo restores both.
 
 ### Phase CM-3 — Poster-scope "Run through the copier"
@@ -171,13 +171,13 @@ Prove the spatial warp in isolation before any UI.
 
 Per project rules, **not complete without a user-facing path.**
 
-- [ ] CM-0 displacement spike renders wobble + drag, byte-identical on repeat (test green)
-- [ ] `copy-machine` in treatment union, label, Cmd+K, LeftRail with scope badge
-- [ ] Inspector param sliders, live re-render, re-roll dice, bypass, remove
-- [ ] Source object editable after apply; Cmd+Z works (incremental treatment op, not full snapshot)
+- [x] CM-0 displacement spike renders wobble + drag, byte-identical on repeat (test green)
+- [x] `copy-machine` in treatment union, label, Cmd+K, LeftRail with scope badge
+- [x] Inspector param sliders, live re-render, re-roll dice, bypass, remove
+- [x] Source object editable after apply; Cmd+Z works (incremental treatment op, not full snapshot)
 - [ ] Save → reload → re-renders identically from seed
 - [ ] Export at 4× shows correctly scaled wobble
-- [ ] CM-2 ghost companion with cleanup + undo
+- [x] CM-2 ghost companion with cleanup + undo
 - [ ] Regression templates in HANDOFF pass (slice/tear/scatter/xerox unaffected)
 
 ---

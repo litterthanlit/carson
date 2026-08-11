@@ -7,7 +7,11 @@ import {
   applyTonalPasses,
   buildDisplacementField,
   COPY_MACHINE_DEFAULTS,
+  copyMachineGhostDelta,
+  copyMachineGhostOpacity,
   copyMachineParamsFromRecord,
+  misprintCompanionPose,
+  renderCopyMachineGhostPass,
   renderCopyMachinePass,
 } from './copyMachine'
 
@@ -181,5 +185,100 @@ describe('copyMachine CM-0', () => {
     const source = createCheckerboard(FIXTURE_SIZE)
     const result = renderCopyMachinePass(source, COPY_MACHINE_DEFAULTS, createSeededRandom(FIXTURE_SEED))
     expect(imageDataDigest(result.data)).not.toBe(imageDataDigest(source.data))
+  })
+})
+
+describe('copyMachine CM-2 ghost', () => {
+  it('maps ghost opacity and offset from params', () => {
+    expect(copyMachineGhostOpacity(0)).toBe(0)
+    expect(copyMachineGhostOpacity(50)).toBeCloseTo(0.2)
+    expect(copyMachineGhostOpacity(100)).toBeCloseTo(0.4)
+    expect(copyMachineGhostDelta(10)).toEqual({ dx: 10, dy: -4.5 })
+  })
+
+  it('shares misprint companion pose with the one-shot action', () => {
+    expect(
+      misprintCompanionPose({
+        left: 100,
+        top: 200,
+        angle: 12,
+        offset: 10,
+        opacity: 0.22,
+      }),
+    ).toEqual({
+      left: 110,
+      top: 195.5,
+      angle: 10.2,
+      opacity: 0.22,
+      globalCompositeOperation: 'multiply',
+    })
+  })
+
+  it('ghost pass is tonal-only and deterministic', () => {
+    const source = createCheckerboard(FIXTURE_SIZE)
+    const params = COPY_MACHINE_DEFAULTS
+    const first = renderCopyMachineGhostPass(source, params, createSeededRandom(FIXTURE_SEED))
+    const second = renderCopyMachineGhostPass(source, params, createSeededRandom(FIXTURE_SEED))
+    const full = renderCopyMachinePass(source, params, createSeededRandom(FIXTURE_SEED))
+    const tonal = applyTonalPasses(source, params, createSeededRandom(FIXTURE_SEED))
+
+    expect(Array.from(first.data)).toEqual(Array.from(second.data))
+    expect(Array.from(first.data)).toEqual(Array.from(tonal.data))
+    expect(imageDataDigest(first.data)).not.toBe(imageDataDigest(full.data))
+  })
+
+  it('resolves defaults for ghost params', () => {
+    expect(copyMachineParamsFromRecord({})).toMatchObject({
+      ghost: COPY_MACHINE_DEFAULTS.ghost,
+      ghostOffset: COPY_MACHINE_DEFAULTS.ghostOffset,
+    })
+  })
+})
+
+describe('copyMachineTreatment ghost resolve', () => {
+  it('picks the last enabled treatment with ghost > 0', async () => {
+    const { resolveCopyMachineGhostParams } = await import('./copyMachineTreatment')
+    const result = resolveCopyMachineGhostParams([
+      {
+        id: 'a',
+        type: 'copy-machine',
+        seed: 1,
+        enabled: true,
+        params: { ghost: 40, ghostOffset: 2 },
+      },
+      {
+        id: 'b',
+        type: 'copy-machine',
+        seed: 2,
+        enabled: true,
+        params: { ghost: 10, ghostOffset: 8 },
+      },
+      {
+        id: 'c',
+        type: 'copy-machine',
+        seed: 3,
+        enabled: false,
+        params: { ghost: 90, ghostOffset: 12 },
+      },
+    ])
+    expect(result).toMatchObject({
+      seed: 2,
+      params: { ghost: 10, ghostOffset: 8 },
+    })
+  })
+
+  it('returns null when ghost is off', async () => {
+    const { resolveCopyMachineGhostParams } = await import('./copyMachineTreatment')
+    expect(
+      resolveCopyMachineGhostParams([
+        {
+          id: 'a',
+          type: 'copy-machine',
+          seed: 1,
+          enabled: true,
+          params: { ghost: 0, ghostOffset: 5 },
+        },
+      ]),
+    ).toBeNull()
   })
 })

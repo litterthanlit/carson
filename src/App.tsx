@@ -87,7 +87,11 @@ import {
   safeFileName,
 } from './lib/canvasUtils'
 import { legibilityToParam } from './lib/glyphBreakTreatment'
-import { COPY_MACHINE_DEFAULTS, copyMachineParamsToRecord } from './lib/copyMachine'
+import {
+  COPY_MACHINE_DEFAULTS,
+  copyMachineParamsToRecord,
+  misprintCompanionPose,
+} from './lib/copyMachine'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
@@ -2002,13 +2006,15 @@ function App() {
     if (!canvas || !object) return
     const profile = getPrintScanProfile(xeroxGeneration)
     const clone = await object.clone()
-    clone.set({
-      left: (object.left ?? 0) + profile.misregistration,
-      top: (object.top ?? 0) - profile.misregistration * 0.45,
-      opacity: 0.18 + profile.generation * 0.018,
-      angle: (object.angle ?? 0) - profile.misregistration * 0.18,
-      globalCompositeOperation: 'multiply',
-    })
+    clone.set(
+      misprintCompanionPose({
+        left: object.left ?? 0,
+        top: object.top ?? 0,
+        angle: object.angle ?? 0,
+        offset: profile.misregistration,
+        opacity: 0.18 + profile.generation * 0.018,
+      }),
+    )
     tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'image', 'Misprint offset')
     canvas.add(clone)
     canvas.sendObjectToBack(clone)
