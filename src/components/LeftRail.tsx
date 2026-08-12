@@ -69,6 +69,7 @@ export type LeftRailProps = {
   onCloneTypeAsTexture: () => void
   onApplyXerox: () => void
   onApplyCopyMachine: () => void
+  onApplyCopyMachineToPoster: () => void
   onAddMisprintDuplicate: () => void
   onAddPrintScanSurface: () => void
   onApplyLayerDecay: () => void
@@ -138,6 +139,7 @@ export function LeftRail({
   onCloneTypeAsTexture,
   onApplyXerox,
   onApplyCopyMachine,
+  onApplyCopyMachineToPoster,
   onAddMisprintDuplicate,
   onAddPrintScanSurface,
   onApplyLayerDecay,
@@ -375,6 +377,15 @@ export function LeftRail({
               >
                 <ScanLine size={17} />
                 Copy machine <ScopeSel />
+              </button>
+              <button
+                type="button"
+                title="Run every visible layer through the copier — one physical pass, each layer stays editable"
+                onClick={onApplyCopyMachineToPoster}
+                disabled={layerCount === 0}
+              >
+                <ScanLine size={17} />
+                Run through copier <ScopeAll />
               </button>
             </div>
           </div>

@@ -122,9 +122,9 @@ Prove the spatial warp in isolation before any UI.
 - **Acceptance:** ghost on → drag `ghostOffset` → echo moves → remove treatment → ghost layer removed → undo restores both.
 
 ### Phase CM-3 — Poster-scope "Run through the copier"
-- A canvas-scoped variant (ScopeBadge ⬚) that flattens nothing but applies the treatment to every visible layer with **per-layer seed offsets** derived from the master seed (`seed + layerIndex`) — so the whole poster looks like one physical pass but stays editable per layer.
-- This is the "Press Check" embryo (REIMAGINED 3.2).
-- **Acceptance:** ⬚ Copy Machine → all layers treated, each re-rollable individually → one undo step for the whole operation.
+- [x] A canvas-scoped variant (ScopeBadge ALL) that flattens nothing but applies the treatment to every visible layer with **per-layer seed offsets** derived from the master seed (`seed + layerIndex`) — so the whole poster looks like one physical pass but stays editable per layer.
+- [x] This is the "Press Check" embryo (REIMAGINED 3.2).
+- **Acceptance:** ALL Copy Machine → all layers treated, each re-rollable individually → one undo step for the whole operation.
 
 ### Phase CM-4 — Gesture recording (stretch, feeds 3.2)
 - "Copy → Scatter → Copy" as a recordable **Gesture** (macro chain). Only scope if CM-0–2 land clean.

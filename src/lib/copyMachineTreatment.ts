@@ -63,6 +63,26 @@ export function restoreCopyMachineSource(object: FabricObject, fallbackOpacity =
   object.setCoords()
 }
 
+export function isCopyMachineCompanionLayer(object: FabricObject): boolean {
+  return Boolean(
+    readCopyMachineProp(object, COPY_MACHINE_SOURCE_ID_KEY) ||
+      readCopyMachineProp(object, COPY_GHOST_SOURCE_ID_KEY),
+  )
+}
+
+/** Visible content layers eligible for a poster-scope Copy Machine pass (excludes companions / scrapes). */
+export function isCopyMachinePosterTarget(object: FabricObject): boolean {
+  if (object.visible === false) return false
+  const record = object as unknown as Record<string, unknown>
+  if (record.scrapeFragment) return false
+  if (isCopyMachineCompanionLayer(object)) return false
+  return Boolean(record.id)
+}
+
+export function listCopyMachinePosterTargets(canvas: Canvas): FabricObject[] {
+  return canvas.getObjects().filter(isCopyMachinePosterTarget)
+}
+
 function sourceToImageData(source: FabricObject): ImageData {
   const element = source.toCanvasElement({ enableRetinaScaling: true })
   const context = element.getContext('2d')

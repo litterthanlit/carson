@@ -24,6 +24,8 @@ export const HISTORY_PROPS = [
   'glyphTreatmentId',
   'scrapeTreatmentId',
   'scrapeFragment',
+  'copyMachineSourceId',
+  'copyGhostSourceId',
   'path',
   'originalFill',
   'openTypeFeatures',

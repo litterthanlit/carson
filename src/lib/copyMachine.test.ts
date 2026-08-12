@@ -9,6 +9,7 @@ import {
   COPY_MACHINE_DEFAULTS,
   copyMachineGhostDelta,
   copyMachineGhostOpacity,
+  copyMachineLayerSeeds,
   copyMachineParamsFromRecord,
   misprintCompanionPose,
   renderCopyMachineGhostPass,
@@ -280,5 +281,50 @@ describe('copyMachineTreatment ghost resolve', () => {
         },
       ]),
     ).toBeNull()
+  })
+})
+
+describe('copyMachine CM-3 poster seeds', () => {
+  it('derives per-layer seeds from the master seed', () => {
+    expect(copyMachineLayerSeeds(4719, 3)).toEqual([4719, 4720, 4721])
+    expect(copyMachineLayerSeeds(10, 0)).toEqual([])
+    expect(copyMachineLayerSeeds(-1, 2)).toEqual([0xffffffff, 0])
+  })
+
+  it('filters poster targets to visible content layers', async () => {
+    const { isCopyMachinePosterTarget } = await import('./copyMachineTreatment')
+    expect(
+      isCopyMachinePosterTarget({
+        visible: true,
+        id: 'layer-1',
+      } as never),
+    ).toBe(true)
+    expect(
+      isCopyMachinePosterTarget({
+        visible: false,
+        id: 'hidden',
+      } as never),
+    ).toBe(false)
+    expect(
+      isCopyMachinePosterTarget({
+        visible: true,
+        id: 'scrape',
+        scrapeFragment: true,
+      } as never),
+    ).toBe(false)
+    expect(
+      isCopyMachinePosterTarget({
+        visible: true,
+        id: 'ghost',
+        copyGhostSourceId: 'layer-1',
+      } as never),
+    ).toBe(false)
+    expect(
+      isCopyMachinePosterTarget({
+        visible: true,
+        id: 'bake',
+        copyMachineSourceId: 'layer-1',
+      } as never),
+    ).toBe(false)
   })
 })

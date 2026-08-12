@@ -451,3 +451,13 @@ export function misprintCompanionPose(options: {
     globalCompositeOperation: 'multiply' as const,
   }
 }
+
+/**
+ * CM-3 — per-layer seeds for a poster-scope copier pass.
+ * One master seed; each layer gets `seed + layerIndex` so the pass feels unified but stays re-rollable per layer.
+ */
+export function copyMachineLayerSeeds(masterSeed: number, layerCount: number): number[] {
+  const count = Math.max(0, Math.floor(layerCount))
+  const base = Math.floor(masterSeed) >>> 0
+  return Array.from({ length: count }, (_, index) => (base + index) >>> 0)
+}

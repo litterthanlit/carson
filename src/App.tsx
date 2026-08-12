@@ -89,9 +89,11 @@ import {
 import { legibilityToParam } from './lib/glyphBreakTreatment'
 import {
   COPY_MACHINE_DEFAULTS,
+  copyMachineLayerSeeds,
   copyMachineParamsToRecord,
   misprintCompanionPose,
 } from './lib/copyMachine'
+import { listCopyMachinePosterTargets } from './lib/copyMachineTreatment'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
@@ -2000,6 +2002,32 @@ function App() {
     )
   }
 
+  async function applyCopyMachineToPoster(seed = newSeed()) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const targets = listCopyMachinePosterTargets(canvas)
+    if (targets.length === 0) {
+      setStatus('Nothing to run through the copier')
+      return
+    }
+
+    const params = copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS)
+    const seeds = copyMachineLayerSeeds(seed, targets.length)
+    const targetIds = targets.map((object) => String(readObjectProp(object, 'id') ?? ''))
+
+    for (const [index, object] of targets.entries()) {
+      captureTransformBaseline(object)
+      addTreatment(object, 'copy-machine', params, seeds[index])
+      object.set({ objectCaching: true } as Partial<FabricObject>)
+      await refreshTreatmentStack(object)
+    }
+
+    setInspectorTab('treatments')
+    trackChaos('Run through the copier', seed, targetIds, (next) => applyCopyMachineToPoster(next))
+    commitHistory(`Ran poster through the copier #${seed}`)
+    setStatus(`Ran ${targets.length} layer${targets.length === 1 ? '' : 's'} through the copier`)
+  }
+
   async function addMisprintDuplicate() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -2765,6 +2793,13 @@ function App() {
       scope: 'selection',
       run: () => void applyCopyMachineToSelected(),
     },
+    {
+      id: 'copy-machine-poster',
+      label: 'Run through the copier',
+      keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier', 'poster', 'all layers', 'press check'],
+      scope: 'canvas',
+      run: () => void applyCopyMachineToPoster(),
+    },
     { id: 'scatter', label: 'Scatter selection', keywords: ['scatter', 'chaos'], scope: 'selection', run: () => scatterSelected() },
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', run: () => void applyLayerDecayToSelected() },
     { id: 'distress', label: 'Distress selection', keywords: ['distress', 'grunge'], scope: 'selection', run: () => void distressSelected() },
@@ -2869,6 +2904,7 @@ function App() {
           onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
           onApplyXerox={() => void applyXeroxToSelected()}
           onApplyCopyMachine={() => void applyCopyMachineToSelected()}
+          onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
           onAddMisprintDuplicate={() => void addMisprintDuplicate()}
           onAddPrintScanSurface={() => addPrintScanSurface()}
           onApplyLayerDecay={() => void applyLayerDecayToSelected()}
