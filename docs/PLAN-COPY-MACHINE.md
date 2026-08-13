@@ -175,10 +175,10 @@ Per project rules, **not complete without a user-facing path.**
 - [x] `copy-machine` in treatment union, label, Cmd+K, LeftRail with scope badge
 - [x] Inspector param sliders, live re-render, re-roll dice, bypass, remove
 - [x] Source object editable after apply; Cmd+Z works (incremental treatment op, not full snapshot)
-- [ ] Save → reload → re-renders identically from seed
-- [ ] Export at 4× shows correctly scaled wobble
+- [x] Save → reload → re-renders identically from seed
+- [x] Export at 4× shows correctly scaled wobble
 - [x] CM-2 ghost companion with cleanup + undo
-- [ ] Regression templates in HANDOFF pass (slice/tear/scatter/xerox unaffected)
+- [x] Regression templates in HANDOFF pass (slice/tear/scatter/xerox unaffected)
 
 ---
 

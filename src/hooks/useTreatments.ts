@@ -20,6 +20,7 @@ import {
   type Treatment,
 } from '../lib/treatments'
 import { cropModeFromParams } from '../lib/cropTreatment'
+import { stripCopyMachineCompanions } from '../lib/copyMachineTreatment'
 import type { LayerKind } from '../types/editor'
 import { newSeed } from '../lib/random'
 
@@ -112,11 +113,13 @@ export function useTreatments({
   const reconcileArtifactTreatments = useCallback(async () => {
     const canvas = canvasRef.current
     if (!canvas) return
+    stripCopyMachineCompanions(canvas)
     const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'copy-machine'])
-    for (const object of canvas.getObjects()) {
-      if (readTreatments(object).some((item) => artifactTypes.has(item.type))) {
-        await refreshTreatmentStack(object)
-      }
+    const sources = canvas.getObjects().filter((object) =>
+      readTreatments(object).some((item) => artifactTypes.has(item.type)),
+    )
+    for (const object of sources) {
+      await refreshTreatmentStack(object)
     }
   }, [canvasRef, refreshTreatmentStack])
 

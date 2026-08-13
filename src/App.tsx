@@ -93,7 +93,7 @@ import {
   copyMachineParamsToRecord,
   misprintCompanionPose,
 } from './lib/copyMachine'
-import { listCopyMachinePosterTargets } from './lib/copyMachineTreatment'
+import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, rebakeCopyMachineTreatments } from './lib/copyMachineTreatment'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
@@ -490,7 +490,7 @@ function App() {
     undo: () => void undoAsync(),
     redo,
     save: () => void saveProjectAction(),
-    export: exportPoster,
+    export: () => void exportPoster(),
     duplicate: () => void duplicateSelected(),
     delete: deleteSelected,
     deselect: () => {
@@ -866,6 +866,14 @@ function App() {
     styleBaselineRef.current = map
   }
 
+  function serializeCanvasForSave() {
+    const canvas = canvasRef.current
+    if (!canvas) return {}
+    return omitCopyMachineCompanionsFromCanvasJSON(
+      canvas.toObject(HISTORY_PROPS as unknown as string[]) as { objects?: unknown[] },
+    )
+  }
+
   function scheduleAutosave() {
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = window.setTimeout(() => {
@@ -876,7 +884,7 @@ function App() {
         name: currentName.trim() || 'Untitled poster',
         savedAt: new Date().toISOString(),
         preset: currentPoster,
-        canvas: canvas.toObject(HISTORY_PROPS as unknown as string[]),
+        canvas: serializeCanvasForSave(),
         document: documentMeta ?? undefined,
       }).catch(() => setStatus('Autosave failed — storage may be full'))
     }, 2500)
@@ -2587,7 +2595,7 @@ function App() {
         name,
         savedAt: new Date().toISOString(),
         preset: poster,
-        canvas: canvas.toObject(HISTORY_PROPS as unknown as string[]),
+        canvas: serializeCanvasForSave(),
         document: documentMeta ?? undefined,
       })
       setSavedProjects(await listProjects())
@@ -2639,7 +2647,7 @@ function App() {
 
   async function exportAllArtboards() {
     if (!documentMeta || documentMeta.artboards.length < 2) {
-      exportPoster()
+      await exportPoster()
       return
     }
     const canvas = canvasRef.current
@@ -2647,7 +2655,7 @@ function App() {
     const activeId = documentMeta.activeArtboardId
     for (const board of documentMeta.artboards) {
       await switchToArtboard(board.id)
-      exportPoster()
+      await exportPoster()
     }
     if (activeId !== documentMeta.activeArtboardId) {
       await switchToArtboard(activeId)
@@ -2677,7 +2685,7 @@ function App() {
     setStatus(enabled ? 'CMYK soft-proof preview on' : 'CMYK soft-proof preview off')
   }
 
-  function exportPoster() {
+  async function exportPoster() {
     const canvas = canvasRef.current
     if (!canvas) return
     const previousBackground = canvas.backgroundColor
@@ -2689,10 +2697,12 @@ function App() {
         : exportBackground === 'transparent'
           ? ''
           : '#f6f1e6'
+    const needsExportBake = exportScale !== 1
 
     try {
       canvas.discardActiveObject()
       canvas.backgroundColor = background
+      if (needsExportBake) await rebakeCopyMachineTreatments(canvas, exportScale)
       canvas.requestRenderAll()
       const width = poster.width * exportScale
       const height = poster.height * exportScale
@@ -2735,6 +2745,7 @@ function App() {
     } catch {
       setStatus('Export failed — try a smaller export size')
     } finally {
+      if (needsExportBake) await rebakeCopyMachineTreatments(canvas, 1)
       canvas.backgroundColor = previousBackground
       canvas.requestRenderAll()
       syncSelected()
@@ -2804,7 +2815,7 @@ function App() {
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', run: () => void applyLayerDecayToSelected() },
     { id: 'distress', label: 'Distress selection', keywords: ['distress', 'grunge'], scope: 'selection', run: () => void distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', run: () => alignSelection('left') },
-    { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf'], scope: 'canvas', run: exportPoster },
+    { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf'], scope: 'canvas', run: () => void exportPoster() },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', run: () => void clipSelectionToShape() },
@@ -2851,7 +2862,7 @@ function App() {
         onRedo={redo}
         onSave={() => void saveProjectAction()}
         onOpenCommands={() => setCommandOpen(true)}
-        onExport={exportPoster}
+        onExport={() => void exportPoster()}
       />
 
       <section className="workspace">
@@ -2968,7 +2979,7 @@ function App() {
           onExportQualityCommit={() => setStatus('Updated export quality')}
           posterWidth={poster.width}
           posterHeight={poster.height}
-          onExport={exportPoster}
+          onExport={() => void exportPoster()}
           savedProjects={savedProjects}
           onLoadProject={(project) => void loadProject(project)}
           onDeleteProject={(id, name) => void deleteSavedProject(id, name)}

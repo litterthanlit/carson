@@ -11,6 +11,7 @@ import {
   copyMachineGhostOpacity,
   copyMachineLayerSeeds,
   copyMachineParamsFromRecord,
+  copyMachinePixelScale,
   misprintCompanionPose,
   renderCopyMachineGhostPass,
   renderCopyMachinePass,
@@ -326,5 +327,46 @@ describe('copyMachine CM-3 poster seeds', () => {
         copyMachineSourceId: 'layer-1',
       } as never),
     ).toBe(false)
+  })
+})
+
+describe('copyMachine save/reload + export scale', () => {
+  it('scales displacement amplitude with exportScale', () => {
+    const params = { wobble: 80, wobbleFreq: 40 }
+    const field1 = buildDisplacementField(FIXTURE_SIZE, FIXTURE_SIZE, params, createSeededRandom(FIXTURE_SEED), 1)
+    const field4 = buildDisplacementField(FIXTURE_SIZE, FIXTURE_SIZE, params, createSeededRandom(FIXTURE_SEED), 4)
+
+    let max1 = 0
+    let max4 = 0
+    for (let i = 0; i < field1.length; i++) {
+      max1 = Math.max(max1, Math.abs(field1[i]))
+      max4 = Math.max(max4, Math.abs(field4[i]))
+    }
+    expect(max1).toBeGreaterThan(0.5)
+    expect(max4 / max1).toBeGreaterThan(3.5)
+    expect(copyMachinePixelScale(4)).toBe(4)
+    expect(copyMachinePixelScale(0)).toBe(1)
+  })
+
+  it('is byte-identical across reload-style re-renders from the same seed', () => {
+    const source = createCheckerboard(FIXTURE_SIZE)
+    const run = () =>
+      renderCopyMachinePass(source, COPY_MACHINE_DEFAULTS, createSeededRandom(FIXTURE_SEED), 1)
+    const first = run()
+    const second = run()
+    expect(Array.from(first.data)).toEqual(Array.from(second.data))
+  })
+
+  it('omits baked companions from saved canvas JSON', async () => {
+    const { omitCopyMachineCompanionsFromCanvasJSON } = await import('./copyMachineTreatment')
+    const saved = omitCopyMachineCompanionsFromCanvasJSON({
+      objects: [
+        { id: 'headline', treatments: [{ type: 'copy-machine', seed: 4719 }] },
+        { id: 'bake', copyMachineSourceId: 'headline' },
+        { id: 'ghost', copyGhostSourceId: 'headline' },
+        { id: 'xerox', treatments: [{ type: 'xerox', seed: 1 }] },
+      ],
+    })
+    expect(saved.objects?.map((item) => (item as { id: string }).id)).toEqual(['headline', 'xerox'])
   })
 })

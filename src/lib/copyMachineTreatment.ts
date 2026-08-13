@@ -7,12 +7,13 @@ import {
   copyMachineGhostDelta,
   copyMachineGhostOpacity,
   copyMachineParamsFromRecord,
+  copyMachinePixelScale,
   renderCopyMachineGhostPass,
   renderCopyMachinePass,
   type CopyMachineParams,
 } from './copyMachine'
 import { createSeededRandom } from './random'
-import { readTransformBaseline, type Treatment } from './treatments'
+import { readTransformBaseline, readTreatments, type Treatment } from './treatments'
 
 export const COPY_MACHINE_SOURCE_ID_KEY = 'copyMachineSourceId'
 export const COPY_GHOST_SOURCE_ID_KEY = 'copyGhostSourceId'
@@ -83,8 +84,49 @@ export function listCopyMachinePosterTargets(canvas: Canvas): FabricObject[] {
   return canvas.getObjects().filter(isCopyMachinePosterTarget)
 }
 
-function sourceToImageData(source: FabricObject): ImageData {
-  const element = source.toCanvasElement({ enableRetinaScaling: true })
+export function listCopyMachineSources(canvas: Canvas): FabricObject[] {
+  return canvas.getObjects().filter((object) => {
+    if (isCopyMachineCompanionLayer(object)) return false
+    return readTreatments(object).some((item) => item.type === 'copy-machine')
+  })
+}
+
+export function stripCopyMachineCompanions(canvas: Canvas) {
+  for (const object of [...canvas.getObjects()]) {
+    if (isCopyMachineCompanionLayer(object)) canvas.remove(object)
+  }
+}
+
+/** Persist seed+params only — never the baked bitmap. Reload re-renders from seed. */
+export function omitCopyMachineCompanionsFromCanvasJSON<T extends { objects?: unknown[] }>(json: T): T {
+  if (!Array.isArray(json.objects)) return json
+  return {
+    ...json,
+    objects: json.objects.filter((object) => {
+      if (!object || typeof object !== 'object') return true
+      const record = object as Record<string, unknown>
+      return !record[COPY_MACHINE_SOURCE_ID_KEY] && !record[COPY_GHOST_SOURCE_ID_KEY]
+    }),
+  }
+}
+
+export async function rebakeCopyMachineTreatments(canvas: Canvas, exportScale = 1) {
+  const sources = listCopyMachineSources(canvas)
+  for (const source of sources) {
+    await renderCopyMachineTreatment(
+      canvas,
+      source,
+      readTreatments(source).filter((item) => item.type === 'copy-machine'),
+      exportScale,
+    )
+  }
+}
+
+function sourceToImageData(source: FabricObject, exportScale = 1): ImageData {
+  const element = source.toCanvasElement({
+    enableRetinaScaling: false,
+    multiplier: copyMachinePixelScale(exportScale),
+  })
   const context = element.getContext('2d')
   if (!context) throw new Error('Copy Machine render failed — no 2d context')
   return context.getImageData(0, 0, element.width, element.height)
@@ -103,13 +145,14 @@ function imageDataToDataUrl(imageData: ImageData): string {
 export function renderCopyMachineChain(
   treatments: Treatment[],
   source: FabricObject,
+  exportScale = 1,
 ): ImageData {
-  let imageData = sourceToImageData(source)
+  let imageData = sourceToImageData(source, exportScale)
   for (const treatment of treatments) {
     if (!treatment.enabled) continue
     const params = copyMachineParamsFromRecord(treatment.params)
     const random = createSeededRandom(treatment.seed)
-    imageData = renderCopyMachinePass(imageData, params, random)
+    imageData = renderCopyMachinePass(imageData, params, random, exportScale)
   }
   return imageData
 }
@@ -171,6 +214,7 @@ export async function renderCopyMachineTreatment(
   canvas: Canvas,
   source: FabricObject,
   treatments: Treatment[],
+  exportScale = 1,
 ) {
   const sourceId = String(readCopyMachineProp(source, 'id') ?? 'layer')
   const enabled = treatments.some((item) => item.type === 'copy-machine' && item.enabled)
@@ -181,8 +225,9 @@ export async function renderCopyMachineTreatment(
     return
   }
 
+  revealSourceForRaster(source)
   const chain = treatments.filter((item) => item.type === 'copy-machine')
-  const imageData = renderCopyMachineChain(chain, source)
+  const imageData = renderCopyMachineChain(chain, source, exportScale)
   const dataUrl = imageDataToDataUrl(imageData)
   const bounds = source.getBoundingRect()
   const sourceIndex = canvas.getObjects().indexOf(source)
@@ -202,7 +247,7 @@ export async function renderCopyMachineTreatment(
     if (ghostOpacity > 0.01) {
       const ghostRandom = createSeededRandom((ghostSpec.seed ^ GHOST_SEED_OFFSET) >>> 0)
       const ghostPixels = renderCopyMachineGhostPass(
-        sourceToImageData(source),
+        sourceToImageData(source, exportScale),
         ghostSpec.params,
         ghostRandom,
       )
@@ -220,6 +265,15 @@ export async function renderCopyMachineTreatment(
   }
 
   hideCopyMachineSource(source)
+}
+
+function revealSourceForRaster(source: FabricObject) {
+  const opacity = readTransformBaselineOpacity(source)
+  source.set({
+    opacity: opacity > 0.01 ? opacity : 1,
+    evented: true,
+  } as Partial<FabricObject>)
+  source.setCoords()
 }
 
 function readTransformBaselineOpacity(source: FabricObject): number {

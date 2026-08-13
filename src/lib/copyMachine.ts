@@ -40,6 +40,12 @@ function clampParam(value: number): number {
   return Math.max(0, Math.min(100, value))
 }
 
+/** Export/display pixel scale — amplitude is in canvas px, so 4× export must be 4× displacement. */
+export function copyMachinePixelScale(exportScale = 1): number {
+  if (!Number.isFinite(exportScale) || exportScale <= 0) return 1
+  return exportScale
+}
+
 function paramUnit(value: number): number {
   return clampParam(value) / 100
 }
@@ -121,13 +127,15 @@ export function buildDisplacementField(
   height: number,
   params: Pick<CopyMachineParams, 'wobble' | 'wobbleFreq'>,
   random: () => number,
+  exportScale = 1,
 ): Float32Array {
   const field = new Float32Array(width * height * 2)
-  const amplitude = paramUnit(params.wobble) * MAX_WOBBLE_PX
+  const pixelScale = copyMachinePixelScale(exportScale)
+  const amplitude = paramUnit(params.wobble) * MAX_WOBBLE_PX * pixelScale
   if (amplitude < 0.01 || width < 1 || height < 1) return field
 
   const freq = paramUnit(params.wobbleFreq)
-  const cellSize = Math.max(4, Math.round(lerp(48, 6, freq)))
+  const cellSize = Math.max(4, Math.round(lerp(48, 6, freq) * pixelScale))
   const cols = Math.max(2, Math.ceil(width / cellSize) + 1)
   const rows = Math.max(2, Math.ceil(height / cellSize) + 1)
 
@@ -175,8 +183,9 @@ export function applyDrag(
   imageData: ImageData,
   params: Pick<CopyMachineParams, 'drag' | 'dragAngle'>,
   random: () => number,
+  exportScale = 1,
 ): ImageData {
-  const maxLength = paramUnit(params.drag) * MAX_DRAG_PX
+  const maxLength = paramUnit(params.drag) * MAX_DRAG_PX * copyMachinePixelScale(exportScale)
   if (maxLength < 0.5) return cloneImageData(imageData)
 
   const { width, height, data } = imageData
@@ -244,11 +253,12 @@ export function applySpatialPasses(
   imageData: ImageData,
   params: Pick<CopyMachineParams, 'wobble' | 'wobbleFreq' | 'drag' | 'dragAngle'>,
   random: () => number,
+  exportScale = 1,
 ): ImageData {
   const { width, height } = imageData
-  const field = buildDisplacementField(width, height, params, random)
+  const field = buildDisplacementField(width, height, params, random, exportScale)
   const warped = applyDisplacement(imageData, field)
-  return applyDrag(warped, params, random)
+  return applyDrag(warped, params, random, exportScale)
 }
 
 export function copyMachineParamsFromRecord(params: Record<string, number>): CopyMachineParams {
@@ -406,8 +416,9 @@ export function renderCopyMachinePass(
   imageData: ImageData,
   params: CopyMachineParams,
   random: () => number,
+  exportScale = 1,
 ): ImageData {
-  const spatial = applySpatialPasses(imageData, params, random)
+  const spatial = applySpatialPasses(imageData, params, random, exportScale)
   return applyTonalPasses(spatial, params, random)
 }
 

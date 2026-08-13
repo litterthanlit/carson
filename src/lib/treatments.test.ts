@@ -57,4 +57,31 @@ describe('treatments', () => {
       }),
     ).toBe('Copy·#4719')
   })
+
+  it('keeps xerox, scatter, and slice labels unchanged', () => {
+    expect(
+      treatmentLabel({ id: '1', type: 'xerox', seed: 1, enabled: true, params: { generation: 5 } }),
+    ).toBe('Xerox·5')
+    expect(
+      treatmentLabel({ id: '2', type: 'scatter', seed: 88, enabled: true, params: {} }),
+    ).toBe('Scatter·#88')
+    expect(
+      treatmentLabel({
+        id: '3',
+        type: 'slice',
+        seed: 2,
+        enabled: true,
+        params: { direction: 0, pieces: 5 },
+      }),
+    ).toBe('Slice·H·5')
+  })
+
+  it('stacks copy-machine generations instead of replacing', () => {
+    const object = { set: (values: Record<string, unknown>) => Object.assign(object, values) } as never
+    addTreatment(object, 'copy-machine', { wobble: 35 }, 1)
+    addTreatment(object, 'copy-machine', { wobble: 60 }, 2)
+    const stack = readTreatments(object)
+    expect(stack).toHaveLength(2)
+    expect(stack.map((item) => item.seed)).toEqual([1, 2])
+  })
 })
