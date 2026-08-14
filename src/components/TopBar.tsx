@@ -22,21 +22,21 @@ export function TopBar({ onUndo, onRedo, onSave, onOpenCommands, onExport }: Top
       </div>
       <div className="top-actions" aria-label="Poster actions">
         <button type="button" className="icon-button" aria-label="Undo" title="Undo (Cmd+Z)" onClick={onUndo}>
-          <Undo2 size={18} />
+          <Undo2 size={15} />
         </button>
         <button type="button" className="icon-button" aria-label="Redo" title="Redo (Cmd+Shift+Z)" onClick={onRedo}>
-          <Redo2 size={18} />
+          <Redo2 size={15} />
         </button>
         <button type="button" className="toolbar-button" title="Save to this browser (Cmd+S)" onClick={onSave}>
-          <Save size={17} />
+          <Save size={14} />
           Save
         </button>
         <button type="button" className="toolbar-button" title="Command palette (Cmd+K)" onClick={onOpenCommands}>
-          <Sparkles size={17} />
+          <Sparkles size={14} />
           Commands
         </button>
         <button type="button" className="primary-button" title="Export the poster (Cmd+E)" onClick={onExport}>
-          <Download size={17} />
+          <Download size={14} />
           Export
         </button>
       </div>

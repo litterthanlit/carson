@@ -24,6 +24,7 @@ export function Slider({ label, value, min, max, onChange, onCommit, format }: S
         max={max}
         value={value}
         aria-label={label}
+        aria-valuetext={display}
         onChange={(event) => onChange(Number(event.target.value))}
         onMouseUp={onCommit}
         onTouchEnd={onCommit}
