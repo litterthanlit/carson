@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react'
 import type { Canvas, FabricObject } from 'fabric'
 import type { MutableRefObject, RefObject } from 'react'
 import { getActiveArtboard, type DocumentMeta } from '../lib/document'
-import type { GridOverlay } from '../lib/grid'
+import { gridTensionScale, type GridOverlay } from '../lib/grid'
 import {
   readPosterTreatments,
   removePosterTreatment,
@@ -66,7 +66,7 @@ export function useTreatments({
     (object: FabricObject, kind: LayerKind, name: string) => tagObjectRef.current?.(object, kind, name),
     [tagObjectRef],
   )
-  const tensionScatterScale = useCallback(() => 1 + gridOverlay.tension / 100, [gridOverlay.tension])
+  const tensionScale = useCallback(() => gridTensionScale(gridOverlay.tension), [gridOverlay.tension])
 
   const tagPosterFragment = useCallback((object: FabricObject, name: string) => {
     object.set({
@@ -103,11 +103,11 @@ export function useTreatments({
             tagObject(fragment, 'text', `Glyph ${glyphText}`)
           },
         },
-        tensionScatterScale(),
+        tensionScale(),
       )
       canvas.requestRenderAll()
     },
-    [activeObject, canvasRef, tagObject, tensionScatterScale],
+    [activeObject, canvasRef, tagObject, tensionScale],
   )
 
   const reconcileArtifactTreatments = useCallback(async () => {

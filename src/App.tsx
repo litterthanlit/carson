@@ -60,7 +60,7 @@ import {
 } from './lib/document'
 import { loadFontFile, loadGoogleFont } from './lib/fonts'
 import { contrastRatio } from './lib/color'
-import { alignObjects, distributeObjects, type GridOverlay } from './lib/grid'
+import { alignObjects, distributeObjects, gridTensionScale, type GridOverlay } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
 import {
   ACCENTS,
@@ -2698,11 +2698,12 @@ function App() {
           ? ''
           : '#f6f1e6'
     const needsExportBake = exportScale !== 1
+    const tensionScale = gridTensionScale(gridOverlay.tension)
 
     try {
       canvas.discardActiveObject()
       canvas.backgroundColor = background
-      if (needsExportBake) await rebakeCopyMachineTreatments(canvas, exportScale)
+      if (needsExportBake) await rebakeCopyMachineTreatments(canvas, exportScale, tensionScale)
       canvas.requestRenderAll()
       const width = poster.width * exportScale
       const height = poster.height * exportScale
@@ -2745,7 +2746,7 @@ function App() {
     } catch {
       setStatus('Export failed — try a smaller export size')
     } finally {
-      if (needsExportBake) await rebakeCopyMachineTreatments(canvas, 1)
+      if (needsExportBake) await rebakeCopyMachineTreatments(canvas, 1, tensionScale)
       canvas.backgroundColor = previousBackground
       canvas.requestRenderAll()
       syncSelected()

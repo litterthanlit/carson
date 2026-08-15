@@ -35,9 +35,35 @@ export const COPY_MACHINE_DEFAULTS: CopyMachineParams = {
 
 const MAX_WOBBLE_PX = 12
 const MAX_DRAG_PX = 24
+/** Allow 2× from grid tension (slider 100 → scale 2) without exploding garbage values. */
+const MAX_PARAM_AFTER_TENSION = 200
 
 function clampParam(value: number): number {
-  return Math.max(0, Math.min(100, value))
+  return Math.max(0, Math.min(MAX_PARAM_AFTER_TENSION, value))
+}
+
+/** Grid/instrument tension multiplier. Scatter uses the same 0.1 floor. */
+export function copyMachineTensionScale(tensionScale = 1): number {
+  if (!Number.isFinite(tensionScale)) return 1
+  return Math.max(0.1, tensionScale)
+}
+
+/** Scale 0–100 intensity params; leave scan angle alone. */
+export function scaleCopyMachineParams(params: CopyMachineParams, tensionScale = 1): CopyMachineParams {
+  const scale = copyMachineTensionScale(tensionScale)
+  if (scale === 1) return params
+  return {
+    ...params,
+    contrast: params.contrast * scale,
+    grain: params.grain * scale,
+    voids: params.voids * scale,
+    wobble: params.wobble * scale,
+    wobbleFreq: params.wobbleFreq * scale,
+    drag: params.drag * scale,
+    bands: params.bands * scale,
+    ghost: params.ghost * scale,
+    ghostOffset: params.ghostOffset * scale,
+  }
 }
 
 /** Export/display pixel scale — amplitude is in canvas px, so 4× export must be 4× displacement. */

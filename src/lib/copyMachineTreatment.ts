@@ -10,6 +10,7 @@ import {
   copyMachinePixelScale,
   renderCopyMachineGhostPass,
   renderCopyMachinePass,
+  scaleCopyMachineParams,
   type CopyMachineParams,
 } from './copyMachine'
 import { createSeededRandom } from './random'
@@ -110,7 +111,7 @@ export function omitCopyMachineCompanionsFromCanvasJSON<T extends { objects?: un
   }
 }
 
-export async function rebakeCopyMachineTreatments(canvas: Canvas, exportScale = 1) {
+export async function rebakeCopyMachineTreatments(canvas: Canvas, exportScale = 1, tensionScale = 1) {
   const sources = listCopyMachineSources(canvas)
   for (const source of sources) {
     await renderCopyMachineTreatment(
@@ -118,6 +119,7 @@ export async function rebakeCopyMachineTreatments(canvas: Canvas, exportScale = 
       source,
       readTreatments(source).filter((item) => item.type === 'copy-machine'),
       exportScale,
+      tensionScale,
     )
   }
 }
@@ -146,11 +148,12 @@ export function renderCopyMachineChain(
   treatments: Treatment[],
   source: FabricObject,
   exportScale = 1,
+  tensionScale = 1,
 ): ImageData {
   let imageData = sourceToImageData(source, exportScale)
   for (const treatment of treatments) {
     if (!treatment.enabled) continue
-    const params = copyMachineParamsFromRecord(treatment.params)
+    const params = scaleCopyMachineParams(copyMachineParamsFromRecord(treatment.params), tensionScale)
     const random = createSeededRandom(treatment.seed)
     imageData = renderCopyMachinePass(imageData, params, random, exportScale)
   }
@@ -215,6 +218,7 @@ export async function renderCopyMachineTreatment(
   source: FabricObject,
   treatments: Treatment[],
   exportScale = 1,
+  tensionScale = 1,
 ) {
   const sourceId = String(readCopyMachineProp(source, 'id') ?? 'layer')
   const enabled = treatments.some((item) => item.type === 'copy-machine' && item.enabled)
@@ -227,7 +231,7 @@ export async function renderCopyMachineTreatment(
 
   revealSourceForRaster(source)
   const chain = treatments.filter((item) => item.type === 'copy-machine')
-  const imageData = renderCopyMachineChain(chain, source, exportScale)
+  const imageData = renderCopyMachineChain(chain, source, exportScale, tensionScale)
   const dataUrl = imageDataToDataUrl(imageData)
   const bounds = source.getBoundingRect()
   const sourceIndex = canvas.getObjects().indexOf(source)
@@ -243,15 +247,16 @@ export async function renderCopyMachineTreatment(
 
   const ghostSpec = resolveCopyMachineGhostParams(chain)
   if (ghostSpec) {
-    const ghostOpacity = copyMachineGhostOpacity(ghostSpec.params.ghost)
+    const ghostParams = scaleCopyMachineParams(ghostSpec.params, tensionScale)
+    const ghostOpacity = copyMachineGhostOpacity(ghostParams.ghost)
     if (ghostOpacity > 0.01) {
       const ghostRandom = createSeededRandom((ghostSpec.seed ^ GHOST_SEED_OFFSET) >>> 0)
       const ghostPixels = renderCopyMachineGhostPass(
         sourceToImageData(source, exportScale),
-        ghostSpec.params,
+        ghostParams,
         ghostRandom,
       )
-      const { dx, dy } = copyMachineGhostDelta(ghostSpec.params.ghostOffset)
+      const { dx, dy } = copyMachineGhostDelta(ghostParams.ghostOffset)
       const mainIndex = canvas.getObjects().indexOf(main)
       await placeCompanionImage(canvas, imageDataToDataUrl(ghostPixels), source, bounds, {
         left: bounds.left + dx,

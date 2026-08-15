@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createSeededRandom } from './random'
+import { gridTensionScale } from './grid'
 import {
   applyDisplacement,
   applyDrag,
@@ -12,9 +13,11 @@ import {
   copyMachineLayerSeeds,
   copyMachineParamsFromRecord,
   copyMachinePixelScale,
+  copyMachineTensionScale,
   misprintCompanionPose,
   renderCopyMachineGhostPass,
   renderCopyMachinePass,
+  scaleCopyMachineParams,
 } from './copyMachine'
 
 const FIXTURE_SIZE = 64
@@ -327,6 +330,75 @@ describe('copyMachine CM-3 poster seeds', () => {
         copyMachineSourceId: 'layer-1',
       } as never),
     ).toBe(false)
+  })
+})
+
+describe('copyMachine tensionScale', () => {
+  it('maps grid tension 0..100 to 1×..2×', () => {
+    expect(gridTensionScale(0)).toBe(1)
+    expect(gridTensionScale(100)).toBe(2)
+    expect(gridTensionScale(50)).toBe(1.5)
+  })
+
+  it('floors invalid and tiny multipliers', () => {
+    expect(copyMachineTensionScale(1)).toBe(1)
+    expect(copyMachineTensionScale(2)).toBe(2)
+    expect(copyMachineTensionScale(0)).toBe(0.1)
+    expect(copyMachineTensionScale(Number.NaN)).toBe(1)
+  })
+
+  it('scales intensity params and leaves scan angle alone', () => {
+    const scaled = scaleCopyMachineParams(COPY_MACHINE_DEFAULTS, 2)
+    expect(scaled.wobble).toBe(COPY_MACHINE_DEFAULTS.wobble * 2)
+    expect(scaled.drag).toBe(COPY_MACHINE_DEFAULTS.drag * 2)
+    expect(scaled.grain).toBe(COPY_MACHINE_DEFAULTS.grain * 2)
+    expect(scaled.ghost).toBe(COPY_MACHINE_DEFAULTS.ghost * 2)
+    expect(scaled.ghostOffset).toBe(COPY_MACHINE_DEFAULTS.ghostOffset * 2)
+    expect(scaled.dragAngle).toBe(COPY_MACHINE_DEFAULTS.dragAngle)
+  })
+
+  it('returns the same object when tension is 1×', () => {
+    expect(scaleCopyMachineParams(COPY_MACHINE_DEFAULTS, 1)).toBe(COPY_MACHINE_DEFAULTS)
+  })
+
+  it('renders stronger wobble at 2× and stays deterministic', () => {
+    const source = createCheckerboard(FIXTURE_SIZE)
+    const params = COPY_MACHINE_DEFAULTS
+    const baseline = renderCopyMachinePass(source, params, createSeededRandom(FIXTURE_SEED))
+    const tense = renderCopyMachinePass(
+      source,
+      scaleCopyMachineParams(params, 2),
+      createSeededRandom(FIXTURE_SEED),
+    )
+    const tenseAgain = renderCopyMachinePass(
+      source,
+      scaleCopyMachineParams(params, 2),
+      createSeededRandom(FIXTURE_SEED),
+    )
+
+    expect(imageDataDigest(tense.data)).not.toBe(imageDataDigest(baseline.data))
+    expect(Array.from(tense.data)).toEqual(Array.from(tenseAgain.data))
+  })
+
+  it('lets tension push wobble past the 0–100 slider cap', () => {
+    const fieldMax = (params: { wobble: number; wobbleFreq: number }) => {
+      const field = buildDisplacementField(
+        FIXTURE_SIZE,
+        FIXTURE_SIZE,
+        params,
+        createSeededRandom(FIXTURE_SEED),
+      )
+      let max = 0
+      for (const value of field) max = Math.max(max, Math.abs(value))
+      return max
+    }
+
+    const atCap = fieldMax({ wobble: 100, wobbleFreq: 50 })
+    const tensed = fieldMax(
+      scaleCopyMachineParams({ ...COPY_MACHINE_DEFAULTS, wobble: 100, wobbleFreq: 50 }, 2),
+    )
+    expect(atCap).toBeGreaterThan(0.5)
+    expect(tensed / atCap).toBeGreaterThan(1.4)
   })
 })
 

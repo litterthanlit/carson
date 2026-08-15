@@ -404,7 +404,7 @@ export async function renderTreatmentStackOnCanvas(
 
   const copyMachineTreatments = treatments.filter((item) => item.type === 'copy-machine')
   if (copyMachineTreatments.length > 0) {
-    await renderCopyMachineTreatment(canvas, object, copyMachineTreatments)
+    await renderCopyMachineTreatment(canvas, object, copyMachineTreatments, 1, tensionScale)
   } else {
     const copySourceId = String((object as unknown as Record<string, unknown>).id ?? '')
     removeCopyMachineCompanions(canvas, copySourceId)

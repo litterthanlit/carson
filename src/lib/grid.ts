@@ -78,6 +78,12 @@ export type GridOverlay = {
   tension: number
 }
 
+/** Grid tension 0..100 → instrument multiplier. 0 → 1×, 100 → 2×. */
+export function gridTensionScale(tension: number): number {
+  if (!Number.isFinite(tension)) return 1
+  return Math.max(0.1, 1 + tension / 100)
+}
+
 export function buildColumnGrid(
   canvas: { width: number; height: number },
   overlay: GridOverlay,
