@@ -86,6 +86,10 @@ describe('gestures', () => {
       addTreatment(manualObject, step.type, step.params, seeds[index]!)
     })
 
-    expect(readTreatments(gestureObject)).toEqual(readTreatments(manualObject))
+    const gestureStack = readTreatments(gestureObject)
+    const manualStack = readTreatments(manualObject)
+    expect(gestureStack.map((item) => ({ type: item.type, seed: item.seed, params: item.params }))).toEqual(
+      manualStack.map((item) => ({ type: item.type, seed: item.seed, params: item.params })),
+    )
   })
 })

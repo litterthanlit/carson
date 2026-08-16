@@ -30,6 +30,7 @@ Local poster editor — React 19 + Fabric.js 7. Moat = seeded, non-destructive c
 | **Layers v2** | Thumbnails (`layerThumbnail.ts`) + Shift/Cmd/Ctrl multi-select in `LayersPanel.tsx` |
 | **Print (partial)** | CMYK soft-proof, bleed/trim guides, PDF+TIFF, registration marks, custom size to 10k px |
 | **IA** | Tabbed inspector, Instruments toggle, Cmd+K, variants, multi-artboard, onboarding modal |
+| **Gestures (CM-4)** | Copy → Scatter → Copy macro (LeftRail + Cmd+K); save treatment stack as gesture; replay saved gestures from Inspector |
 | **Horizon 1** | **Complete** — Tab-cycle layers, FontPicker face, zoom-to-layer, a11y contrast + canvas focus, tooltips |
 
 **64 tests** · `npm test && npm run build`
