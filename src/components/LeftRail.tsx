@@ -4,6 +4,7 @@ import {
   Crop,
   FlipHorizontal,
   ImagePlus,
+  Images,
   Layers,
   Minus,
   PenLine,
@@ -88,6 +89,7 @@ export type LeftRailProps = {
   onCropToPosterEdge: () => void
   onOpenLayersPanel: () => void
   onOpenFilterGallery: () => void
+  onOpenTextureGallery: () => void
 }
 
 export function LeftRail({
@@ -158,6 +160,7 @@ export function LeftRail({
   onCropToPosterEdge,
   onOpenLayersPanel,
   onOpenFilterGallery,
+  onOpenTextureGallery,
 }: LeftRailProps) {
   return (
     <aside className="rail left-rail glass-panel" aria-label="Tools and layers">
@@ -226,6 +229,10 @@ export function LeftRail({
           >
             <Sparkles size={17} />
             Filters
+          </button>
+          <button type="button" title="Browse print, ink, paper, and grit textures" onClick={onOpenTextureGallery}>
+            <Images size={17} />
+            Textures
           </button>
           <button type="button" title="Delete the selected layer (Delete)" onClick={onDeleteSelected} disabled={!selected}>
             <Trash2 size={17} />
@@ -466,6 +473,10 @@ export function LeftRail({
           <div className="panel-section">
             <h2>Texture Tools</h2>
             <div className="preset-row">
+              <button type="button" title="Browse print, ink, paper, and grit textures" onClick={onOpenTextureGallery}>
+                <Images size={17} />
+                Texture gallery <ScopeAll />
+              </button>
               <button type="button" title="Apply a cold, tinted print wash to the selected image" onClick={onApplyColdWashImage} disabled={!selectedIsImage}>
                 <ImagePlus size={17} />
                 Cold wash <ScopeSel />

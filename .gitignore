@@ -15,6 +15,10 @@ dist-ssr
 output
 *.local
 
+# Local commercial texture rasters (regenerate with npm run import-textures)
+public/textures/full/
+public/textures/catalog.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

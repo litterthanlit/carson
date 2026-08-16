@@ -1428,6 +1428,27 @@ input[type='color'] {
   }
 }
 
+.texture-gallery-preview.checker {
+  background-color: #d7d0c4;
+  background-image:
+    linear-gradient(45deg, #c4bdb0 25%, transparent 25%),
+    linear-gradient(-45deg, #c4bdb0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #c4bdb0 75%),
+    linear-gradient(-45deg, transparent 75%, #c4bdb0 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+.texture-gallery-modal .filter-gallery-params .preset-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+.texture-gallery-modal .filter-gallery-params .preset-row button.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .typography-face.nested {
   margin-top: 4px;
   padding: 8px;

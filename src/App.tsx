@@ -107,8 +107,10 @@ import { OnboardingModal } from './components/OnboardingModal'
 import { TopBar } from './components/TopBar'
 import { VariantCompareModal } from './components/VariantCompareModal'
 import { FilterGalleryModal } from './components/FilterGalleryModal'
+import { TextureGalleryModal, type TexturePlacement } from './components/TextureGalleryModal'
 import type { FilterPreset } from './lib/filterGallery'
 import { paramsForTreatment } from './lib/filterGallery'
+import { coverScale, layerScale, textureUrl } from './lib/textureGallery'
 import { useCanvasEvents } from './hooks/useCanvasEvents'
 import { usePathEditing } from './hooks/usePathEditing'
 import { useTreatments } from './hooks/useTreatments'
@@ -208,6 +210,7 @@ function App() {
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
   const [commandOpen, setCommandOpen] = useState(false)
   const [filterGalleryOpen, setFilterGalleryOpen] = useState(false)
+  const [textureGalleryOpen, setTextureGalleryOpen] = useState(false)
   const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(null)
   const [customFonts, setCustomFonts] = useState<string[]>([])
   const [storedAssets, setStoredAssets] = useState<StoredAsset[]>([])
@@ -2009,6 +2012,45 @@ function App() {
     setFilterGalleryOpen(true)
   }
 
+  function openTextureGallery() {
+    setTextureGalleryOpen(true)
+  }
+
+  async function placeTextureFromGallery(placement: TexturePlacement) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const image = await FabricImage.fromURL(textureUrl(placement.texture.src), { crossOrigin: 'anonymous' })
+    const imageWidth = image.width ?? 1
+    const imageHeight = image.height ?? 1
+    if (placement.fit === 'cover') {
+      const scale = coverScale(imageWidth, imageHeight, poster.width, poster.height)
+      image.set({
+        left: (poster.width - imageWidth * scale) / 2,
+        top: (poster.height - imageHeight * scale) / 2,
+        scaleX: scale,
+        scaleY: scale,
+        opacity: placement.opacity,
+        globalCompositeOperation: placement.blend as GlobalCompositeOperation,
+      })
+    } else {
+      const scale = layerScale(imageWidth, imageHeight, poster.width, poster.height)
+      image.set({
+        left: poster.width * 0.12,
+        top: poster.height * 0.2,
+        scaleX: scale,
+        scaleY: scale,
+        angle: -2,
+        opacity: placement.opacity,
+        globalCompositeOperation: placement.blend as GlobalCompositeOperation,
+      })
+    }
+    tagObject(image, 'image', placement.texture.name)
+    canvas.add(image)
+    canvas.setActiveObject(image)
+    commitHistory(`Placed texture “${placement.texture.name}”`)
+    setStatus(`Placed ${placement.texture.name}`)
+  }
+
   function applyColdWashImage() {
     const object = activeObject()
     if (!object || object.type !== 'image') return
@@ -2815,6 +2857,7 @@ function App() {
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox'], scope: 'selection', disabled: !selected, run: openFilterGallery },
+    { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
     {
       id: 'copy-machine',
@@ -2878,6 +2921,11 @@ function App() {
         selectedIsImage={selectedIsImage}
         onApply={applyFilterFromGallery}
         onClose={() => setFilterGalleryOpen(false)}
+      />
+      <TextureGalleryModal
+        open={textureGalleryOpen}
+        onPlace={(placement) => void placeTextureFromGallery(placement)}
+        onClose={() => setTextureGalleryOpen(false)}
       />
       <TopBar
         onUndo={() => void undoAsync()}
@@ -2956,6 +3004,7 @@ function App() {
           onCropToPosterEdge={() => void cropToPosterEdge()}
           onOpenLayersPanel={() => setInspectorTab('layers')}
           onOpenFilterGallery={openFilterGallery}
+          onOpenTextureGallery={openTextureGallery}
         />
 
         <EditorCanvas
