@@ -321,6 +321,31 @@ input[type='color'] {
   color: var(--dial-value);
 }
 
+.dial-value-input {
+  width: 44px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  font: 400 11px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--dial-value);
+  text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.dial-value-input::-webkit-outer-spin-button,
+.dial-value-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.dial-value-input:focus {
+  outline: none;
+  color: var(--accent);
+}
+
 .dial-input {
   -webkit-appearance: none;
   appearance: none;
@@ -337,7 +362,8 @@ input[type='color'] {
   outline: none;
 }
 
-.dial:focus-within .dial-value {
+.dial:focus-within .dial-value,
+.dial:focus-within .dial-value-input {
   color: var(--accent);
 }
 
@@ -1036,8 +1062,13 @@ input[type='color'] {
 }
 
 .command-list button.active,
-.command-list button:hover {
+.command-list button:hover:not(:disabled) {
   background: var(--accent-soft);
+}
+
+.command-list button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .command-empty {

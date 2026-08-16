@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CommandAction } from '../lib/commands'
 import { filterCommands } from '../lib/commands'
 
+function commandTitle(command: CommandAction) {
+  if (command.disabled) return 'Select a layer first'
+  if (command.scope === 'selection') return 'Applies to the selected layer'
+  if (command.scope === 'canvas') return 'Applies to the whole poster'
+  return undefined
+}
+
 export function CommandPalette({
   open,
   commands,
@@ -31,6 +38,7 @@ export function CommandPalette({
   if (!open) return null
 
   const run = (command: CommandAction) => {
+    if (command.disabled) return
     command.run()
     onClose()
   }
@@ -74,11 +82,13 @@ export function CommandPalette({
                 <button
                   type="button"
                   className={i === index ? 'active' : undefined}
+                  disabled={command.disabled}
+                  title={commandTitle(command)}
                   onMouseEnter={() => setIndex(i)}
                   onClick={() => run(command)}
                 >
                   <span>{command.label}</span>
-                  {command.scope ? <small>{command.scope}</small> : null}
+                  {command.scope ? <small aria-hidden="true">{command.scope}</small> : null}
                 </button>
               </li>
             ))

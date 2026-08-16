@@ -1,4 +1,4 @@
-import { GripVertical, Lock, LockOpen, Eye, EyeOff } from 'lucide-react'
+import { GripVertical, Lock, LockOpen, Eye, EyeOff, Pencil } from 'lucide-react'
 
 export type LayerRow = {
   id: string
@@ -119,8 +119,14 @@ export function LayersPanel({
             >
               {layer.locked ? <Lock size={13} /> : <LockOpen size={13} />}
             </button>
-            <button type="button" className="layer-rename" title={`Rename ${layer.name}`} onDoubleClick={() => onRenameStart(layer.id)}>
-              Rename
+            <button
+              type="button"
+              className="icon-button layer-toggle"
+              title={`Rename ${layer.name}`}
+              aria-label={`Rename ${layer.name}`}
+              onClick={() => onRenameStart(layer.id)}
+            >
+              <Pencil size={13} />
             </button>
           </span>
         </div>

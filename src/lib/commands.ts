@@ -7,6 +7,7 @@ export type CommandAction = {
   label: string
   keywords: string[]
   scope?: 'selection' | 'canvas' | 'any'
+  disabled?: boolean
   run: () => void
 }
 

@@ -39,6 +39,32 @@ export function buildStarPoints(points: number, outer: number, inner: number) {
   return output
 }
 
+export const FIT_PADDING = 48
+
+export function computeFitScale(
+  stageWidth: number,
+  stageHeight: number,
+  posterWidth: number,
+  posterHeight: number,
+  padding = FIT_PADDING,
+) {
+  const safeStageW = Number.isFinite(stageWidth) && stageWidth > 0 ? stageWidth : 0
+  const safeStageH = Number.isFinite(stageHeight) && stageHeight > 0 ? stageHeight : 0
+  const safePosterW = Number.isFinite(posterWidth) && posterWidth > 0 ? posterWidth : 1
+  const safePosterH = Number.isFinite(posterHeight) && posterHeight > 0 ? posterHeight : 1
+
+  if (safeStageW === 0 || safeStageH === 0) {
+    return 0.02
+  }
+
+  const availableW = safeStageW - padding
+  const availableH = safeStageH - padding
+  const scaleW = availableW > 0 ? availableW / safePosterW : 0.02
+  const scaleH = availableH > 0 ? availableH / safePosterH : 0.02
+
+  return Math.max(0.02, Math.min(1, scaleW, scaleH))
+}
+
 export const formatPercent = (value: number) => `${Math.round(value)}%`
 export const formatDegrees = (value: number) => `${Math.round(value)}°`
 export const formatLineHeight = (value: number) => (value / 100).toFixed(2)

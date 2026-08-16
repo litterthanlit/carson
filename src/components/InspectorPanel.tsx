@@ -296,6 +296,87 @@ export function InspectorPanel({
   onNewArtboardPresetChange,
   onExportAllArtboards,
 }: InspectorPanelProps) {
+  const inspectProjectSection = (
+    <div className="panel-section">
+      <h2>Project</h2>
+      <label>
+        Name
+        <input value={projectName} onChange={(event) => onProjectNameChange(event.target.value)} />
+      </label>
+      <div className="export-box">
+        <h3>Export</h3>
+        <div className="split-inputs">
+          <label>
+            Format
+            <select value={exportFormat} onChange={(event) => onExportFormatChange(event.target.value as ExportFormat)}>
+              <option value="png">PNG</option>
+              <option value="jpeg">JPG</option>
+              <option value="pdf">PDF</option>
+              <option value="tiff">TIFF</option>
+            </select>
+          </label>
+          <label>
+            Size
+            <select value={exportScale} onChange={(event) => onExportScaleChange(Number(event.target.value))}>
+              <option value={1}>1x</option>
+              <option value={2}>2x</option>
+              <option value={3}>3x</option>
+              <option value={4}>4x</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Background
+          <select value={exportBackground} onChange={(event) => onExportBackgroundChange(event.target.value as ExportBackground)}>
+            <option value="paper">Paper</option>
+            <option value="white">White</option>
+            <option value="transparent" disabled={exportFormat === 'jpeg'}>
+              Transparent
+            </option>
+          </select>
+        </label>
+        {exportFormat === 'jpeg' ? (
+          <Slider
+            label="JPG quality"
+            value={exportQuality}
+            min={40}
+            max={100}
+            format={formatPercent}
+            onChange={onExportQualityChange}
+            onCommit={onExportQualityCommit}
+          />
+        ) : null}
+        <button type="button" className="primary-button export-button" onClick={onExport}>
+          <Download size={17} />
+          Export {posterWidth * exportScale} x {posterHeight * exportScale}
+        </button>
+      </div>
+      <div className="saved-list">
+        {savedProjects.length === 0 ? (
+          <p className="empty">No saved posters yet.</p>
+        ) : (
+          savedProjects.map((project) => (
+            <div key={project.id} className="saved-row">
+              <button type="button" title={`Load “${project.name}”`} onClick={() => onLoadProject(project)}>
+                <span>{project.name}</span>
+                <small>{new Date(project.savedAt).toLocaleString()}</small>
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={`Delete saved poster ${project.name}`}
+                title="Delete this saved poster"
+                onClick={() => onDeleteProject(project.id, project.name)}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <aside className="rail inspector glass-panel" aria-label="Inspector">
       <div className="inspector-tabs" role="tablist" aria-label="Inspector panels">
@@ -321,87 +402,6 @@ export function InspectorPanel({
           </button>
         ))}
       </div>
-
-      {inspectorTab === 'inspect' ? (
-        <div className="panel-section">
-          <h2>Project</h2>
-          <label>
-            Name
-            <input value={projectName} onChange={(event) => onProjectNameChange(event.target.value)} />
-          </label>
-          <div className="export-box">
-            <h3>Export</h3>
-            <div className="split-inputs">
-              <label>
-                Format
-                <select value={exportFormat} onChange={(event) => onExportFormatChange(event.target.value as ExportFormat)}>
-                  <option value="png">PNG</option>
-                  <option value="jpeg">JPG</option>
-                  <option value="pdf">PDF</option>
-                  <option value="tiff">TIFF</option>
-                </select>
-              </label>
-              <label>
-                Size
-                <select value={exportScale} onChange={(event) => onExportScaleChange(Number(event.target.value))}>
-                  <option value={1}>1x</option>
-                  <option value={2}>2x</option>
-                  <option value={3}>3x</option>
-                  <option value={4}>4x</option>
-                </select>
-              </label>
-            </div>
-            <label>
-              Background
-              <select value={exportBackground} onChange={(event) => onExportBackgroundChange(event.target.value as ExportBackground)}>
-                <option value="paper">Paper</option>
-                <option value="white">White</option>
-                <option value="transparent" disabled={exportFormat === 'jpeg'}>
-                  Transparent
-                </option>
-              </select>
-            </label>
-            {exportFormat === 'jpeg' ? (
-              <Slider
-                label="JPG quality"
-                value={exportQuality}
-                min={40}
-                max={100}
-                format={formatPercent}
-                onChange={onExportQualityChange}
-                onCommit={onExportQualityCommit}
-              />
-            ) : null}
-            <button type="button" className="primary-button export-button" onClick={onExport}>
-              <Download size={17} />
-              Export {posterWidth * exportScale} x {posterHeight * exportScale}
-            </button>
-          </div>
-          <div className="saved-list">
-            {savedProjects.length === 0 ? (
-              <p className="empty">No saved posters yet.</p>
-            ) : (
-              savedProjects.map((project) => (
-                <div key={project.id} className="saved-row">
-                  <button type="button" title={`Load “${project.name}”`} onClick={() => onLoadProject(project)}>
-                    <span>{project.name}</span>
-                    <small>{new Date(project.savedAt).toLocaleString()}</small>
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Delete saved poster ${project.name}`}
-                    title="Delete this saved poster"
-                    onClick={() => onDeleteProject(project.id, project.name)}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      ) : null}
 
       {inspectorTab === 'treatments' ? (
         <div className="panel-section">
@@ -580,6 +580,7 @@ export function InspectorPanel({
 
       {inspectorTab === 'inspect' ? (
         <>
+          {!selected ? inspectProjectSection : null}
           <div className="panel-section">
             <div className="panel-title">
               <h2>Selection</h2>
@@ -1068,6 +1069,8 @@ export function InspectorPanel({
               </div>
             )}
           </div>
+
+          {selected ? inspectProjectSection : null}
 
           <div className="panel-section">
             <h2>Image effects</h2>

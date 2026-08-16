@@ -81,6 +81,7 @@ import {
 } from './lib/pathBoolean'
 import {
   buildStarPoints,
+  computeFitScale,
   readFileAsDataUrl,
   readObjectProp,
   round,
@@ -198,6 +199,7 @@ function App() {
   const [decayAmount, setDecayAmount] = useState(55)
   const [status, setStatus] = useState('Ready')
   const [zoom, setZoom] = useState<number | null>(null)
+  const [stageSize, setStageSize] = useState<{ width: number; height: number } | null>(null)
   const [isPanMode, setIsPanMode] = useState(false)
   const [lastChaos, setLastChaos] = useState<{ label: string; seed: number } | null>(null)
   const [recentColors, setRecentColors] = useState<string[]>([])
@@ -377,8 +379,11 @@ function App() {
   bleedMmRef.current = bleedMm
 
   const fitScale = useMemo(() => {
+    if (stageSize) {
+      return computeFitScale(stageSize.width, stageSize.height, poster.width, poster.height)
+    }
     return Math.min(1, 660 / poster.width, 780 / poster.height)
-  }, [poster.height, poster.width])
+  }, [poster.height, poster.width, stageSize])
   const displayScale = zoom ?? fitScale
   displayScaleRef.current = displayScale
 
@@ -660,6 +665,19 @@ function App() {
   }, [])
 
   // Cmd/Ctrl + wheel zoom (needs a non-passive native listener).
+  useEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      setStageSize({ width, height })
+    })
+    observer.observe(scroller)
+    return () => observer.disconnect()
+  }, [])
+
   useEffect(() => {
     const scroller = scrollRef.current
     if (!scroller) return
@@ -2796,13 +2814,14 @@ function App() {
   void pathGeometryTick
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
-    { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox'], scope: 'selection', run: openFilterGallery },
-    { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', run: () => void applyXeroxToSelected() },
+    { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox'], scope: 'selection', disabled: !selected, run: openFilterGallery },
+    { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
     {
       id: 'copy-machine',
       label: 'Copy machine',
       keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier'],
       scope: 'selection',
+      disabled: !selected,
       run: () => void applyCopyMachineToSelected(),
     },
     {
@@ -2812,19 +2831,20 @@ function App() {
       scope: 'canvas',
       run: () => void applyCopyMachineToPoster(),
     },
-    { id: 'scatter', label: 'Scatter selection', keywords: ['scatter', 'chaos'], scope: 'selection', run: () => scatterSelected() },
-    { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', run: () => void applyLayerDecayToSelected() },
-    { id: 'distress', label: 'Distress selection', keywords: ['distress', 'grunge'], scope: 'selection', run: () => void distressSelected() },
-    { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', run: () => alignSelection('left') },
+    { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
+    { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => void applyLayerDecayToSelected() },
+    { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
+    { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
     { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf'], scope: 'canvas', run: () => void exportPoster() },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
-    { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', run: () => void clipSelectionToShape() },
+    { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
     {
       id: 'boolean-union',
       label: 'Combine shapes (union)',
       keywords: ['boolean', 'union', 'combine', 'merge', 'path'],
       scope: 'selection',
+      disabled: !selected,
       run: () => void combineSelectedBoolean('union'),
     },
     {
@@ -2832,6 +2852,7 @@ function App() {
       label: 'Subtract shapes',
       keywords: ['boolean', 'subtract', 'punch', 'path'],
       scope: 'selection',
+      disabled: !selected,
       run: () => void combineSelectedBoolean('subtract'),
     },
     { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns'], scope: 'canvas', run: () => setShowLayoutGrid((value) => !value) },

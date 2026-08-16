@@ -10,8 +10,13 @@ type ExplorationTrailProps = {
 export function ExplorationTrail({ variants, activeLabel, onSelect, onFork }: ExplorationTrailProps) {
   if (variants.length === 0) {
     return (
-      <div className="exploration-trail glass-bar">
-        <span className="trail-label">Exploration trail</span>
+      <div className="exploration-trail glass-bar" aria-label="Exploration trail">
+        <span className="trail-label">Trail</span>
+        <div className="trail-filmstrip" role="list">
+          <button type="button" className="trail-chip active" title={`Current — ${activeLabel}`}>
+            <span className="trail-chip-label">Now</span>
+          </button>
+        </div>
         <button type="button" className="trail-fork" onClick={onFork} title="Fork current state (Cmd+B)">
           Fork first variant
         </button>
