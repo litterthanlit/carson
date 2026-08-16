@@ -71,6 +71,7 @@ export type LeftRailProps = {
   onApplyXerox: () => void
   onApplyCopyMachine: () => void
   onApplyCopyMachineToPoster: () => void
+  onApplyCopyScatterCopyGesture: () => void
   onAddMisprintDuplicate: () => void
   onAddPrintScanSurface: () => void
   onApplyLayerDecay: () => void
@@ -142,6 +143,7 @@ export function LeftRail({
   onApplyXerox,
   onApplyCopyMachine,
   onApplyCopyMachineToPoster,
+  onApplyCopyScatterCopyGesture,
   onAddMisprintDuplicate,
   onAddPrintScanSurface,
   onApplyLayerDecay,
@@ -393,6 +395,15 @@ export function LeftRail({
               >
                 <ScanLine size={17} />
                 Run through copier <ScopeAll />
+              </button>
+              <button
+                type="button"
+                title="Play Copy Machine, then Scatter, then Copy Machine again — one undo reverts the whole chain"
+                onClick={onApplyCopyScatterCopyGesture}
+                disabled={!selected}
+              >
+                <Shuffle size={17} />
+                Copy → Scatter → Copy <ScopeSel />
               </button>
             </div>
           </div>

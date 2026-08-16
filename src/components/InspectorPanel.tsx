@@ -24,6 +24,7 @@ import { legibilityBand } from '../lib/color'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
+import type { Gesture } from '../lib/gestures'
 import type {
   ExportBackground,
   ExportFormat,
@@ -74,6 +75,9 @@ export type InspectorPanelProps = {
   onPreviewLayerTreatmentParams: (id: string, params: Record<string, number>) => void
   onUpdateLayerTreatmentParams: (id: string, params: Record<string, number>) => void
   onSaveTreatmentStackAsComponent: () => void
+  onSaveTreatmentStackAsGesture: () => void
+  savedGestures: Gesture[]
+  onApplyGesture: (gesture: Gesture) => void
   layers: SelectedState[]
   selectedLayerIds: string[]
   renamingLayerId: string | null
@@ -203,6 +207,9 @@ export function InspectorPanel({
   onPreviewLayerTreatmentParams,
   onUpdateLayerTreatmentParams,
   onSaveTreatmentStackAsComponent,
+  onSaveTreatmentStackAsGesture,
+  savedGestures,
+  onApplyGesture,
   layers,
   selectedLayerIds,
   renamingLayerId,
@@ -492,6 +499,23 @@ export function InspectorPanel({
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                         <Slider
+                          label="Tear"
+                          value={treatment.params.wobbleFreq ?? COPY_MACHINE_DEFAULTS.wobbleFreq}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { wobbleFreq: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Scan angle"
+                          value={treatment.params.dragAngle ?? COPY_MACHINE_DEFAULTS.dragAngle}
+                          min={0}
+                          max={359}
+                          format={formatDegrees}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { dragAngle: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
                           label="Grain"
                           value={treatment.params.grain ?? COPY_MACHINE_DEFAULTS.grain}
                           min={0}
@@ -554,6 +578,32 @@ export function InspectorPanel({
           >
             Save stack as component
           </button>
+          <button
+            type="button"
+            title="Save this layer's treatment chain as a replayable gesture (treatments only, not canvas JSON)"
+            onClick={onSaveTreatmentStackAsGesture}
+            disabled={!selected || selectedTreatments.length === 0}
+          >
+            Save stack as gesture
+          </button>
+          {savedGestures.length > 0 ? (
+            <>
+              <h3 className="property-kicker">Saved gestures</h3>
+              <div className="preset-row">
+                {savedGestures.map((gesture) => (
+                  <button
+                    key={gesture.id}
+                    type="button"
+                    title={`Play ${gesture.name} on the selected layer`}
+                    onClick={() => onApplyGesture(gesture)}
+                    disabled={!selected}
+                  >
+                    {gesture.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
       ) : null}
 

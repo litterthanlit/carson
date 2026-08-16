@@ -64,5 +64,12 @@ describe('document variants', () => {
     const normalized = normalizeDocumentMeta(legacy)
     expect(normalized.characterStyles).toEqual([])
     expect(normalized.paragraphStyles).toEqual([])
+    expect(normalized.gestures).toEqual([])
+  })
+
+  it('normalizeDocumentMeta defaults gestures for legacy docs', () => {
+    const doc = sampleDoc()
+    const legacy = { ...doc, gestures: undefined } as unknown as DocumentMeta
+    expect(normalizeDocumentMeta(legacy).gestures).toEqual([])
   })
 })

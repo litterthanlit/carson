@@ -3,6 +3,7 @@
  */
 import type { PosterPreset, PosterPresetId } from './editorModel'
 import { applyPosterPreset } from './editorModel'
+import type { Gesture } from './gestures'
 import type { Treatment } from './treatments'
 import type { CharacterStyleDef, ParagraphStyleDef } from './textStyles'
 
@@ -37,6 +38,7 @@ export type DocumentMeta = {
   activeArtboardId: string
   variants: DocumentVariant[]
   components: SavedComponent[]
+  gestures: Gesture[]
   characterStyles: CharacterStyleDef[]
   paragraphStyles: ParagraphStyleDef[]
 }
@@ -53,6 +55,10 @@ export function newComponentId(): string {
   return `component-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
 }
 
+export function newGestureId(): string {
+  return `gesture-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+}
+
 export function createDefaultDocument(preset: PosterPreset, canvas: Record<string, unknown>): DocumentMeta {
   const id = newArtboardId()
   return {
@@ -63,6 +69,7 @@ export function createDefaultDocument(preset: PosterPreset, canvas: Record<strin
     activeArtboardId: id,
     variants: [],
     components: [],
+    gestures: [],
     characterStyles: [],
     paragraphStyles: [],
   }
@@ -71,6 +78,7 @@ export function createDefaultDocument(preset: PosterPreset, canvas: Record<strin
 export function normalizeDocumentMeta(doc: DocumentMeta): DocumentMeta {
   return {
     ...doc,
+    gestures: doc.gestures ?? [],
     characterStyles: doc.characterStyles ?? [],
     paragraphStyles: doc.paragraphStyles ?? [],
   }

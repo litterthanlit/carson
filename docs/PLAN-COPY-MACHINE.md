@@ -127,7 +127,7 @@ Prove the spatial warp in isolation before any UI.
 - **Acceptance:** ALL Copy Machine → all layers treated, each re-rollable individually → one undo step for the whole operation.
 
 ### Phase CM-4 — Gesture recording (stretch, feeds 3.2)
-- "Copy → Scatter → Copy" as a recordable **Gesture** (macro chain). Only scope if CM-0–2 land clean.
+- [x] "Copy → Scatter → Copy" as a recordable **Gesture** (macro chain). LeftRail + Cmd+K + Inspector save/replay; `DocumentMeta.gestures` persistence.
 
 ---
 
@@ -178,7 +178,12 @@ Per project rules, **not complete without a user-facing path.**
 - [x] Save → reload → re-renders identically from seed
 - [x] Export at 4× shows correctly scaled wobble
 - [x] CM-2 ghost companion with cleanup + undo
+- [x] CM-3 poster-scope copier pass with per-layer seeds
+- [x] CM-4 Gestures v1: built-in Copy → Scatter → Copy + save stack as gesture + Inspector replay
+- [x] Copy Machine Inspector sliders include Tear (`wobbleFreq`) and Scan angle (`dragAngle`)
 - [x] Regression templates in HANDOFF pass (slice/tear/scatter/xerox unaffected)
+
+**Bar:** not complete without a user-facing path — CM-4 ships LeftRail, Cmd+K, and Inspector entry points.
 
 ---
 

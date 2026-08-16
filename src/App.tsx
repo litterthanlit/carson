@@ -51,6 +51,7 @@ import {
   forkVariant,
   getActiveArtboard,
   mergeVariantCanvas,
+  newGestureId,
   renameVariant,
   switchArtboard,
   addArtboard,
@@ -95,6 +96,13 @@ import {
   misprintCompanionPose,
 } from './lib/copyMachine'
 import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, rebakeCopyMachineTreatments } from './lib/copyMachineTreatment'
+import {
+  applyGestureToObject,
+  COPY_SCATTER_COPY_GESTURE,
+  gestureFromTreatments,
+  gestureLabel,
+  type Gesture,
+} from './lib/gestures'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
@@ -1633,6 +1641,49 @@ function App() {
     commitHistory(`Saved treatment stack “${name}”`)
   }
 
+  function saveTreatmentStackAsGesture() {
+    const object = activeObject()
+    if (!object || readTreatments(object).length === 0) return
+    const draft = gestureFromTreatments(readTreatments(object))
+    if (draft.steps.length === 0) return
+    const name = window.prompt('Gesture name', draft.name)
+    if (!name?.trim()) return
+    const gesture: Gesture = {
+      ...draft,
+      id: newGestureId(),
+      name: name.trim(),
+    }
+    setDocumentMeta((current) => {
+      const base = current ?? createDefaultDocument(poster, {})
+      return {
+        ...base,
+        gestures: [gesture, ...base.gestures],
+      }
+    })
+    commitHistory(`Saved gesture “${name.trim()}”`)
+  }
+
+  async function applyGestureToSelection(gesture: Gesture, seed = newSeed()) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+    if (gesture.steps.length === 0) return
+    const targetIds = selectedTargetIds()
+    const label = gestureLabel(gesture)
+
+    captureTransformBaseline(object)
+    applyGestureToObject(object, gesture, seed)
+    object.set({ objectCaching: true } as Partial<FabricObject>)
+    await refreshTreatmentStack(object)
+    setInspectorTab('treatments')
+    trackChaos(label, seed, targetIds, (next) => applyGestureToSelection(gesture, next))
+    commitHistory(`Played ${label} #${seed}`)
+  }
+
+  async function applyCopyScatterCopyGesture(seed = newSeed()) {
+    await applyGestureToSelection(COPY_SCATTER_COPY_GESTURE, seed)
+  }
+
   async function mergeVariant(variantId: string) {
     const canvas = canvasRef.current
     if (!canvas || !documentMeta) return
@@ -2874,6 +2925,14 @@ function App() {
       scope: 'canvas',
       run: () => void applyCopyMachineToPoster(),
     },
+    {
+      id: 'gesture-copy-scatter-copy',
+      label: 'Copy → Scatter → Copy',
+      keywords: ['gesture', 'copy machine', 'scatter', 'macro', 'chain'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => void applyCopyScatterCopyGesture(),
+    },
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => void applyLayerDecayToSelected() },
     { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
@@ -2986,6 +3045,7 @@ function App() {
           onApplyXerox={() => void applyXeroxToSelected()}
           onApplyCopyMachine={() => void applyCopyMachineToSelected()}
           onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
+          onApplyCopyScatterCopyGesture={() => void applyCopyScatterCopyGesture()}
           onAddMisprintDuplicate={() => void addMisprintDuplicate()}
           onAddPrintScanSurface={() => addPrintScanSurface()}
           onApplyLayerDecay={() => void applyLayerDecayToSelected()}
@@ -3069,6 +3129,9 @@ function App() {
           onPreviewLayerTreatmentParams={(id, params) => void previewLayerTreatmentParams(id, params)}
           onUpdateLayerTreatmentParams={(id, params) => void updateLayerTreatmentParams(id, params)}
           onSaveTreatmentStackAsComponent={() => void saveTreatmentStackAsComponent()}
+          onSaveTreatmentStackAsGesture={saveTreatmentStackAsGesture}
+          savedGestures={documentMeta?.gestures ?? []}
+          onApplyGesture={(gesture) => void applyGestureToSelection(gesture)}
           layers={layers}
           selectedLayerIds={selectedLayerIds}
           renamingLayerId={renamingLayerId}
