@@ -447,7 +447,7 @@ export function InspectorPanel({
           {!selected ? (
             <p className="empty">Select a layer to view its treatment stack.</p>
           ) : selectedTreatments.length === 0 ? (
-            <p className="empty">No layer treatments yet. Try Xerox or Scatter from the left rail.</p>
+            <p className="empty">No layer treatments yet. Try Xerox or Scatter from Instruments.</p>
           ) : (
             <>
               <h3 className="property-kicker">Layer treatments</h3>
@@ -1159,7 +1159,10 @@ export function InspectorPanel({
                 <kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10
               </li>
               <li>
-                <kbd>T</kbd> Text · <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>R</kbd> Re-roll
+                <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
+              </li>
+              <li>
+                <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>R</kbd> Re-roll
               </li>
               <li>
                 <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom

@@ -1,6 +1,12 @@
 import { Download, Redo2, Save, Sparkles, Undo2 } from 'lucide-react'
+import { TensionDial } from './TensionDial'
 
 type TopBarProps = {
+  projectName: string
+  onProjectNameChange: (name: string) => void
+  tension: number
+  onTensionChange: (value: number) => void
+  onTensionCommit: () => void
   onUndo: () => void
   onRedo: () => void
   onSave: () => void
@@ -8,18 +14,38 @@ type TopBarProps = {
   onExport: () => void
 }
 
-export function TopBar({ onUndo, onRedo, onSave, onOpenCommands, onExport }: TopBarProps) {
+export function TopBar({
+  projectName,
+  onProjectNameChange,
+  tension,
+  onTensionChange,
+  onTensionCommit,
+  onUndo,
+  onRedo,
+  onSave,
+  onOpenCommands,
+  onExport,
+}: TopBarProps) {
   return (
     <header className="topbar glass-bar">
       <div className="brand">
         <span className="brand-mark" aria-hidden="true">
           C
         </span>
-        <div>
+        <div className="brand-copy">
           <h1>Carson</h1>
-          <p>Poster editor</p>
+          <label className="project-name-field">
+            <span className="visually-hidden">Project name</span>
+            <input
+              className="project-name-input"
+              value={projectName}
+              onChange={(event) => onProjectNameChange(event.target.value)}
+              aria-label="Project name"
+            />
+          </label>
         </div>
       </div>
+      <TensionDial value={tension} onChange={onTensionChange} onCommit={onTensionCommit} />
       <div className="top-actions" aria-label="Poster actions">
         <button type="button" className="icon-button" aria-label="Undo" title="Undo (Cmd+Z)" onClick={onUndo}>
           <Undo2 size={15} />

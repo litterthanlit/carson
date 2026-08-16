@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { GOOGLE_FONTS } from '../lib/fonts'
+import { FONT_CATEGORIES, fontsForCategory, isLibraryFont } from '../lib/fonts'
 import { FONT_STACKS } from '../lib/editorConstants'
 
 type FontPickerProps = {
@@ -21,8 +21,11 @@ export function FontPicker({ value, customFonts, onChange, onLoadGoogleFont }: F
   const listId = useId()
 
   const groups: FontGroup[] = [
+    ...FONT_CATEGORIES.map((category) => ({
+      label: category.label,
+      fonts: fontsForCategory(category.id).map((font) => font.family),
+    })),
     { label: 'System', fonts: FONT_STACKS },
-    { label: 'Google Fonts', fonts: GOOGLE_FONTS.map((font) => font.family) },
   ]
   if (customFonts.length > 0) {
     groups.push({ label: 'Uploaded', fonts: customFonts })
@@ -38,10 +41,15 @@ export function FontPicker({ value, customFonts, onChange, onLoadGoogleFont }: F
   }, [open])
 
   const selectFont = (family: string) => {
-    void onLoadGoogleFont(family).finally(() => {
+    const apply = () => {
       onChange(family)
       setOpen(false)
-    })
+    }
+    if (isLibraryFont(family)) {
+      void onLoadGoogleFont(family).finally(apply)
+      return
+    }
+    apply()
   }
 
   return (

@@ -1,3 +1,7 @@
+export type EditorTool = 'move' | 'text' | 'shape' | 'image' | 'mask' | 'instruments'
+export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'star' | 'pen'
+export type MaskKind = 'clip' | 'brush' | 'scrape'
+
 export type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
 export type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff'
 export type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'layout' | 'print'

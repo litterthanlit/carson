@@ -4,9 +4,11 @@ import type { MutableRefObject } from 'react'
 import { SNAP_SCREEN_THRESHOLD } from '../lib/editorConstants'
 import { baselineGridLines, buildColumnGrid, type GridOverlay } from '../lib/grid'
 import { buildPrintGuides } from '../lib/print'
+import { SELECTION_ACCENT } from '../lib/selectionChrome'
 import { computeSnap } from '../lib/snapping'
+import { constrainMoveDelta, constrainUniformScale, snapRotation } from '../lib/transformConstraints'
 import { applyPathData, simplifyPathData, type PathData } from '../lib/pathEditing'
-import type { LayerKind, TextSelectionRange } from '../types/editor'
+import type { EditorTool, LayerKind, TextSelectionRange } from '../types/editor'
 
 type UseCanvasEventsOptions = {
   guidesRef: MutableRefObject<{ v: number[]; h: number[] }>
@@ -24,6 +26,9 @@ type UseCanvasEventsOptions = {
   commitHistory: (message: string) => void
   tagObject: (object: FabricObject, kind: LayerKind, name: string) => void
   onTextSelectionChange?: (range: TextSelectionRange | null) => void
+  onLiveTransform?: () => void
+  editorToolRef?: MutableRefObject<EditorTool>
+  onPlaceText?: (point: { left: number; top: number }) => void
 }
 
 export function useCanvasEvents({
@@ -42,6 +47,9 @@ export function useCanvasEvents({
   commitHistory,
   tagObject,
   onTextSelectionChange,
+  onLiveTransform,
+  editorToolRef,
+  onPlaceText,
 }: UseCanvasEventsOptions) {
   const registerCanvasEvents = useCallback(
     (canvas: Canvas) => {
@@ -76,6 +84,15 @@ export function useCanvasEvents({
       canvas.on('text:selection:changed', syncTextSelection)
       canvas.on('text:editing:exited', () => onTextSelectionChange?.(null))
 
+      canvas.on('mouse:down', (event) => {
+        if (editorToolRef?.current !== 'text') return
+        if (canvas.isDrawingMode || canvas.skipTargetFind) return
+        if (event.target) return
+        const native = event.e as MouseEvent
+        const point = canvas.getScenePoint(native)
+        onPlaceText?.({ left: point.x, top: point.y })
+      })
+
       canvas.on('path:created', (event) => {
         const path = event.path as FabricPath | undefined
         if (!path) return
@@ -92,14 +109,27 @@ export function useCanvasEvents({
         commitHistory('Drew pen stroke')
       })
 
-      // Snapping v1: canvas edges, centers, and object-to-object. Hold Cmd/Ctrl to suspend.
+      const shiftHeld = (event: { transform?: { shiftKey?: boolean; original?: { left?: number; top?: number; scaleX?: number; scaleY?: number } }; e?: Event }) => {
+        const pointerEvent = event.e as MouseEvent | TouchEvent | undefined
+        return Boolean(event.transform?.shiftKey || (pointerEvent && 'shiftKey' in pointerEvent && pointerEvent.shiftKey))
+      }
+
       canvas.on('object:moving', (event) => {
         const target = event.target
         guidesRef.current = { v: [], h: [] }
         if (!target) return
         const pointerEvent = event.e as MouseEvent | TouchEvent | undefined
+        const original = event.transform?.original
+        if (shiftHeld(event) && original) {
+          const originLeft = original.left ?? 0
+          const originTop = original.top ?? 0
+          const locked = constrainMoveDelta((target.left ?? 0) - originLeft, (target.top ?? 0) - originTop)
+          target.set({ left: originLeft + locked.dx, top: originTop + locked.dy })
+          target.setCoords()
+        }
         const suspended = pointerEvent && 'metaKey' in pointerEvent && (pointerEvent.metaKey || pointerEvent.ctrlKey)
         if (suspended) {
+          onLiveTransform?.()
           canvas.requestRenderAll()
           return
         }
@@ -115,7 +145,34 @@ export function useCanvasEvents({
           target.setCoords()
         }
         guidesRef.current = { v: snap.vGuides, h: snap.hGuides }
+        onLiveTransform?.()
         canvas.requestRenderAll()
+      })
+
+      canvas.on('object:scaling', (event) => {
+        const target = event.target
+        const original = event.transform?.original
+        if (!target || !shiftHeld(event) || !original) {
+          onLiveTransform?.()
+          return
+        }
+        target.set(
+          constrainUniformScale(target.scaleX ?? 1, target.scaleY ?? 1, {
+            scaleX: original.scaleX,
+            scaleY: original.scaleY,
+          }),
+        )
+        target.setCoords()
+        onLiveTransform?.()
+      })
+
+      canvas.on('object:rotating', (event) => {
+        const target = event.target
+        if (target && shiftHeld(event)) {
+          target.set({ angle: snapRotation(target.angle ?? 0) })
+          target.setCoords()
+        }
+        onLiveTransform?.()
       })
 
       canvas.on('mouse:up', () => {
@@ -179,8 +236,8 @@ export function useCanvasEvents({
         }
 
         if (v.length > 0 || h.length > 0) {
-          ctx.strokeStyle = '#e11d48'
-          ctx.setLineDash([6, 4])
+          ctx.strokeStyle = SELECTION_ACCENT
+          ctx.setLineDash([])
           for (const x of v) {
             ctx.beginPath()
             ctx.moveTo(x, 0)
@@ -213,6 +270,9 @@ export function useCanvasEvents({
       syncSelected,
       tagObject,
       onTextSelectionChange,
+      onLiveTransform,
+      editorToolRef,
+      onPlaceText,
     ],
   )
 

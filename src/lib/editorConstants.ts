@@ -36,14 +36,13 @@ export const HISTORY_PROPS = [
 ] as const
 
 export const FONT_STACKS = [
-  'Arial Black',
   'Impact',
+  'Arial Black',
   'Helvetica',
   'Arial Narrow',
   'Georgia',
   'Times New Roman',
   'Courier New',
-  'Verdana',
 ]
 
 export const BLEND_MODES = FULL_BLEND_MODES

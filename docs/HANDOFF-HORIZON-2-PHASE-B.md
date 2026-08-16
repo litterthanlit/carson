@@ -110,6 +110,8 @@ File bugs if treatment stack breaks on `type === 'path'`.
 
 ### B3. Pen tool polish ← **start here (next)**
 
+See **[`HANDOFF-HORIZON-2-PHASE-B3.md`](./HANDOFF-HORIZON-2-PHASE-B3.md)** for focused scope and acceptance.
+
 ### B3. Pen tool polish
 
 **Current:** `PencilBrush` freehand — good for Carson chaos, not precision logos.

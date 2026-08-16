@@ -59,7 +59,7 @@ import {
   normalizeDocumentMeta,
   type DocumentMeta,
 } from './lib/document'
-import { loadFontFile, loadGoogleFont } from './lib/fonts'
+import { loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
 import { contrastRatio } from './lib/color'
 import { alignObjects, distributeObjects, gridTensionScale, type GridOverlay } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
@@ -110,9 +110,12 @@ import type { CommandAction } from './lib/commands'
 import { CommandPalette } from './components/CommandPalette'
 import { EditorCanvas } from './components/EditorCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
-import { LeftRail } from './components/LeftRail'
+import { InstrumentsPalette } from './components/InstrumentsPalette'
 import { OnboardingModal } from './components/OnboardingModal'
+import { SelectionHud } from './components/SelectionHud'
+import { ToolRail } from './components/ToolRail'
 import { TopBar } from './components/TopBar'
+import { TreatmentChips } from './components/TreatmentChips'
 import { VariantCompareModal } from './components/VariantCompareModal'
 import { FilterGalleryModal } from './components/FilterGalleryModal'
 import { TextureGalleryModal, type TexturePlacement } from './components/TextureGalleryModal'
@@ -124,6 +127,8 @@ import { usePathEditing } from './hooks/usePathEditing'
 import { useTreatments } from './hooks/useTreatments'
 import { useEditorHistory } from './hooks/useEditorHistory'
 import { createLayerThumbnail } from './lib/layerThumbnail'
+import { applySelectionChrome } from './lib/selectionChrome'
+import { cursorForTool, hoverCursorForTool } from './lib/editorTools'
 import {
   applyCharacterStyleToText,
   applyParagraphStyleToText,
@@ -137,6 +142,7 @@ import {
   readOpenTypeFeatures,
 } from './lib/textTypography'
 import type {
+  EditorTool,
   ExportBackground,
   ExportFormat,
   InspectorTab,
@@ -230,7 +236,8 @@ function App() {
   const [showBaselineGrid, setShowBaselineGrid] = useState(false)
   const [showPrintGuides, setShowPrintGuides] = useState(false)
   const [showCmykPreview, setShowCmykPreview] = useState(false)
-  const [showInstruments, setShowInstruments] = useState(false)
+  const [editorTool, setEditorTool] = useState<EditorTool>('move')
+  const [hudTick, setHudTick] = useState(0)
   const [penMode, setPenMode] = useState(false)
   const [pathEditMode, setPathEditMode] = useState(false)
   const [pathAddPointMode, setPathAddPointMode] = useState(false)
@@ -273,6 +280,8 @@ function App() {
   const selectedPathAnchorRef = useRef<import('./lib/pathEditing').PathAnchorPoint | null>(null)
   const notifyPathGeometryChangeRef = useRef(() => setPathGeometryTick((tick) => tick + 1))
   const tagObjectRef = useRef<(object: FabricObject, kind: LayerKind, name: string) => void>(() => {})
+  const editorToolRef = useRef<EditorTool>('move')
+  const addTextRef = useRef<(position?: { left: number; top: number }) => void>(() => {})
 
   const {
     refreshTreatmentStack,
@@ -363,6 +372,9 @@ function App() {
     commitHistory,
     tagObject,
     onTextSelectionChange: setTextSelection,
+    onLiveTransform: () => setHudTick((tick) => tick + 1),
+    editorToolRef,
+    onPlaceText: (point) => addTextRef.current(point),
   })
 
   usePathEditing({
@@ -403,6 +415,10 @@ function App() {
   liveRef.current = { poster, projectName, projectId, displayScale, fitScale, zoom }
 
   useEffect(() => {
+    markLibraryLoaded()
+  }, [])
+
+  useEffect(() => {
     if (!canvasEl.current) return
 
     const canvas = new Canvas(canvasEl.current, {
@@ -410,8 +426,8 @@ function App() {
       height: poster.height,
       backgroundColor: '#f6f1e6',
       preserveObjectStacking: true,
-      selectionColor: 'rgba(24, 24, 27, 0.06)',
-      selectionBorderColor: '#52525b',
+      selectionColor: 'rgba(20, 115, 230, 0.12)',
+      selectionBorderColor: '#1473e6',
       selectionLineWidth: 1,
     })
 
@@ -460,6 +476,30 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [penMode, penStrokeColor, penStrokeWidth])
+
+  editorToolRef.current = editorTool
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const cursor = cursorForTool(editorTool, { pan: isPanMode, pen: penMode })
+    const hover = hoverCursorForTool(editorTool, { pan: isPanMode, pen: penMode })
+    canvas.defaultCursor = cursor
+    canvas.hoverCursor = hover
+    canvas.selection = (editorTool === 'move' || editorTool === 'instruments') && !penMode && !isPanMode
+    canvas.requestRenderAll()
+  }, [editorTool, penMode, isPanMode])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    for (const object of canvas.getObjects()) {
+      applySelectionChrome(object, displayScale)
+    }
+    const active = canvas.getActiveObject()
+    if (active) applySelectionChrome(active, displayScale)
+    canvas.requestRenderAll()
+  }, [displayScale])
 
   useEffect(() => {
     // Fix: previously this also ran on mount, double-committing history.
@@ -514,7 +554,7 @@ function App() {
       canvasRef.current?.requestRenderAll()
       syncSelected()
     },
-    addText,
+    addText: () => setEditorTool('text'),
     addShape,
     zoomFit: () => setZoom(null),
     zoom100: () => setZoom(1),
@@ -523,7 +563,30 @@ function App() {
     reroll: () => void rerollLast(),
     commandPalette: () => setCommandOpen(true),
     forkVariant: () => void forkVariation(),
-    togglePen: () => setPenMode((value) => !value),
+    togglePen: () => {
+      setPenMode((value) => {
+        const next = !value
+        if (next) setEditorTool('shape')
+        else setEditorTool('move')
+        return next
+      })
+    },
+    moveTool: () => {
+      setPenMode(false)
+      setEditorTool('move')
+    },
+    shapeTool: () => {
+      setPenMode(false)
+      setEditorTool('shape')
+    },
+    maskTool: () => {
+      setPenMode(false)
+      setEditorTool('mask')
+    },
+    instrumentsTool: () => {
+      setPenMode(false)
+      setEditorTool((current) => (current === 'instruments' ? 'move' : 'instruments'))
+    },
   }
 
   useEffect(() => {
@@ -644,6 +707,18 @@ function App() {
         if (nudgeSelection(0, event.shiftKey ? 10 : 1)) event.preventDefault()
       } else if (event.key.toLowerCase() === 't') {
         actions.addText()
+      } else if (event.key.toLowerCase() === 'v') {
+        event.preventDefault()
+        actions.moveTool()
+      } else if (event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        actions.shapeTool()
+      } else if (event.key.toLowerCase() === 'm') {
+        event.preventDefault()
+        actions.maskTool()
+      } else if (event.key.toLowerCase() === 'i') {
+        event.preventDefault()
+        actions.instrumentsTool()
       } else if (event.key.toLowerCase() === 'b') {
         actions.addShape()
       } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
@@ -748,12 +823,8 @@ function App() {
       id: nextId(kind),
       name,
       kind,
-      cornerColor: '#52525b',
-      cornerStrokeColor: '#ffffff',
-      borderColor: '#52525b',
-      transparentCorners: false,
-      cornerStyle: 'rect',
     } as Partial<FabricObject>)
+    applySelectionChrome(object, displayScaleRef.current)
   }
 
   tagObjectRef.current = tagObject
@@ -1086,14 +1157,14 @@ function App() {
     return objects.map((object) => String(readObjectProp(object, 'id') ?? ''))
   }
 
-  function addText() {
+  function addText(position?: { left: number; top: number }) {
     const canvas = canvasRef.current
     if (!canvas) return
     const text = new Textbox('NEW TYPE', {
-      left: poster.width * 0.18,
-      top: poster.height * 0.18,
+      left: position?.left ?? poster.width * 0.18,
+      top: position?.top ?? poster.height * 0.18,
       width: poster.width * 0.52,
-      fontFamily: 'Impact',
+      fontFamily: 'Archivo Black',
       fontSize: Math.round(poster.width * 0.08),
       fontWeight: 900,
       lineHeight: 0.86,
@@ -1105,6 +1176,8 @@ function App() {
     canvas.setActiveObject(text)
     commitHistory('Added text')
   }
+
+  addTextRef.current = addText
 
   function addShape() {
     const canvas = canvasRef.current
@@ -1919,6 +1992,17 @@ function App() {
   function applyCustomSize(nextSize = customSize) {
     setCustomSize(nextSize)
     if (presetId === 'custom') setPoster(applyPosterPreset('custom', nextSize))
+  }
+
+  function commitTension() {
+    setShowLayoutGrid(true)
+    const canvas = canvasRef.current
+    if (!canvas) return
+    for (const object of canvas.getObjects()) {
+      if (readTreatments(object).some((item) => item.type === 'scatter' || item.type === 'copy-machine')) {
+        void refreshTreatmentStack(object)
+      }
+    }
   }
 
   async function handleImageFile(file: File) {
@@ -2905,6 +2989,7 @@ function App() {
       ? isPathClosed((selectedObject as import('fabric').Path).path as PathData)
       : false
   void pathGeometryTick
+  void hudTick
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox'], scope: 'selection', disabled: !selected, run: openFilterGallery },
@@ -2987,6 +3072,11 @@ function App() {
         onClose={() => setTextureGalleryOpen(false)}
       />
       <TopBar
+        projectName={projectName}
+        onProjectNameChange={setProjectName}
+        tension={gridOverlay.tension}
+        onTensionChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
+        onTensionCommit={commitTension}
         onUndo={() => void undoAsync()}
         onRedo={redo}
         onSave={() => void saveProjectAction()}
@@ -2995,77 +3085,85 @@ function App() {
       />
 
       <section className="workspace">
-        <LeftRail
-          fileInputRef={fileInputRef}
+        <ToolRail
+          tool={editorTool}
           penMode={penMode}
-          showInstruments={showInstruments}
-          selected={Boolean(selected)}
-          selectedIsImage={selectedIsImage}
-          selectedIsText={selectedIsText}
-          presetId={presetId}
-          customSize={customSize}
-          typeLegibility={typeLegibility}
-          typeIntensity={typeIntensity}
-          xeroxGeneration={xeroxGeneration}
-          accidentIntensity={accidentIntensity}
-          decayAmount={decayAmount}
-          layerCount={layers.length}
-          onAddText={addText}
-          onImageInputChange={(file) => void handleImageFile(file)}
+          fileInputRef={fileInputRef}
+          onToolChange={(next) => {
+            setEditorTool(next)
+            if (next !== 'shape') setPenMode(false)
+          }}
           onAddShape={addShape}
           onAddEllipse={addEllipse}
           onAddLine={addLine}
           onAddStar={addStarShape}
-          onTogglePenMode={() => setPenMode((value) => !value)}
-          onDuplicateSelected={() => void duplicateSelected()}
-          onSliceHorizontal={() => void sliceSelected('horizontal')}
-          onSliceVertical={() => void sliceSelected('vertical')}
-          onScatter={() => scatterSelected()}
-          onDeleteSelected={deleteSelected}
-          onToggleInstruments={() => setShowInstruments((value) => !value)}
-          onPresetChange={(id) => handlePresetChange(id)}
-          onCustomSizeChange={applyCustomSize}
-          onApplyPosterStyle={applyPosterStyle}
-          onTypeLegibilityChange={setTypeLegibility}
-          onTypeIntensityChange={setTypeIntensity}
-          onTypeIntensityCommit={() => setStatus('Updated type intensity')}
-          onXeroxGenerationChange={setXeroxGeneration}
-          onXeroxGenerationCommit={() => setStatus('Updated xerox generation')}
-          onAccidentIntensityChange={setAccidentIntensity}
-          onAccidentIntensityCommit={() => setStatus('Updated accident intensity')}
-          onDecayAmountChange={setDecayAmount}
-          onDecayAmountCommit={() => setStatus('Updated layer decay amount')}
-          onAddTypeStrip={() => addTypeStrip()}
-          onDistressSelected={() => void distressSelected()}
-          onAddPhotocopyNoise={() => addPhotocopyNoise()}
-          onTearCollage={() => void tearCollageSelected()}
-          onAddCropMarks={addCropMarks}
-          onBreakSelectedType={() => breakSelectedType()}
-          onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
-          onApplyXerox={() => void applyXeroxToSelected()}
-          onApplyCopyMachine={() => void applyCopyMachineToSelected()}
-          onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
-          onApplyCopyScatterCopyGesture={() => void applyCopyScatterCopyGesture()}
-          onAddMisprintDuplicate={() => void addMisprintDuplicate()}
-          onAddPrintScanSurface={() => addPrintScanSurface()}
-          onApplyLayerDecay={() => void applyLayerDecayToSelected()}
-          onAddLayerDecayMarks={(kind) => addLayerDecayMarks(kind)}
-          onAddLayerDecayOffset={() => void addLayerDecayOffset()}
-          onDuplicateDriftAccident={() => void duplicateDriftAccident()}
-          onBadCropAccident={() => void badCropAccident()}
-          onFlipMistakeAccident={() => void flipMistakeAccident()}
-          onCollideSelectionAccident={collideSelectionAccident}
-          onNudgeLayoutAccident={() => nudgeLayoutAccident()}
-          onApplyColdWashImage={applyColdWashImage}
-          onAddDiagonalTexture={addDiagonalTexture}
-          onAddWhiteScrapes={() => addWhiteScrapes()}
-          onAddRedEchoType={addRedEchoType}
-          onAggressiveCrop={(mode) => void aggressiveCropSelected(mode)}
-          onCropToPosterEdge={() => void cropToPosterEdge()}
-          onOpenLayersPanel={() => setInspectorTab('layers')}
-          onOpenFilterGallery={openFilterGallery}
-          onOpenTextureGallery={openTextureGallery}
+          onTogglePenMode={() => {
+            setPenMode((value) => {
+              const next = !value
+              if (next) setEditorTool('shape')
+              return next
+            })
+          }}
+          onImageInputChange={(file) => void handleImageFile(file)}
+          onClipToShape={() => void clipSelectionToShape()}
+          onBrushMask={() => void paintBrushMask()}
+          onWhiteScrapes={() => addWhiteScrapes()}
         />
+        {editorTool === 'instruments' ? (
+          <InstrumentsPalette
+            selected={Boolean(selected)}
+            selectedIsImage={selectedIsImage}
+            selectedIsText={selectedIsText}
+            typeLegibility={typeLegibility}
+            typeIntensity={typeIntensity}
+            xeroxGeneration={xeroxGeneration}
+            accidentIntensity={accidentIntensity}
+            decayAmount={decayAmount}
+            layerCount={layers.length}
+            onSliceHorizontal={() => void sliceSelected('horizontal')}
+            onSliceVertical={() => void sliceSelected('vertical')}
+            onScatter={() => scatterSelected()}
+            onApplyPosterStyle={applyPosterStyle}
+            onTypeLegibilityChange={setTypeLegibility}
+            onTypeIntensityChange={setTypeIntensity}
+            onTypeIntensityCommit={() => setStatus('Updated type intensity')}
+            onXeroxGenerationChange={setXeroxGeneration}
+            onXeroxGenerationCommit={() => setStatus('Updated xerox generation')}
+            onAccidentIntensityChange={setAccidentIntensity}
+            onAccidentIntensityCommit={() => setStatus('Updated accident intensity')}
+            onDecayAmountChange={setDecayAmount}
+            onDecayAmountCommit={() => setStatus('Updated layer decay amount')}
+            onAddTypeStrip={() => addTypeStrip()}
+            onDistressSelected={() => void distressSelected()}
+            onAddPhotocopyNoise={() => addPhotocopyNoise()}
+            onTearCollage={() => void tearCollageSelected()}
+            onAddCropMarks={addCropMarks}
+            onBreakSelectedType={() => breakSelectedType()}
+            onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
+            onApplyXerox={() => void applyXeroxToSelected()}
+            onApplyCopyMachine={() => void applyCopyMachineToSelected()}
+            onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
+            onApplyCopyScatterCopyGesture={() => void applyCopyScatterCopyGesture()}
+            onAddMisprintDuplicate={() => void addMisprintDuplicate()}
+            onAddPrintScanSurface={() => addPrintScanSurface()}
+            onApplyLayerDecay={() => void applyLayerDecayToSelected()}
+            onAddLayerDecayMarks={(kind) => addLayerDecayMarks(kind)}
+            onAddLayerDecayOffset={() => void addLayerDecayOffset()}
+            onDuplicateDriftAccident={() => void duplicateDriftAccident()}
+            onBadCropAccident={() => void badCropAccident()}
+            onFlipMistakeAccident={() => void flipMistakeAccident()}
+            onCollideSelectionAccident={collideSelectionAccident}
+            onNudgeLayoutAccident={() => nudgeLayoutAccident()}
+            onApplyColdWashImage={applyColdWashImage}
+            onAddDiagonalTexture={addDiagonalTexture}
+            onAddWhiteScrapes={() => addWhiteScrapes()}
+            onAddRedEchoType={addRedEchoType}
+            onAggressiveCrop={(mode) => void aggressiveCropSelected(mode)}
+            onCropToPosterEdge={() => void cropToPosterEdge()}
+            onOpenFilterGallery={openFilterGallery}
+            onOpenTextureGallery={openTextureGallery}
+          />
+        ) : null}
 
         <EditorCanvas
           poster={poster}
@@ -3075,8 +3173,41 @@ function App() {
           documentMeta={documentMeta}
           lastChaos={lastChaos}
           projectName={projectName}
+          presetId={presetId}
+          customSize={customSize}
           canvasEl={canvasEl}
           scrollRef={scrollRef}
+          stackBar={
+            <TreatmentChips
+              compact
+              posterTreatments={posterTreatments}
+              selectedTreatments={selectedTreatments}
+              selectedObject={selectedObject}
+              onReorderPosterTreatment={reorderPosterTreatmentAction}
+              onRerollPosterTreatment={rerollPosterTreatment}
+              onTogglePosterTreatment={togglePosterTreatment}
+              onRemovePosterTreatment={removePosterTreatmentAction}
+              onReorderLayerTreatment={reorderLayerTreatment}
+              onRerollLayerTreatment={rerollTreatment}
+              onToggleLayerTreatment={toggleTreatment}
+              onRemoveLayerTreatment={removeLayerTreatment}
+            />
+          }
+          hud={
+            selected && selectedObject ? (
+              <SelectionHud
+                selected={selected}
+                bounds={selectedObject.getBoundingRect()}
+                displayScale={displayScale}
+                customFonts={customFonts}
+                onLoadGoogleFont={loadGoogleFont}
+                onUpdateActive={updateActive}
+                onFinalizeActive={finalizeActive}
+              />
+            ) : null
+          }
+          onPresetChange={(id) => handlePresetChange(id)}
+          onCustomSizeChange={applyCustomSize}
           onSwitchArtboard={(artboardId) => void switchToArtboard(artboardId)}
           onChangeArtboardPreset={changeArtboardPreset}
           onStepZoom={stepZoom}
@@ -3094,6 +3225,20 @@ function App() {
           onForkVariant={() => void forkVariation()}
         />
 
+        <div className="inspector-column">
+          <TreatmentChips
+            posterTreatments={posterTreatments}
+            selectedTreatments={selectedTreatments}
+            selectedObject={selectedObject}
+            onReorderPosterTreatment={reorderPosterTreatmentAction}
+            onRerollPosterTreatment={rerollPosterTreatment}
+            onTogglePosterTreatment={togglePosterTreatment}
+            onRemovePosterTreatment={removePosterTreatmentAction}
+            onReorderLayerTreatment={reorderLayerTreatment}
+            onRerollLayerTreatment={rerollTreatment}
+            onToggleLayerTreatment={toggleTreatment}
+            onRemoveLayerTreatment={removeLayerTreatment}
+          />
         <InspectorPanel
           inspectorTab={inspectorTab}
           onInspectorTabChange={setInspectorTab}
@@ -3212,16 +3357,7 @@ function App() {
           onClipSelectionToShape={() => void clipSelectionToShape()}
           gridOverlay={gridOverlay}
           onGridTensionChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
-          onGridTensionCommit={() => {
-            setShowLayoutGrid(true)
-            const canvas = canvasRef.current
-            if (!canvas) return
-            for (const object of canvas.getObjects()) {
-              if (readTreatments(object).some((item) => item.type === 'scatter' || item.type === 'copy-machine')) {
-                void refreshTreatmentStack(object)
-              }
-            }
-          }}
+          onGridTensionCommit={commitTension}
           showLayoutGrid={showLayoutGrid}
           onToggleLayoutGrid={() => setShowLayoutGrid((value) => !value)}
           showBaselineGrid={showBaselineGrid}
@@ -3245,6 +3381,7 @@ function App() {
           onNewArtboardPresetChange={setNewArtboardPreset}
           onExportAllArtboards={() => void exportAllArtboards()}
         />
+        </div>
       </section>
 
     </main>

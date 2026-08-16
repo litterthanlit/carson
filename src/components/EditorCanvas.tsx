@@ -1,6 +1,6 @@
-import type { CSSProperties, DragEvent, MouseEvent, RefObject } from 'react'
+import type { CSSProperties, DragEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import { Dices, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
-import type { PosterPreset } from '../lib/editorModel'
+import type { PosterPreset, PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
 import { ExplorationTrail } from './ExplorationTrail'
 
@@ -12,8 +12,14 @@ type EditorCanvasProps = {
   documentMeta: DocumentMeta | null
   lastChaos: { label: string; seed: number } | null
   projectName: string
+  presetId: PosterPresetId
+  customSize: { width: number; height: number }
   canvasEl: RefObject<HTMLCanvasElement | null>
   scrollRef: RefObject<HTMLDivElement | null>
+  hud?: ReactNode
+  stackBar?: ReactNode
+  onPresetChange: (presetId: PosterPresetId) => void
+  onCustomSizeChange: (size: { width: number; height: number }) => void
   onSwitchArtboard: (artboardId: string) => void
   onChangeArtboardPreset: (artboardId: string, presetId: string) => void
   onStepZoom: (direction: 1 | -1) => void
@@ -36,8 +42,14 @@ export function EditorCanvas({
   documentMeta,
   lastChaos,
   projectName,
+  presetId,
+  customSize,
   canvasEl,
   scrollRef,
+  hud,
+  stackBar,
+  onPresetChange,
+  onCustomSizeChange,
   onSwitchArtboard,
   onChangeArtboardPreset,
   onStepZoom,
@@ -60,10 +72,42 @@ export function EditorCanvas({
   return (
     <section className="canvas-stage" aria-label="Poster canvas">
       <div className="stage-toolbar glass-bar">
-        <span>
-          {poster.name} · {poster.width} x {poster.height}px
-          {poster.dpi ? ` @ ${poster.dpi}dpi` : ''}
-        </span>
+        <label className="stage-size">
+          <span className="visually-hidden">Poster size</span>
+          <select value={presetId} aria-label="Poster size" onChange={(event) => onPresetChange(event.target.value as PosterPresetId)}>
+            <option value="a3">A3</option>
+            <option value="a2">A2</option>
+            <option value="instagram">IG</option>
+            <option value="square">Square</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        {presetId === 'custom' ? (
+          <span className="stage-custom-size">
+            <input
+              type="number"
+              min={320}
+              max={10000}
+              aria-label="Custom width"
+              value={customSize.width}
+              onChange={(event) => onCustomSizeChange({ ...customSize, width: Number(event.target.value) })}
+            />
+            ×
+            <input
+              type="number"
+              min={320}
+              max={10000}
+              aria-label="Custom height"
+              value={customSize.height}
+              onChange={(event) => onCustomSizeChange({ ...customSize, height: Number(event.target.value) })}
+            />
+          </span>
+        ) : (
+          <span>
+            {poster.width} × {poster.height}px
+            {poster.dpi ? ` @ ${poster.dpi}dpi` : ''}
+          </span>
+        )}
         {documentMeta && documentMeta.artboards.length > 1 ? (
           <span className="artboard-tabs">
             {documentMeta.artboards.map((board) => (
@@ -122,6 +166,7 @@ export function EditorCanvas({
           {status}
         </span>
       </div>
+      {stackBar}
       <div
         ref={scrollRef}
         className={isPanMode ? 'canvas-scroll panning' : 'canvas-scroll'}
@@ -150,6 +195,7 @@ export function EditorCanvas({
           }
         >
           <canvas ref={canvasEl} />
+          {hud}
         </div>
       </div>
       <ExplorationTrail

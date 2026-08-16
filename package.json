@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
-    "import-textures": "python3 scripts/import-textures.py"
+    "import-textures": "python3 scripts/import-textures.py",
+    "import-fonts": "python3 scripts/import-fonts.py"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
