@@ -33,7 +33,7 @@ export function TopBar({
           C
         </span>
         <div className="brand-copy">
-          <h1>Carson</h1>
+          <h1 className="visually-hidden">Carson</h1>
           <label className="project-name-field">
             <span className="visually-hidden">Project name</span>
             <input
@@ -53,13 +53,11 @@ export function TopBar({
         <button type="button" className="icon-button" aria-label="Redo" title="Redo (Cmd+Shift+Z)" onClick={onRedo}>
           <Redo2 size={15} />
         </button>
-        <button type="button" className="toolbar-button" title="Save to this browser (Cmd+S)" onClick={onSave}>
-          <Save size={14} />
-          Save
+        <button type="button" className="icon-button" title="Save to this browser (Cmd+S)" aria-label="Save" onClick={onSave}>
+          <Save size={15} />
         </button>
-        <button type="button" className="toolbar-button" title="Command palette (Cmd+K)" onClick={onOpenCommands}>
-          <Sparkles size={14} />
-          Commands
+        <button type="button" className="icon-button" title="Command palette (Cmd+K)" aria-label="Commands" onClick={onOpenCommands}>
+          <Sparkles size={15} />
         </button>
         <button type="button" className="primary-button" title="Export the poster (Cmd+E)" onClick={onExport}>
           <Download size={14} />

@@ -1,14 +1,25 @@
 import {
+  Aperture,
+  Columns3,
+  Copy,
   Crop,
+  Droplets,
+  Eraser,
   FlipHorizontal,
-  ImagePlus,
+  Frame,
   Images,
   Layers,
+  Printer,
+  Repeat,
+  Rows3,
   ScanLine,
   Scissors,
   Shuffle,
-  Sparkles,
+  Spline,
+  Timer,
   Type,
+  Wand2,
+  Waves,
 } from 'lucide-react'
 import type { ExpressiveLegibility } from '../lib/editorModel'
 import { Slider } from './Slider'
@@ -130,16 +141,16 @@ export function InstrumentsPalette({
             <Shuffle size={16} /> Scatter <ScopeSel />
           </button>
           <button type="button" title="Browse Carson filters with live preview" onClick={onOpenFilterGallery} disabled={!selected}>
-            <Sparkles size={16} /> Filters <ScopeSel />
+            <Wand2 size={16} /> Filters <ScopeSel />
           </button>
           <button type="button" title="Browse print, ink, paper, and grit textures" onClick={onOpenTextureGallery}>
             <Images size={16} /> Textures <ScopeAll />
           </button>
           <button type="button" title="Slice into horizontal strips" onClick={onSliceHorizontal} disabled={!selected}>
-            <Scissors size={16} /> Strips <ScopeSel />
+            <Rows3 size={16} /> Strips <ScopeSel />
           </button>
           <button type="button" title="Slice into vertical columns" onClick={onSliceVertical} disabled={!selected}>
-            <Scissors size={16} /> Columns <ScopeSel />
+            <Columns3 size={16} /> Columns <ScopeSel />
           </button>
         </div>
       </div>
@@ -178,7 +189,7 @@ export function InstrumentsPalette({
             <Type size={16} /> Type strip <ScopeSel />
           </button>
           <button type="button" title="Break the selected text into loose letters" onClick={onBreakSelectedType} disabled={!selectedIsText}>
-            <Type size={16} /> Break letters <ScopeSel />
+            <Spline size={16} /> Break letters <ScopeSel />
           </button>
           <button type="button" title="Bury a ghost copy of the selected text" onClick={onCloneTypeAsTexture} disabled={!selectedIsText}>
             <Layers size={16} /> Bury type <ScopeSel />
@@ -194,13 +205,13 @@ export function InstrumentsPalette({
         <Slider label="Generation" value={xeroxGeneration} min={1} max={10} onChange={onXeroxGenerationChange} onCommit={onXeroxGenerationCommit} />
         <div className="preset-row">
           <button type="button" title="Photocopy warp — source stays editable" onClick={onApplyCopyMachine} disabled={!selected}>
-            <ScanLine size={16} /> Copy machine <ScopeSel />
+            <Printer size={16} /> Copy machine <ScopeSel />
           </button>
           <button type="button" title="Run every visible layer through the copier" onClick={onApplyCopyMachineToPoster} disabled={layerCount === 0}>
-            <ScanLine size={16} /> Run through copier <ScopeAll />
+            <Copy size={16} /> Run through copier <ScopeAll />
           </button>
           <button type="button" title="Copy Machine, then Scatter, then Copy Machine" onClick={onApplyCopyScatterCopyGesture} disabled={!selected}>
-            <Shuffle size={16} /> Copy → Scatter → Copy <ScopeSel />
+            <Repeat size={16} /> Copy → Scatter → Copy <ScopeSel />
           </button>
           <button type="button" title="Re-photocopy the selected layer" onClick={onApplyXerox} disabled={!selected}>
             <ScanLine size={16} /> Copy selected <ScopeSel />
@@ -209,13 +220,13 @@ export function InstrumentsPalette({
             <Layers size={16} /> Misprint offset <ScopeSel />
           </button>
           <button type="button" title="Add photocopier bands across the poster" onClick={onAddPrintScanSurface}>
-            <Sparkles size={16} /> Surface wear <ScopeAll />
+            <Waves size={16} /> Surface wear <ScopeAll />
           </button>
           <button type="button" title="Sprinkle photocopier specks across the poster" onClick={onAddPhotocopyNoise}>
-            <ScanLine size={16} /> Photocopy noise <ScopeAll />
+            <Aperture size={16} /> Photocopy noise <ScopeAll />
           </button>
           <button type="button" title="Stamp decorative crop marks onto the artwork" onClick={onAddCropMarks}>
-            <Crop size={16} /> Crop marks/grid <ScopeAll />
+            <Frame size={16} /> Crop marks/grid <ScopeAll />
           </button>
         </div>
       </div>
@@ -225,22 +236,22 @@ export function InstrumentsPalette({
         <Slider label="Amount" value={decayAmount} min={0} max={100} onChange={onDecayAmountChange} onCommit={onDecayAmountCommit} />
         <div className="preset-row">
           <button type="button" title="Age the selected layer" onClick={onApplyLayerDecay} disabled={!selected}>
-            <Sparkles size={16} /> Age selected <ScopeSel />
+            <Timer size={16} /> Age selected <ScopeSel />
           </button>
           <button type="button" title="Convert the selected layer into harsh grit" onClick={onDistressSelected} disabled={!selected}>
-            <Sparkles size={16} /> Distress <ScopeSel />
+            <Aperture size={16} /> Distress <ScopeSel />
           </button>
           <button type="button" title="Chip ink away from the selected layer" onClick={() => onAddLayerDecayMarks('ink-loss')} disabled={!selected}>
-            <Scissors size={16} /> Ink loss <ScopeSel />
+            <Droplets size={16} /> Ink loss <ScopeSel />
           </button>
           <button type="button" title="Add fold creases" onClick={() => onAddLayerDecayMarks('fold')} disabled={!selected}>
-            <ScanLine size={16} /> Fold marks <ScopeSel />
+            <Rows3 size={16} /> Fold marks <ScopeSel />
           </button>
           <button type="button" title="Add the full wear treatment" onClick={() => onAddLayerDecayMarks('all')} disabled={!selected}>
             <Layers size={16} /> Wear overlay <ScopeSel />
           </button>
           <button type="button" title="Add a faint decayed echo" onClick={onAddLayerDecayOffset} disabled={!selected}>
-            <Shuffle size={16} /> Decay offset <ScopeSel />
+            <Copy size={16} /> Decay offset <ScopeSel />
           </button>
         </div>
       </div>
@@ -250,7 +261,7 @@ export function InstrumentsPalette({
         <Slider label="Intensity" value={accidentIntensity} min={0} max={100} onChange={onAccidentIntensityChange} onCommit={onAccidentIntensityCommit} />
         <div className="preset-row">
           <button type="button" title="Clone the selection with accidental drift" onClick={onDuplicateDriftAccident} disabled={!selected}>
-            <Shuffle size={16} /> Duplicate drift <ScopeSel />
+            <Copy size={16} /> Duplicate drift <ScopeSel />
           </button>
           <button type="button" title="Crop badly on purpose" onClick={onBadCropAccident} disabled={!selected}>
             <Crop size={16} /> Bad crop <ScopeSel />
@@ -262,7 +273,7 @@ export function InstrumentsPalette({
             <Layers size={16} /> Collide selection <ScopeSel />
           </button>
           <button type="button" title="Nudge every layer with accidental drift" onClick={onNudgeLayoutAccident}>
-            <Sparkles size={16} /> Nudge layout <ScopeAll />
+            <Shuffle size={16} /> Nudge layout <ScopeAll />
           </button>
           <button type="button" title="Tear into shifted scraps" onClick={onTearCollage} disabled={!selected}>
             <Scissors size={16} /> Tear collage <ScopeSel />
@@ -274,13 +285,13 @@ export function InstrumentsPalette({
         <h2>Texture</h2>
         <div className="preset-row">
           <button type="button" title="Apply a cold print wash" onClick={onApplyColdWashImage} disabled={!selectedIsImage}>
-            <ImagePlus size={16} /> Cold wash <ScopeSel />
+            <Droplets size={16} /> Cold wash <ScopeSel />
           </button>
           <button type="button" title="Lay diagonal print texture lines" onClick={onAddDiagonalTexture}>
             <ScanLine size={16} /> Diagonal texture <ScopeAll />
           </button>
           <button type="button" title="Scrape white bands across the poster" onClick={onAddWhiteScrapes}>
-            <Scissors size={16} /> White scrapes <ScopeAll />
+            <Eraser size={16} /> White scrapes <ScopeAll />
           </button>
         </div>
       </div>

@@ -55,13 +55,13 @@
 }
 
 .project-name-input {
-  width: 180px;
-  max-width: 28vw;
-  height: 20px;
-  padding: 0 4px;
+  width: 200px;
+  max-width: 32vw;
+  height: 24px;
+  padding: 0 6px;
   border-color: transparent;
   background: transparent;
-  font: 500 12px/1.2 var(--font);
+  font: 500 13px/1.2 var(--font);
   color: var(--text);
 }
 
@@ -131,21 +131,21 @@
 
 .treatment-chips {
   display: grid;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 3px;
+  padding: 5px 8px;
   border-bottom: 1px solid var(--border);
   background: #2a2a2a;
 }
 
 .treatment-chips.compact {
-  padding: 4px 10px;
+  padding: 3px 10px;
   background: #323232;
 }
 
 .treatment-chip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -154,11 +154,12 @@
 .treatment-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 4px 2px 8px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-subtle);
+  gap: 3px;
+  padding: 1px 2px 1px 7px;
+  border: 1px solid #3f3f3f;
+  background: #252525;
   font-size: 11px;
+  border-radius: 2px;
 }
 
 .treatment-chip.bypassed {
@@ -174,12 +175,13 @@
   z-index: 8;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
+  gap: 4px;
+  padding: 3px 4px;
   background: var(--panel);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-md);
   pointer-events: auto;
+  border-radius: 2px;
 }
 
 .selection-hud .font-picker {
@@ -315,7 +317,8 @@ textarea:focus-visible {
 }
 
 .icon-button {
-  width: 24px;
+  width: 28px;
+  min-height: 28px;
   padding: 0;
   color: var(--text-muted);
   background: transparent;
@@ -372,24 +375,32 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px 4px;
+  gap: 1px;
+  padding: 8px 4px;
   min-height: calc(100dvh - 40px);
   max-height: calc(100dvh - 40px);
   border-right: 1px solid var(--border);
-  background: var(--panel);
+  background: #2d2d2d;
   z-index: 14;
+}
+
+.tool-rail-rule {
+  width: 18px;
+  height: 1px;
+  margin: 5px 0;
+  background: #4a4a4a;
 }
 
 .tool-rail > button,
 .tool-rail-flyout-wrap > button {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
   padding: 0;
   border-color: transparent;
   background: transparent;
   color: var(--text-muted);
+  border-radius: 3px;
 }
 
 .tool-rail > button:hover:not(:disabled),
@@ -400,7 +411,7 @@ textarea:focus-visible {
 
 .tool-rail > button.active,
 .tool-rail-flyout-wrap > button.active {
-  background: var(--accent-soft);
+  background: #454545;
   color: #fff;
   border-color: transparent;
 }
@@ -440,11 +451,29 @@ textarea:focus-visible {
   left: 48px;
   top: 0;
   bottom: 0;
-  width: 240px;
+  width: 248px;
   z-index: 12;
   overflow: auto;
   border-right: 1px solid var(--border);
   box-shadow: var(--shadow-md);
+}
+
+.instruments-palette .preset-row {
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.instruments-palette .preset-row button {
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 10px;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.instruments-palette .preset-row button svg {
+  flex-shrink: 0;
 }
 
 .inspector-column {
@@ -471,7 +500,7 @@ textarea:focus-visible {
 }
 
 .panel-section {
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -493,7 +522,7 @@ textarea:focus-visible {
 
 .panel-title {
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .panel-title h2 {
@@ -530,6 +559,10 @@ textarea:focus-visible {
   margin-top: 6px;
 }
 
+.effect-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
 .preset-row button {
   justify-content: flex-start;
   background: var(--bg-subtle);
@@ -542,7 +575,7 @@ label,
 }
 
 label {
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--text-muted);
   font: 500 10px/1.3 var(--font);
   letter-spacing: 0.04em;
@@ -580,8 +613,8 @@ input[type='color'] {
 
 .dial {
   display: grid;
-  gap: 3px;
-  margin-top: 8px;
+  gap: 2px;
+  margin-top: 6px;
 }
 
 .dial-header {
@@ -882,14 +915,14 @@ input[type='color'] {
 
 .stage-toolbar {
   justify-content: space-between;
-  gap: 12px;
-  padding: 4px 10px;
-  min-height: 28px;
+  gap: 10px;
+  padding: 3px 10px;
+  min-height: 26px;
   border-radius: 0;
   border-left: 0;
   border-right: 0;
   border-top: 0;
-  background: #383838;
+  background: #2d2d2d;
   font-weight: 400;
   font-size: 11px;
   font-family: var(--font);
@@ -1020,21 +1053,28 @@ input[type='color'] {
 
 .shortcut-list {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   display: grid;
-  gap: 6px;
-  font-size: 11px;
+  gap: 3px;
+  font-size: 10px;
   color: var(--text-muted);
 }
 
+.shortcut-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+}
+
 .shortcut-list kbd {
-  padding: 1px 4px;
-  border: 1px solid var(--border-strong);
+  padding: 0 4px;
+  border: 1px solid #3a3a3a;
   border-bottom-width: 1px;
   border-radius: 2px;
-  background: #2a2a2a;
-  font: 500 10px/1.4 var(--font-mono);
+  background: #252525;
+  font: 500 10px/1.5 var(--font-mono);
   color: var(--text);
 }
 
@@ -1237,6 +1277,12 @@ input[type='color'] {
     border-bottom: 1px solid var(--border);
   }
 
+  .tool-rail-rule {
+    width: 1px;
+    height: 16px;
+    margin: 0 6px;
+  }
+
   .instruments-palette {
     position: static;
     width: auto;
@@ -1260,17 +1306,20 @@ input[type='color'] {
 }
 
 .inspector-tabs {
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0;
   padding: 0;
-  overflow-x: auto;
+  overflow: hidden;
   background: #2a2a2a;
   border-bottom: 1px solid var(--border);
 }
 
 .inspector-tabs button {
-  padding: 7px 9px;
+  padding: 0;
+  height: 32px;
+  min-height: 32px;
+  width: 100%;
   font-size: 11px;
   border-radius: 0;
   background: transparent;
@@ -1324,7 +1373,17 @@ input[type='color'] {
 .treatment-actions {
   margin-left: auto;
   display: inline-flex;
-  gap: 2px;
+  gap: 0;
+}
+
+.treatment-actions button,
+.treatment-chip .treatment-actions button {
+  width: 18px;
+  min-height: 18px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
 }
 
 .command-backdrop {
@@ -1791,7 +1850,8 @@ input[type='color'] {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 8px;
+  min-height: 24px;
+  padding: 2px 6px;
   border: 1px solid #1a1a1a;
   border-radius: var(--radius);
   background: #1e1e1e;
@@ -1804,7 +1864,7 @@ input[type='color'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .font-picker-menu {
@@ -1838,12 +1898,12 @@ input[type='color'] {
 .font-picker-option {
   width: 100%;
   display: block;
-  padding: 8px 10px;
+  padding: 5px 10px;
   border: 0;
   background: transparent;
   color: var(--text);
   text-align: left;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
 }
 

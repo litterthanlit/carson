@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import {
   AlignLeft,
+  Blend,
   BringToFront,
   ChevronDown,
   ChevronUp,
@@ -9,8 +10,12 @@ import {
   Eye,
   EyeOff,
   Grid3x3,
+  Image as ImageIcon,
+  Layers,
   Pipette,
+  Printer,
   SendToBack,
+  SlidersHorizontal,
   Trash2,
 } from 'lucide-react'
 import type { FabricObject } from 'fabric'
@@ -389,23 +394,25 @@ export function InspectorPanel({
       <div className="inspector-tabs" role="tablist" aria-label="Inspector panels">
         {(
           [
-            ['inspect', 'Inspect'],
-            ['treatments', 'Treatments'],
-            ['layers', 'Layers'],
-            ['assets', 'Assets'],
-            ['layout', 'Layout'],
-            ['print', 'Print'],
+            ['inspect', 'Inspect', SlidersHorizontal],
+            ['treatments', 'Treatments', Blend],
+            ['layers', 'Layers', Layers],
+            ['assets', 'Assets', ImageIcon],
+            ['layout', 'Layout', Grid3x3],
+            ['print', 'Print', Printer],
           ] as const
-        ).map(([id, label]) => (
+        ).map(([id, label, Icon]) => (
           <button
             key={id}
             type="button"
             role="tab"
+            title={label}
+            aria-label={label}
             aria-selected={inspectorTab === id}
             className={inspectorTab === id ? 'active' : undefined}
             onClick={() => onInspectorTabChange(id)}
           >
-            {label}
+            <Icon size={14} />
           </button>
         ))}
       </div>
@@ -1125,7 +1132,7 @@ export function InspectorPanel({
           <div className="panel-section">
             <h2>Image effects</h2>
             <p className="hint">Effects stack — click again to remove one.</p>
-            <div className="preset-row">
+            <div className="preset-row effect-grid">
               {(['grayscale', 'contrast', 'threshold', 'blur', 'noise', 'clear'] as const).map((effect) => (
                 <button
                   key={effect}

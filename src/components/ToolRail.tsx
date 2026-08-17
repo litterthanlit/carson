@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import {
+  BoxSelect,
   Circle,
   Crop,
+  Eraser,
   ImagePlus,
   Minus,
   MousePointer2,
   PenLine,
-  Scissors,
-  Sparkles,
   Square,
   Star,
   Type,
+  Wand2,
 } from 'lucide-react'
 import type { EditorTool } from '../types/editor'
 
@@ -76,6 +77,7 @@ export function ToolRail({
       >
         <MousePointer2 size={16} />
       </button>
+      <span className="tool-rail-rule" aria-hidden="true" />
       <button
         type="button"
         className={tool === 'text' ? 'active' : undefined}
@@ -143,6 +145,7 @@ export function ToolRail({
       >
         <ImagePlus size={16} />
       </button>
+      <span className="tool-rail-rule" aria-hidden="true" />
       <div className="tool-rail-flyout-wrap">
         <button
           type="button"
@@ -156,7 +159,7 @@ export function ToolRail({
             setFlyout((current) => (current === 'mask' ? null : 'mask'))
           }}
         >
-          <Crop size={16} />
+          <BoxSelect size={16} />
         </button>
         {flyout === 'mask' ? (
           <div className="tool-flyout" role="menu" aria-label="Mask tools">
@@ -167,11 +170,12 @@ export function ToolRail({
               <Circle size={14} /> Brush mask
             </button>
             <button type="button" role="menuitem" title="Scrape white bands across the poster" onClick={() => { onWhiteScrapes(); setFlyout(null) }}>
-              <Scissors size={14} /> White scrapes
+              <Eraser size={14} /> White scrapes
             </button>
           </div>
         ) : null}
       </div>
+      <span className="tool-rail-rule" aria-hidden="true" />
       <button
         type="button"
         className={tool === 'instruments' ? 'active' : undefined}
@@ -180,7 +184,7 @@ export function ToolRail({
         aria-pressed={tool === 'instruments'}
         onClick={() => selectTool(tool === 'instruments' ? 'move' : 'instruments')}
       >
-        <Sparkles size={16} />
+        <Wand2 size={16} />
       </button>
       <input
         ref={fileInputRef}
