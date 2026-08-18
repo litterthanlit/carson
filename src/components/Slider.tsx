@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 
 type SliderProps = {
   label: string
@@ -15,6 +15,8 @@ export function Slider({ label, value, min, max, onChange, onCommit, format }: S
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
   const skipCommitRef = useRef(false)
+  const span = max - min
+  const progress = span <= 0 ? 0 : Math.min(1, Math.max(0, (value - min) / span))
 
   useEffect(() => {
     if (!editing) {
@@ -34,49 +36,11 @@ export function Slider({ label, value, min, max, onChange, onCommit, format }: S
   }
 
   return (
-    <div className="dial">
-      <div className="dial-header">
-        <span className="dial-label">{label}</span>
-        <input
-          className="dial-value-input"
-          type="text"
-          inputMode="decimal"
-          aria-label={`${label} value`}
-          value={editing ? editText : display}
-          onFocus={() => {
-            setEditing(true)
-            setEditText(String(value))
-          }}
-          onChange={(event) => {
-            setEditText(event.target.value)
-            const num = Number(event.target.value)
-            if (Number.isFinite(num)) {
-              onChange(clamp(num))
-            }
-          }}
-          onBlur={() => {
-            if (skipCommitRef.current) {
-              skipCommitRef.current = false
-              setEditing(false)
-              return
-            }
-            if (editing) commitEdit()
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              commitEdit()
-              event.currentTarget.blur()
-            } else if (event.key === 'Escape') {
-              event.preventDefault()
-              skipCommitRef.current = true
-              setEditText(String(value))
-              setEditing(false)
-              event.currentTarget.blur()
-            }
-          }}
-        />
-      </div>
+    <div className="dial" style={{ '--dial-p': progress } as CSSProperties}>
+      <span className="dial-ticks" aria-hidden="true" />
+      <span className="dial-fill" aria-hidden="true" />
+      <span className="dial-thumb" aria-hidden="true" />
+      <span className="dial-label">{label}</span>
       <input
         className="dial-input"
         type="range"
@@ -89,6 +53,45 @@ export function Slider({ label, value, min, max, onChange, onCommit, format }: S
         onPointerUp={onCommit}
         onKeyUp={(event) => {
           if (event.key.startsWith('Arrow')) onCommit()
+        }}
+      />
+      <input
+        className="dial-value-input"
+        type="text"
+        inputMode="decimal"
+        aria-label={`${label} value`}
+        value={editing ? editText : display}
+        onFocus={() => {
+          setEditing(true)
+          setEditText(String(value))
+        }}
+        onChange={(event) => {
+          setEditText(event.target.value)
+          const num = Number(event.target.value)
+          if (Number.isFinite(num)) {
+            onChange(clamp(num))
+          }
+        }}
+        onBlur={() => {
+          if (skipCommitRef.current) {
+            skipCommitRef.current = false
+            setEditing(false)
+            return
+          }
+          if (editing) commitEdit()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            commitEdit()
+            event.currentTarget.blur()
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            skipCommitRef.current = true
+            setEditText(String(value))
+            setEditing(false)
+            event.currentTarget.blur()
+          }
         }}
       />
     </div>

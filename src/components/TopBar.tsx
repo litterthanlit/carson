@@ -29,9 +29,11 @@ export function TopBar({
   return (
     <header className="topbar glass-bar">
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true">
-          C
-        </span>
+        <svg className="brand-mark" viewBox="0 0 1452 1311" aria-hidden="true">
+          <rect x="339" y="0" width="851" height="395" rx="20" />
+          <rect x="0" y="460" width="395" height="851" rx="20" />
+          <rect x="601" y="916" width="851" height="395" rx="20" />
+        </svg>
         <div className="brand-copy">
           <h1 className="visually-hidden">Carson</h1>
           <label className="project-name-field">
