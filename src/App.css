@@ -1935,6 +1935,28 @@ input[type='color'] {
   box-shadow: var(--shadow-md);
 }
 
+.font-picker-search {
+  display: block;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 6px;
+  background: var(--panel-raised);
+}
+
+.font-picker-search input {
+  width: 100%;
+  min-height: 24px;
+  padding: 4px 8px;
+}
+
+.font-picker-empty {
+  margin: 0;
+  padding: 10px;
+  color: var(--text-muted);
+}
+
 .font-picker-group + .font-picker-group {
   border-top: 1px solid var(--border);
 }

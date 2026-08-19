@@ -3,8 +3,11 @@ import {
   FONT_CATEGORIES,
   FONT_LIBRARY,
   buildGoogleFontsUrl,
+  collectFontFamilies,
+  fontSource,
   fontsForCategory,
   isLibraryFont,
+  isRemoteFont,
   libraryFontByFamily,
 } from './fonts'
 
@@ -19,6 +22,19 @@ describe('fonts', () => {
   it('keeps family names unique', () => {
     const names = FONT_LIBRARY.map((font) => font.family)
     expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('includes Studio OS Google Fonts and Fontshare faces', () => {
+    expect(isLibraryFont('Inter')).toBe(true)
+    expect(isLibraryFont('Space Grotesk')).toBe(true)
+    expect(isLibraryFont('Playfair Display')).toBe(true)
+    expect(isLibraryFont('JetBrains Mono')).toBe(true)
+    expect(isLibraryFont('Satoshi')).toBe(true)
+    expect(isLibraryFont('Clash Display')).toBe(true)
+    expect(fontSource(libraryFontByFamily('Inter')!)).toBe('google')
+    expect(fontSource(libraryFontByFamily('Satoshi')!)).toBe('fontshare')
+    expect(isRemoteFont('Oswald')).toBe(false)
+    expect(isRemoteFont('Inter')).toBe(true)
   })
 
   it('looks up library faces and rejects system names', () => {
@@ -40,9 +56,21 @@ describe('fonts', () => {
     )
   })
 
+  it('collects font families from nested canvas JSON', () => {
+    const families = collectFontFamilies({
+      objects: [{ fontFamily: 'Inter' }, { objects: [{ fontFamily: 'Satoshi' }] }],
+    })
+    expect([...families].sort()).toEqual(['Inter', 'Satoshi'])
+  })
+
   it('treats loadGoogleFont as a local no-op once the family is in the library', async () => {
     const { loadGoogleFont, markLibraryLoaded } = await import('./fonts')
     markLibraryLoaded()
     await expect(loadGoogleFont('Oswald')).resolves.toBeUndefined()
+  })
+
+  it('builds Google Fonts URLs for Studio OS families', () => {
+    expect(buildGoogleFontsUrl(['Inter'])).toContain('family=Inter:wght@400;500;600;700')
+    expect(libraryFontByFamily('Satoshi')?.slug).toBe('satoshi')
   })
 })

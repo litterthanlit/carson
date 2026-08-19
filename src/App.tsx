@@ -59,7 +59,7 @@ import {
   normalizeDocumentMeta,
   type DocumentMeta,
 } from './lib/document'
-import { loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
+import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
 import { contrastRatio } from './lib/color'
 import { alignObjects, distributeObjects, gridTensionScale, type GridOverlay } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
@@ -1417,6 +1417,7 @@ function App() {
     if (!variant) return
 
     restoringRef.current = true
+    await ensureLibraryFonts(collectFontFamilies(variant.canvas))
     await canvas.loadFromJSON(variant.canvas)
     restoringRef.current = false
     await reconcileArtifactTreatments()
@@ -1456,6 +1457,7 @@ function App() {
     const target = getActiveArtboard(next)
     if (!target) return
     restoringRef.current = true
+    await ensureLibraryFonts(collectFontFamilies(target.canvas))
     await canvas.loadFromJSON(target.canvas)
     restoringRef.current = false
     await reconcileArtifactTreatments()
@@ -1765,6 +1767,7 @@ function App() {
     const current = canvas.toObject(HISTORY_PROPS as unknown as string[])
     const merged = mergeVariantCanvas(current, variant.canvas)
     restoringRef.current = true
+    await ensureLibraryFonts(collectFontFamilies(merged))
     await canvas.loadFromJSON(merged)
     restoringRef.current = false
     await reconcileArtifactTreatments()
@@ -2815,6 +2818,7 @@ function App() {
       setBleedMm(project.document.bleedMm)
     }
     restoringRef.current = true
+    await ensureLibraryFonts(collectFontFamilies(project.canvas))
     await canvas.loadFromJSON(project.canvas)
     restoringRef.current = false
     await reconcileArtifactTreatments()

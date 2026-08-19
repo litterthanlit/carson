@@ -3,6 +3,7 @@ import type { Canvas } from 'fabric'
 import type { MutableRefObject, RefObject } from 'react'
 import { HISTORY_PROPS } from '../lib/editorConstants'
 import { readObjectProp } from '../lib/canvasUtils'
+import { collectFontFamilies, ensureLibraryFonts } from '../lib/fonts'
 import { applyLayerOrder, applyObjectPatch } from '../lib/historyObject'
 import {
   createHistoryState,
@@ -61,7 +62,9 @@ export function useEditorHistory({
       const canvas = canvasRef.current
       if (!canvas) return
       restoringRef.current = true
-      await canvas.loadFromJSON(JSON.parse(snapshot))
+      const parsed = JSON.parse(snapshot) as Record<string, unknown>
+      await ensureLibraryFonts(collectFontFamilies(parsed))
+      await canvas.loadFromJSON(parsed)
       restoringRef.current = false
       await onAfterRestore()
       canvas.requestRenderAll()
