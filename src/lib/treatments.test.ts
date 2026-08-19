@@ -84,4 +84,14 @@ describe('treatments', () => {
     expect(stack).toHaveLength(2)
     expect(stack.map((item) => item.seed)).toEqual([1, 2])
   })
+
+  it('stores pixel filters as stackable fx treatments', () => {
+    const object = { set: (values: Record<string, unknown>) => Object.assign(object, values) } as never
+    addTreatment(object, 'fx', { distance: 36, angle: 45 }, 9, { fxKind: 'motion-blur' })
+    const stack = readTreatments(object)
+    expect(stack[0]?.fxKind).toBe('motion-blur')
+    expect(treatmentLabel(stack[0]!)).toBe('Motion·45°')
+    const filters = buildTreatmentFilters(stack)
+    expect(filters[0]?.type).toBe('MotionBlur')
+  })
 })

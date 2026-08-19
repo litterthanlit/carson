@@ -140,7 +140,7 @@ export function InstrumentsPalette({
           <button type="button" title="Scatter the selected layers — press R to re-roll" onClick={onScatter} disabled={!selected}>
             <Shuffle size={16} /> Scatter <ScopeSel />
           </button>
-          <button type="button" title="Browse Carson filters with live preview" onClick={onOpenFilterGallery} disabled={!selected}>
+          <button type="button" title="Browse blur, stylize, color, and Carson print filters with live preview" onClick={onOpenFilterGallery} disabled={!selected}>
             <Wand2 size={16} /> Filters <ScopeSel />
           </button>
           <button type="button" title="Browse print, ink, paper, and grit textures" onClick={onOpenTextureGallery}>

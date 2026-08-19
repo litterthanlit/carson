@@ -4,6 +4,14 @@
 import { filters } from 'fabric'
 import type { Canvas, FabricImage, FabricObject } from 'fabric'
 import { getLayerDecayProfile, getPrintScanProfile } from './editorModel'
+import {
+  buildFxFilters,
+  fxChipLabel,
+  isFxKind,
+  isTreatmentFilter,
+  markTreatmentFilter,
+  type FxKind,
+} from './pixelFilters'
 import { createSeededRandom } from './random'
 import {
   BAD_CROP_SOURCE_ID_KEY,
@@ -69,6 +77,7 @@ export type TreatmentType =
   | 'glyph-break'
   | 'scrape'
   | 'copy-machine'
+  | 'fx'
 
 export type Treatment = {
   id: string
@@ -76,6 +85,7 @@ export type Treatment = {
   seed: number
   enabled: boolean
   params: Record<string, number>
+  fxKind?: FxKind
 }
 
 export type TransformBaseline = {
@@ -87,7 +97,6 @@ export type TransformBaseline = {
   opacity: number
 }
 
-const TREATMENT_FILTER_PREFIX = 'carson-'
 const ARTIFACT_TYPES = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
 const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
 
@@ -147,6 +156,7 @@ export function addTreatment(
   type: TreatmentType,
   params: Record<string, number>,
   seed: number,
+  extras?: { fxKind?: FxKind },
 ): Treatment {
   const baseline = readTransformBaseline(object) ?? captureTransformBaseline(object)
   void baseline
@@ -156,6 +166,7 @@ export function addTreatment(
     seed,
     enabled: true,
     params,
+    fxKind: extras?.fxKind,
   }
   const stack = ONE_PER_LAYER.has(type)
     ? [...readTreatments(object).filter((item) => item.type !== type), treatment]
@@ -220,35 +231,39 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Scrape·${treatment.params.count ?? 7}`
     case 'copy-machine':
       return `Copy·#${treatment.seed}`
+    case 'fx':
+      return fxChipLabel(treatment.fxKind, treatment.params)
     default:
       return treatment.type
   }
 }
 
-export function buildTreatmentFilters(treatments: Treatment[]): filters.BaseFilter<string, Record<string, unknown>>[] {
-  const output: filters.BaseFilter<string, Record<string, unknown>>[] = []
+export function buildTreatmentFilters(treatments: Treatment[]): filters.BaseFilter<string, object>[] {
+  const output: filters.BaseFilter<string, object>[] = []
   for (const treatment of treatments.filter((item) => item.enabled)) {
     if (treatment.type === 'xerox') {
       const profile = getPrintScanProfile(treatment.params.generation ?? 5)
-      output.push(new filters.Grayscale())
-      output.push(new filters.Contrast({ contrast: profile.contrast }))
-      output.push(new filters.Noise({ noise: profile.noise }))
-      output.push(new filters.Blur({ blur: profile.blur }))
+      output.push(markTreatmentFilter(new filters.Grayscale()))
+      output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
+      output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
+      output.push(markTreatmentFilter(new filters.Blur({ blur: profile.blur })))
     } else if (treatment.type === 'decay') {
       const profile = getLayerDecayProfile(treatment.params.amount ?? 55)
-      output.push(new filters.Contrast({ contrast: profile.contrast }))
-      output.push(new filters.Noise({ noise: profile.noise }))
-      output.push(new filters.Blur({ blur: profile.blur }))
+      output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
+      output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
+      output.push(markTreatmentFilter(new filters.Blur({ blur: profile.blur })))
     } else if (treatment.type === 'distress') {
       const intensity = (treatment.params.intensity ?? 70) / 100
-      output.push(new filters.Contrast({ contrast: 0.2 + intensity * 0.5 }))
-      output.push(new filters.Noise({ noise: 40 + intensity * 180 }))
-      output.push(new filters.Blur({ blur: 0.05 + intensity * 0.12 }))
+      output.push(markTreatmentFilter(new filters.Contrast({ contrast: 0.2 + intensity * 0.5 })))
+      output.push(markTreatmentFilter(new filters.Noise({ noise: 40 + intensity * 180 })))
+      output.push(markTreatmentFilter(new filters.Blur({ blur: 0.05 + intensity * 0.12 })))
     } else if (treatment.type === 'cold-wash') {
-      output.push(new filters.Grayscale())
-      output.push(new filters.Contrast({ contrast: 0.42 }))
-      output.push(new filters.BlendColor({ color: '#2f6f8f', mode: 'tint', alpha: 0.22 }))
-      output.push(new filters.Noise({ noise: 85 }))
+      output.push(markTreatmentFilter(new filters.Grayscale()))
+      output.push(markTreatmentFilter(new filters.Contrast({ contrast: 0.42 })))
+      output.push(markTreatmentFilter(new filters.BlendColor({ color: '#2f6f8f', mode: 'tint', alpha: 0.22 })))
+      output.push(markTreatmentFilter(new filters.Noise({ noise: 85 })))
+    } else if (treatment.type === 'fx' && isFxKind(treatment.fxKind)) {
+      output.push(...buildFxFilters(treatment.fxKind, treatment.params))
     }
   }
   return output
@@ -299,9 +314,7 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
   const built = buildTreatmentFilters(filterTreatments)
   const filterable = object as FabricImage
   if (typeof filterable.applyFilters === 'function') {
-    const existing = (filterable.filters ?? []).filter(
-      (filter) => !String(filter?.type ?? '').startsWith(TREATMENT_FILTER_PREFIX),
-    )
+    const existing = (filterable.filters ?? []).filter((filter) => !isTreatmentFilter(filter))
     filterable.filters = [...existing, ...built]
     filterable.applyFilters()
   }

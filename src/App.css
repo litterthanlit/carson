@@ -1720,15 +1720,20 @@ input[type='color'] {
   font-size: 18px;
 }
 
+.filter-gallery-lede {
+  margin: 4px 0 0;
+  max-width: 52ch;
+}
+
 .filter-gallery-empty {
   margin: 8px 0 4px;
 }
 
 .filter-gallery-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 220px;
+  grid-template-columns: 240px minmax(0, 1fr) 220px;
   gap: 14px;
-  min-height: 420px;
+  min-height: 460px;
   max-height: calc(100vh - 140px);
 }
 
@@ -1741,13 +1746,16 @@ input[type='color'] {
 
 .filter-gallery-categories {
   display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 4px;
+  max-height: 220px;
+  overflow: auto;
 }
 
 .filter-gallery-categories button {
   text-align: left;
-  padding: 8px 10px;
-  font-size: 12px;
+  padding: 6px 8px;
+  font-size: 11px;
 }
 
 .filter-gallery-categories button.active {

@@ -34,6 +34,7 @@ function syntheticTreatment(preset: FilterPreset, params: Record<string, number>
     seed: PREVIEW_SEED,
     enabled: true,
     params,
+    fxKind: preset.fxKind,
   }
 }
 

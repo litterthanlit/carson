@@ -121,6 +121,7 @@ import { FilterGalleryModal } from './components/FilterGalleryModal'
 import { TextureGalleryModal, type TexturePlacement } from './components/TextureGalleryModal'
 import type { FilterPreset } from './lib/filterGallery'
 import { paramsForTreatment } from './lib/filterGallery'
+import { snapshotObjectToImage } from './lib/rasterizeLayer'
 import { coverScale, layerScale, textureUrl } from './lib/textureGallery'
 import { useCanvasEvents } from './hooks/useCanvasEvents'
 import { usePathEditing } from './hooks/usePathEditing'
@@ -587,6 +588,7 @@ function App() {
       setPenMode(false)
       setEditorTool((current) => (current === 'instruments' ? 'move' : 'instruments'))
     },
+    filterGallery: () => setFilterGalleryOpen(true),
   }
 
   useEffect(() => {
@@ -675,6 +677,9 @@ function App() {
         } else if (key === 'b') {
           event.preventDefault()
           actions.forkVariant()
+        } else if (key === 'f') {
+          event.preventDefault()
+          actions.filterGallery()
         }
         return
       }
@@ -2063,27 +2068,38 @@ function App() {
     commitHistory(already ? `Removed ${effect} effect` : `Added ${effect} effect`)
   }
 
-  function applyTreatmentToSelection(
+  async function applyTreatmentToSelection(
     type: Treatment['type'],
     params: Record<string, number>,
     label: string,
     seed = newSeed(),
+    extras?: { fxKind?: Treatment['fxKind'] },
   ) {
     const canvas = canvasRef.current
-    const object = activeObject()
+    let object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
+    if (type === 'fx' && object.type !== 'image') {
+      const snapshot = await snapshotObjectToImage(object)
+      const name = String(readObjectProp(object, 'name') ?? 'Layer')
+      tagObject(snapshot, 'image', name)
+      canvas.remove(object)
+      canvas.add(snapshot)
+      canvas.setActiveObject(snapshot)
+      object = snapshot
+      syncLayers()
+      syncSelected()
+    }
     const targetIds = selectedTargetIds()
     captureTransformBaseline(object)
-    addTreatment(object, type, params, seed)
+    addTreatment(object, type, params, seed, extras)
     object.set({ objectCaching: true } as Partial<FabricObject>)
-    void refreshTreatmentStack(object).then(() => {
-      trackChaos(label, seed, targetIds, (next) => applyTreatmentToSelection(type, params, label, next))
-      commitHistory(`Applied ${label} #${seed}`)
-    })
+    await refreshTreatmentStack(object)
+    trackChaos(label, seed, targetIds, (next) => void applyTreatmentToSelection(type, params, label, next, extras))
+    commitHistory(`Applied ${label} #${seed}`)
   }
 
   async function applyLayerDecayToSelected(seed = newSeed()) {
-    applyTreatmentToSelection('decay', { amount: decayAmount }, 'layer decay', seed)
+    void applyTreatmentToSelection('decay', { amount: decayAmount }, 'layer decay', seed)
   }
 
   function addLayerDecayMarks(kind: 'ink-loss' | 'fold' | 'all', seed = newSeed()) {
@@ -2143,7 +2159,13 @@ function App() {
   }
 
   function applyFilterFromGallery(preset: FilterPreset, params: Record<string, number>) {
-    applyTreatmentToSelection(preset.treatmentType, paramsForTreatment(preset, params), preset.name)
+    void applyTreatmentToSelection(
+      preset.treatmentType,
+      paramsForTreatment(preset, params),
+      preset.name,
+      newSeed(),
+      preset.fxKind ? { fxKind: preset.fxKind } : undefined,
+    )
   }
 
   function openFilterGallery() {
@@ -2192,15 +2214,15 @@ function App() {
   function applyColdWashImage() {
     const object = activeObject()
     if (!object || object.type !== 'image') return
-    applyTreatmentToSelection('cold-wash', {}, 'cold wash')
+    void applyTreatmentToSelection('cold-wash', {}, 'cold wash')
   }
 
   async function applyXeroxToSelected(seed = newSeed()) {
-    applyTreatmentToSelection('xerox', { generation: xeroxGeneration }, 'xerox copy', seed)
+    void applyTreatmentToSelection('xerox', { generation: xeroxGeneration }, 'xerox copy', seed)
   }
 
   async function applyCopyMachineToSelected(seed = newSeed()) {
-    applyTreatmentToSelection(
+    void applyTreatmentToSelection(
       'copy-machine',
       copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS),
       'copy machine',
@@ -2542,7 +2564,7 @@ function App() {
   }
 
   async function distressSelected(seed = newSeed()) {
-    applyTreatmentToSelection('distress', { intensity: 70 }, 'distress', seed)
+    void applyTreatmentToSelection('distress', { intensity: 70 }, 'distress', seed)
   }
 
   function addPhotocopyNoise(seed = newSeed()) {
@@ -2996,7 +3018,7 @@ function App() {
   void hudTick
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
-    { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox'], scope: 'selection', disabled: !selected, run: openFilterGallery },
+    { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
     {
@@ -3351,6 +3373,7 @@ function App() {
           onPenStrokeWidthChange={setPenStrokeWidth}
           onMoveLayer={moveLayer}
           onApplyImageEffect={applyImageEffect}
+          onOpenFilterGallery={openFilterGallery}
           storedAssets={storedAssets}
           documentMeta={documentMeta}
           onInsertAsset={(asset) => void insertAsset(asset)}

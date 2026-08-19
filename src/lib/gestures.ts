@@ -5,10 +5,12 @@
 import type { FabricObject } from 'fabric'
 import { COPY_MACHINE_DEFAULTS, copyMachineParamsToRecord } from './copyMachine'
 import { addTreatment, type Treatment, type TreatmentType } from './treatments'
+import type { FxKind } from './pixelFilters'
 
 export type GestureStep = {
   type: TreatmentType
   params: Record<string, number>
+  fxKind?: FxKind
 }
 
 export type Gesture = {
@@ -40,6 +42,7 @@ const STEP_LABELS: Partial<Record<TreatmentType, string>> = {
   'bad-crop': 'Bad crop',
   'glyph-break': 'Glyph break',
   scrape: 'Scrape',
+  fx: 'Filter',
 }
 
 function stepLabel(type: TreatmentType): string {
@@ -56,10 +59,14 @@ export function gestureLabel(gesture: Gesture): string {
 export function gestureFromTreatments(treatments: Treatment[]): Gesture {
   const steps: GestureStep[] = treatments
     .filter((item) => item.enabled)
-    .map((item) => ({
-      type: item.type,
-      params: { ...item.params },
-    }))
+    .map((item) => {
+      const step: GestureStep = {
+        type: item.type,
+        params: { ...item.params },
+      }
+      if (item.fxKind) step.fxKind = item.fxKind
+      return step
+    })
   const draft: Gesture = { id: '', name: '', steps }
   return {
     id: '',
@@ -80,6 +87,6 @@ export function applyGestureToObject(object: FabricObject, gesture: Gesture, mas
   const seeds = gestureStepSeeds(masterSeed, gesture.steps.length)
   for (let index = 0; index < gesture.steps.length; index += 1) {
     const step = gesture.steps[index]!
-    addTreatment(object, step.type, step.params, seeds[index]!)
+    addTreatment(object, step.type, step.params, seeds[index]!, { fxKind: step.fxKind })
   }
 }

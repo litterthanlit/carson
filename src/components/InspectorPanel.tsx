@@ -29,6 +29,7 @@ import { legibilityBand } from '../lib/color'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
+import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
 import type { Gesture } from '../lib/gestures'
 import type {
   ExportBackground,
@@ -142,6 +143,7 @@ export type InspectorPanelProps = {
   onPenStrokeWidthChange: (width: number) => void
   onMoveLayer: (direction: 'front' | 'back') => void
   onApplyImageEffect: (effect: 'grayscale' | 'contrast' | 'threshold' | 'blur' | 'noise' | 'clear') => void
+  onOpenFilterGallery: () => void
   storedAssets: StoredAsset[]
   documentMeta: DocumentMeta | null
   onInsertAsset: (asset: StoredAsset) => void
@@ -274,6 +276,7 @@ export function InspectorPanel({
   onPenStrokeWidthChange,
   onMoveLayer,
   onApplyImageEffect,
+  onOpenFilterGallery,
   storedAssets,
   documentMeta,
   onInsertAsset,
@@ -570,6 +573,25 @@ export function InspectorPanel({
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { ghostOffset: value })}
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
+                      </div>
+                    ) : treatment.type === 'fx' ? (
+                      <div className="treatment-params nested">
+                        {paramDefsForFx(treatment.fxKind).map((param) => (
+                          <Slider
+                            key={param.key}
+                            label={param.label}
+                            value={
+                              treatment.params[param.key] ??
+                              defaultsForFx(treatment.fxKind)[param.key] ??
+                              param.min
+                            }
+                            min={param.min}
+                            max={param.max}
+                            format={(value) => formatFilterParam(param, value)}
+                            onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { [param.key]: value })}
+                            onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                          />
+                        ))}
                       </div>
                     ) : null}
                   </li>
@@ -1131,7 +1153,7 @@ export function InspectorPanel({
 
           <div className="panel-section">
             <h2>Image effects</h2>
-            <p className="hint">Effects stack — click again to remove one.</p>
+            <p className="hint">Quick toggles, or open the Filter Gallery for motion blur, stylize, and film looks.</p>
             <div className="preset-row effect-grid">
               {(['grayscale', 'contrast', 'threshold', 'blur', 'noise', 'clear'] as const).map((effect) => (
                 <button
@@ -1144,6 +1166,14 @@ export function InspectorPanel({
                   {effect} {effect === 'clear' ? null : <ScopeSel />}
                 </button>
               ))}
+              <button
+                type="button"
+                title="Open the Filter Gallery for directional blurs and stacked looks"
+                onClick={onOpenFilterGallery}
+                disabled={!selected}
+              >
+                Filter gallery <ScopeSel />
+              </button>
             </div>
           </div>
 
@@ -1157,7 +1187,7 @@ export function InspectorPanel({
                 <kbd>Cmd+D</kbd> Duplicate · <kbd>Delete</kbd> Remove
               </li>
               <li>
-                <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant
+                <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant · <kbd>Cmd+F</kbd> Filter gallery
               </li>
               <li>
                 <kbd>Tab</kbd> Cycle layers (canvas focused) · <kbd>Shift+Tab</kbd> Reverse

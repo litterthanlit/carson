@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import type { FabricObject } from 'fabric'
 import {
   FILTER_CATEGORIES,
+  formatFilterParam,
   isPresetApplicable,
   mergePresetParams,
   presetsForCategory,
@@ -28,7 +29,7 @@ export function FilterGalleryModal({
   onClose,
 }: FilterGalleryModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
-  const [category, setCategory] = useState<FilterCategory>('print')
+  const [category, setCategory] = useState<FilterCategory>('blur')
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null)
   const [params, setParams] = useState<Record<string, number>>({})
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -128,7 +129,12 @@ export function FilterGalleryModal({
         onClick={(event) => event.stopPropagation()}
       >
         <header className="filter-gallery-header">
-          <h2 id="filter-gallery-title">Filter Gallery</h2>
+          <div>
+            <h2 id="filter-gallery-title">Filter Gallery</h2>
+            <p className="hint filter-gallery-lede">
+              Blur, stylize, color, and film looks plus Carson print treatments. Live preview; applies as a removable stack.
+            </p>
+          </div>
           <button type="button" className="icon-button" aria-label="Close filter gallery" onClick={onClose}>
             <X size={16} />
           </button>
@@ -199,6 +205,10 @@ export function FilterGalleryModal({
               {selectedPreset ? (
                 <>
                   <h3>{selectedPreset.name}</h3>
+                  {selectedPreset.description ? <p className="hint">{selectedPreset.description}</p> : null}
+                  {selectedPreset.treatmentType === 'fx' && !selectedIsImage ? (
+                    <p className="hint">Type and shapes are snapshotted to an image layer so pixel filters can run. Undo restores the original.</p>
+                  ) : null}
                   {selectedPreset.paramDefs.length === 0 ? (
                     <p className="hint">No adjustable parameters.</p>
                   ) : (
@@ -209,6 +219,7 @@ export function FilterGalleryModal({
                         value={params[param.key] ?? selectedPreset.defaultParams[param.key] ?? param.min}
                         min={param.min}
                         max={param.max}
+                        format={(value) => formatFilterParam(param, value)}
                         onChange={(value) => setParams((current) => ({ ...current, [param.key]: value }))}
                         onCommit={() => undefined}
                       />

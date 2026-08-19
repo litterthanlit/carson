@@ -9,8 +9,8 @@ import {
 } from './filterGallery'
 
 describe('filterGallery', () => {
-  it('defines all five categories with presets', () => {
-    expect(FILTER_CATEGORIES).toHaveLength(5)
+  it('defines all categories with presets', () => {
+    expect(FILTER_CATEGORIES).toHaveLength(10)
     for (const category of FILTER_CATEGORIES) {
       expect(presetsForCategory(category.id).length).toBeGreaterThan(0)
     }
@@ -51,5 +51,14 @@ describe('filterGallery', () => {
     expect(isPresetApplicable(coldWash!, false)).toBe(false)
     expect(isPresetApplicable(coldWash!, true)).toBe(true)
     expect(isPresetApplicable(presetById('xerox-office')!, false)).toBe(true)
+  })
+
+  it('exposes motion blur with angle and distance', () => {
+    const motion = presetById('motion-blur')
+    expect(motion?.category).toBe('blur')
+    expect(motion?.treatmentType).toBe('fx')
+    expect(motion?.fxKind).toBe('motion-blur')
+    expect(motion?.paramDefs.map((param) => param.key)).toEqual(['distance', 'angle'])
+    expect(isPresetApplicable(motion!, false)).toBe(true)
   })
 })
