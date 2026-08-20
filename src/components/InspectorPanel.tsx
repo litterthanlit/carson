@@ -23,7 +23,7 @@ import type { PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
 import type { StoredAsset } from '../lib/assets'
 import type { StoredProject } from '../lib/storage'
-import type { GridOverlay } from '../lib/grid'
+import type { GridOverlay, LayoutGuide } from '../lib/grid'
 import { BLEND_MODES, FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
 import { legibilityBand } from '../lib/color'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
@@ -149,16 +149,24 @@ export type InspectorPanelProps = {
   onInsertAsset: (asset: StoredAsset) => void
   onInsertComponent: (componentId: string) => void
   onSaveSelectionAsComponent: () => void
-  onAlignSelection: (mode: 'left' | 'center' | 'right') => void
+  onAlignSelection: (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void
   onDistributeSelection: (mode: 'horizontal' | 'vertical') => void
   onClipSelectionToShape: () => void
   gridOverlay: GridOverlay
+  onGridOverlayChange: (patch: Partial<GridOverlay>) => void
   onGridTensionChange: (value: number) => void
   onGridTensionCommit: () => void
   showLayoutGrid: boolean
   onToggleLayoutGrid: () => void
   showBaselineGrid: boolean
   onToggleBaselineGrid: () => void
+  snapToGrid: boolean
+  onToggleSnapToGrid: () => void
+  layoutGuides: LayoutGuide[]
+  onAddVerticalGuide: () => void
+  onAddHorizontalGuide: () => void
+  onRemoveLayoutGuide: (id: string) => void
+  onClearLayoutGuides: () => void
   onRestoreVariant: (variantId: string) => void
   onOpenVariantCompare: (variantId: string) => void
   onMergeVariant: (variantId: string) => void
@@ -286,12 +294,20 @@ export function InspectorPanel({
   onDistributeSelection,
   onClipSelectionToShape,
   gridOverlay,
+  onGridOverlayChange,
   onGridTensionChange,
   onGridTensionCommit,
   showLayoutGrid,
   onToggleLayoutGrid,
   showBaselineGrid,
   onToggleBaselineGrid,
+  snapToGrid,
+  onToggleSnapToGrid,
+  layoutGuides,
+  onAddVerticalGuide,
+  onAddHorizontalGuide,
+  onRemoveLayoutGuide,
+  onClearLayoutGuides,
   onRestoreVariant,
   onOpenVariantCompare,
   onMergeVariant,
@@ -1199,7 +1215,7 @@ export function InspectorPanel({
                 <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
               </li>
               <li>
-                <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble
+                <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>G</kbd> Grid · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble
               </li>
               <li>
                 <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom
@@ -1261,16 +1277,130 @@ export function InspectorPanel({
 
       {inspectorTab === 'layout' ? (
         <div className="panel-section">
-          <h2>Layout & grid</h2>
+          <h2>Layout grid</h2>
+          <p className="hint">Structure to play against. Click the rulers to drop guides. Tension loosens the snap.</p>
+          <div className="button-row">
+            <button type="button" className={showLayoutGrid ? 'active' : undefined} onClick={onToggleLayoutGrid} title="Toggle column grid (G)">
+              <Grid3x3 size={16} />
+              {showLayoutGrid ? 'Columns on' : 'Columns off'}
+            </button>
+            <button type="button" className={showBaselineGrid ? 'active' : undefined} onClick={onToggleBaselineGrid}>
+              <Grid3x3 size={16} />
+              {showBaselineGrid ? 'Rows on' : 'Rows off'}
+            </button>
+          </div>
+          <label className="toggle-row">
+            <input type="checkbox" checked={snapToGrid} onChange={onToggleSnapToGrid} />
+            Snap to grid
+          </label>
+          <span className="layout-field-label">Columns</span>
+          <div className="preset-row">
+            {([2, 3, 4, 6, 12] as const).map((count) => (
+              <button
+                key={count}
+                type="button"
+                className={gridOverlay.columns === count ? 'active' : undefined}
+                onClick={() => onGridOverlayChange({ columns: count })}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          <span className="layout-field-label">Rows</span>
+          <div className="preset-row">
+            {([4, 6, 8, 12] as const).map((count) => (
+              <button
+                key={count}
+                type="button"
+                className={gridOverlay.rows === count ? 'active' : undefined}
+                onClick={() => onGridOverlayChange({ rows: count })}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          <label>
+            Margin
+            <input
+              type="number"
+              min={0}
+              max={320}
+              value={gridOverlay.margin}
+              onChange={(event) => onGridOverlayChange({ margin: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            Gutter
+            <input
+              type="number"
+              min={0}
+              max={160}
+              value={gridOverlay.gutter}
+              onChange={(event) => onGridOverlayChange({ gutter: Number(event.target.value) })}
+            />
+          </label>
+          <Slider
+            label="Grid tension"
+            value={gridOverlay.tension}
+            min={0}
+            max={100}
+            format={formatPercent}
+            onChange={onGridTensionChange}
+            onCommit={onGridTensionCommit}
+          />
+
+          <h3>Guides</h3>
+          <div className="button-row">
+            <button type="button" title="Add a vertical guide at the center" onClick={onAddVerticalGuide}>
+              Vertical
+            </button>
+            <button type="button" title="Add a horizontal guide at the center" onClick={onAddHorizontalGuide}>
+              Horizontal
+            </button>
+          </div>
+          {layoutGuides.length === 0 ? (
+            <p className="empty">Click a ruler on the poster, or add a center guide.</p>
+          ) : (
+            <ul className="guide-list">
+              {layoutGuides.map((guide) => (
+                <li key={guide.id}>
+                  <span>
+                    {guide.axis === 'v' ? 'V' : 'H'} {Math.round(guide.position)}px
+                  </span>
+                  <button type="button" className="icon-button" title="Remove guide" onClick={() => onRemoveLayoutGuide(guide.id)}>
+                    <Trash2 size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {layoutGuides.length > 0 ? (
+            <button type="button" onClick={onClearLayoutGuides}>
+              Clear guides
+            </button>
+          ) : null}
+
+          <h3>Align</h3>
           <div className="button-row">
             <button type="button" onClick={() => onAlignSelection('left')}>
-              Align left
+              Left
             </button>
             <button type="button" onClick={() => onAlignSelection('center')}>
               Center
             </button>
             <button type="button" onClick={() => onAlignSelection('right')}>
-              Align right
+              Right
+            </button>
+          </div>
+          <div className="button-row">
+            <button type="button" onClick={() => onAlignSelection('top')}>
+              Top
+            </button>
+            <button type="button" onClick={() => onAlignSelection('middle')}>
+              Middle
+            </button>
+            <button type="button" onClick={() => onAlignSelection('bottom')}>
+              Bottom
             </button>
           </div>
           <div className="button-row">
@@ -1284,23 +1414,6 @@ export function InspectorPanel({
               Clip to shape
             </button>
           </div>
-          <Slider
-            label="Grid tension"
-            value={gridOverlay.tension}
-            min={0}
-            max={100}
-            format={formatPercent}
-            onChange={onGridTensionChange}
-            onCommit={onGridTensionCommit}
-          />
-          <button type="button" onClick={onToggleLayoutGrid}>
-            <Grid3x3 size={16} />
-            {showLayoutGrid ? 'Hide column grid' : 'Show column grid'}
-          </button>
-          <button type="button" onClick={onToggleBaselineGrid}>
-            <Grid3x3 size={16} />
-            {showBaselineGrid ? 'Hide baseline grid' : 'Show baseline grid'}
-          </button>
           {documentMeta && documentMeta.variants.length > 0 ? (
             <>
               <h3>Variations</h3>

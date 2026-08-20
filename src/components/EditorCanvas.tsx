@@ -1,5 +1,7 @@
 import type { CSSProperties, DragEvent, MouseEvent, ReactNode, RefObject } from 'react'
-import { Dices, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
+import { LayoutGuidesOverlay } from './LayoutGuidesOverlay'
+import type { LayoutGuide } from '../lib/grid'
+import { Dices, Grid3x3, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { PosterPreset, PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
 import { ExplorationTrail } from './ExplorationTrail'
@@ -32,6 +34,12 @@ type EditorCanvasProps = {
   onAssetDrop: (assetId: string) => void
   onRestoreVariant: (variantId: string) => void
   onForkVariant: () => void
+  showLayoutGrid: boolean
+  onToggleLayoutGrid: () => void
+  layoutGuides: LayoutGuide[]
+  onAddLayoutGuide: (axis: 'v' | 'h', position: number) => void
+  onMoveLayoutGuide: (id: string, position: number) => void
+  onRemoveLayoutGuide: (id: string) => void
 }
 
 export function EditorCanvas({
@@ -62,6 +70,12 @@ export function EditorCanvas({
   onAssetDrop,
   onRestoreVariant,
   onForkVariant,
+  showLayoutGrid,
+  onToggleLayoutGrid,
+  layoutGuides,
+  onAddLayoutGuide,
+  onMoveLayoutGuide,
+  onRemoveLayoutGuide,
 }: EditorCanvasProps) {
   const handleDrop = (event: DragEvent) => {
     event.preventDefault()
@@ -150,6 +164,16 @@ export function EditorCanvas({
           <button type="button" className="icon-button" aria-label="Fit poster to view" title="Fit to view (Cmd+0)" onClick={onZoomFit}>
             <Maximize size={15} />
           </button>
+          <button
+            type="button"
+            className={showLayoutGrid ? 'icon-button active' : 'icon-button'}
+            aria-label="Toggle layout grid"
+            aria-pressed={showLayoutGrid}
+            title="Layout grid (G)"
+            onClick={onToggleLayoutGrid}
+          >
+            <Grid3x3 size={15} />
+          </button>
         </span>
         {lastChaos ? (
           <button
@@ -195,6 +219,15 @@ export function EditorCanvas({
           }
         >
           <canvas ref={canvasEl} />
+          <LayoutGuidesOverlay
+            posterWidth={poster.width}
+            posterHeight={poster.height}
+            displayScale={displayScale}
+            guides={layoutGuides}
+            onAddGuide={onAddLayoutGuide}
+            onMoveGuide={onMoveLayoutGuide}
+            onRemoveGuide={onRemoveLayoutGuide}
+          />
           {hud}
         </div>
       </div>

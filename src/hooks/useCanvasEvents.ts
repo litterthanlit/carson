@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import type { Canvas, FabricObject, Path as FabricPath } from 'fabric'
 import type { MutableRefObject } from 'react'
 import { SNAP_SCREEN_THRESHOLD } from '../lib/editorConstants'
-import { baselineGridLines, buildColumnGrid, type GridOverlay } from '../lib/grid'
+import { buildLayoutGrid, layoutSnapLines, type GridOverlay, type LayoutGuide } from '../lib/grid'
 import { buildPrintGuides } from '../lib/print'
 import { SELECTION_ACCENT } from '../lib/selectionChrome'
 import { computeSnap } from '../lib/snapping'
@@ -17,6 +17,8 @@ type UseCanvasEventsOptions = {
   showBaselineGridRef: MutableRefObject<boolean>
   showPrintGuidesRef: MutableRefObject<boolean>
   gridOverlayRef: MutableRefObject<GridOverlay>
+  layoutGuidesRef: MutableRefObject<LayoutGuide[]>
+  snapToGridRef: MutableRefObject<boolean>
   printDpiRef: MutableRefObject<number>
   bleedMmRef: MutableRefObject<number>
   penStrokeColorRef: MutableRefObject<string>
@@ -38,6 +40,8 @@ export function useCanvasEvents({
   showBaselineGridRef,
   showPrintGuidesRef,
   gridOverlayRef,
+  layoutGuidesRef,
+  snapToGridRef,
   printDpiRef,
   bleedMmRef,
   penStrokeColorRef,
@@ -139,7 +143,21 @@ export function useCanvasEvents({
           .filter((object) => object !== target && object.visible !== false && !canvas.getActiveObjects().includes(object))
           .map((object) => object.getBoundingRect())
         const threshold = SNAP_SCREEN_THRESHOLD / displayScaleRef.current
-        const snap = computeSnap(bounds, others, { width: canvas.getWidth(), height: canvas.getHeight() }, threshold)
+        const layout = buildLayoutGrid(
+          { width: canvas.getWidth(), height: canvas.getHeight() },
+          gridOverlayRef.current,
+        )
+        const extras = layoutSnapLines(layout, layoutGuidesRef.current, {
+          includeGrid: snapToGridRef.current && gridOverlayRef.current.tension < 96,
+          includeGuides: true,
+        })
+        const snap = computeSnap(
+          bounds,
+          others,
+          { width: canvas.getWidth(), height: canvas.getHeight() },
+          threshold,
+          extras,
+        )
         if (snap.dx !== 0 || snap.dy !== 0) {
           target.set({ left: (target.left ?? 0) + snap.dx, top: (target.top ?? 0) + snap.dy })
           target.setCoords()
@@ -191,28 +209,43 @@ export function useCanvasEvents({
         ctx.lineWidth = 1 / displayScaleRef.current
 
         if (showLayoutGridRef.current) {
-          const overlay = gridOverlayRef.current
-          const columns = buildColumnGrid(
+          const layout = buildLayoutGrid(
             { width: canvas.getWidth(), height: canvas.getHeight() },
-            overlay,
-            () => 0.5,
+            gridOverlayRef.current,
           )
-          ctx.strokeStyle = 'rgba(5, 182, 212, 0.35)'
-          ctx.setLineDash([4, 8])
-          for (const column of columns) {
-            ctx.strokeRect(column.left, column.top, column.width, column.height)
+          ctx.setLineDash([])
+          ctx.fillStyle = 'rgba(5, 182, 212, 0.07)'
+          for (const column of layout.columns) {
+            ctx.fillRect(column.left, column.top, column.width, column.height)
+          }
+          ctx.strokeStyle = 'rgba(5, 182, 212, 0.55)'
+          ctx.strokeRect(layout.marginRect.left, layout.marginRect.top, layout.marginRect.width, layout.marginRect.height)
+          ctx.setLineDash([5, 7])
+          ctx.strokeStyle = 'rgba(5, 182, 212, 0.38)'
+          for (const column of layout.columns) {
+            ctx.beginPath()
+            ctx.moveTo(column.left, column.top)
+            ctx.lineTo(column.left, column.top + column.height)
+            ctx.stroke()
+            ctx.beginPath()
+            ctx.moveTo(column.left + column.width, column.top)
+            ctx.lineTo(column.left + column.width, column.top + column.height)
+            ctx.stroke()
           }
         }
 
         if (showBaselineGridRef.current) {
-          const step = Math.max(12, Math.round(canvas.getHeight() / (gridOverlayRef.current.rows || 8)))
-          const lines = baselineGridLines({ width: canvas.getWidth(), height: canvas.getHeight() }, step)
-          ctx.strokeStyle = 'rgba(17, 17, 17, 0.12)'
+          const layout = buildLayoutGrid(
+            { width: canvas.getWidth(), height: canvas.getHeight() },
+            gridOverlayRef.current,
+          )
+          ctx.strokeStyle = 'rgba(17, 17, 17, 0.16)'
           ctx.setLineDash([2, 10])
-          for (const line of lines) {
+          for (const y of layout.hLines) {
+            if (y <= 0 || y >= canvas.getHeight()) continue
             ctx.beginPath()
-            ctx.moveTo(line.x1, line.y1)
-            ctx.lineTo(line.x2, line.y2)
+            ctx.moveTo(0, y)
+            ctx.lineTo(canvas.getWidth(), y)
             ctx.stroke()
           }
         }
@@ -259,6 +292,8 @@ export function useCanvasEvents({
       commitHistory,
       displayScaleRef,
       gridOverlayRef,
+      layoutGuidesRef,
+      snapToGridRef,
       guidesRef,
       penStrokeColorRef,
       penStrokeWidthRef,

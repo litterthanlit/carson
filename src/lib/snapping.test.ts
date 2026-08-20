@@ -42,11 +42,10 @@ describe('computeSnap', () => {
     expect(snap.dy).toBe(-5)
   })
 
-  it('snaps vertically and horizontally independently', () => {
-    const moving = { left: 3, top: 320, width: 100, height: 100 } // x near edge, y away from guides
-    const snap = computeSnap(moving, [], canvas, 6)
-    expect(snap.dx).toBe(-3)
-    expect(snap.dy).toBe(0)
-    expect(snap.hGuides).toEqual([])
+  it('snaps to extra layout grid lines', () => {
+    const moving = { left: 118, top: 40, width: 80, height: 40 }
+    const snap = computeSnap(moving, [], canvas, 6, { vLines: [120], hLines: [] })
+    expect(snap.dx).toBe(2)
+    expect(snap.vGuides).toEqual([120])
   })
 })

@@ -69,7 +69,7 @@ import {
 } from './lib/document'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
 import { contrastRatio } from './lib/color'
-import { alignObjects, distributeObjects, gridTensionScale, type GridOverlay } from './lib/grid'
+import { alignObjects, clampGridOverlay, distributeObjects, gridTensionScale, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
 import {
   ACCENTS,
@@ -201,6 +201,8 @@ function App() {
   const showBaselineGridRef = useRef(false)
   const showCmykPreviewRef = useRef(false)
   const gridOverlayRef = useRef<GridOverlay>({ columns: 4, rows: 8, margin: 48, gutter: 16, tension: 0 })
+  const layoutGuidesRef = useRef<LayoutGuide[]>([])
+  const snapToGridRef = useRef(true)
   const printDpiRef = useRef(300)
   const bleedMmRef = useRef(3)
 
@@ -243,6 +245,8 @@ function App() {
   const [gridOverlay, setGridOverlay] = useState<GridOverlay>({ columns: 4, rows: 8, margin: 48, gutter: 16, tension: 0 })
   const [showLayoutGrid, setShowLayoutGrid] = useState(false)
   const [showBaselineGrid, setShowBaselineGrid] = useState(false)
+  const [snapToGrid, setSnapToGrid] = useState(true)
+  const [layoutGuides, setLayoutGuides] = useState<LayoutGuide[]>([])
   const [showPrintGuides, setShowPrintGuides] = useState(false)
   const [showCmykPreview, setShowCmykPreview] = useState(false)
   const [editorTool, setEditorTool] = useState<EditorTool>('move')
@@ -372,6 +376,8 @@ function App() {
     showBaselineGridRef,
     showPrintGuidesRef,
     gridOverlayRef,
+    layoutGuidesRef,
+    snapToGridRef,
     printDpiRef,
     bleedMmRef,
     penStrokeColorRef,
@@ -407,6 +413,8 @@ function App() {
   showBaselineGridRef.current = showBaselineGrid
   showCmykPreviewRef.current = showCmykPreview
   gridOverlayRef.current = gridOverlay
+  layoutGuidesRef.current = layoutGuides
+  snapToGridRef.current = snapToGrid
   printDpiRef.current = printDpi
   bleedMmRef.current = bleedMm
 
@@ -458,7 +466,7 @@ function App() {
 
   useEffect(() => {
     canvasRef.current?.requestRenderAll()
-  }, [showLayoutGrid, showBaselineGrid, showPrintGuides, gridOverlay, printDpi, bleedMm])
+  }, [showLayoutGrid, showBaselineGrid, showPrintGuides, gridOverlay, layoutGuides, snapToGrid, printDpi, bleedMm])
 
   useEffect(() => {
     void refreshPosterTreatments()
@@ -571,6 +579,13 @@ function App() {
     zoomOut: () => stepZoom(-1),
     reroll: () => void rerollLast(),
     scramble: () => void scrambleCanvas(),
+    toggleLayoutGrid: () => {
+      setShowLayoutGrid((value) => {
+        const next = !value
+        if (next) setInspectorTab('layout')
+        return next
+      })
+    },
     commandPalette: () => setCommandOpen(true),
     forkVariant: () => void forkVariation(),
     togglePen: () => {
@@ -737,6 +752,9 @@ function App() {
         actions.addShape()
       } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
         actions.togglePen()
+      } else if (event.key.toLowerCase() === 'g') {
+        event.preventDefault()
+        actions.toggleLayoutGrid()
       } else if (event.key.toLowerCase() === 'r') {
         if (event.shiftKey) {
           event.preventDefault()
@@ -1283,6 +1301,28 @@ function App() {
     distributeObjects(objects, axis)
     canvas.requestRenderAll()
     commitHistory(`Distributed ${axis}`)
+  }
+
+  function patchGridOverlay(patch: Partial<GridOverlay>) {
+    setGridOverlay((current) => clampGridOverlay({ ...current, ...patch }))
+    if (patch.columns !== undefined || patch.margin !== undefined || patch.gutter !== undefined) {
+      setShowLayoutGrid(true)
+    }
+    if (patch.rows !== undefined) setShowBaselineGrid(true)
+  }
+
+  function addLayoutGuide(axis: 'v' | 'h', position?: number) {
+    const next = position ?? (axis === 'v' ? poster.width / 2 : poster.height / 2)
+    setLayoutGuides((current) => [...current, { id: newLayoutGuideId(), axis, position: next }])
+    setStatus(axis === 'v' ? 'Vertical guide — drag to place, drag off to delete' : 'Horizontal guide — drag to place, drag off to delete')
+  }
+
+  function moveLayoutGuide(id: string, position: number) {
+    setLayoutGuides((current) => current.map((guide) => (guide.id === id ? { ...guide, position } : guide)))
+  }
+
+  function removeLayoutGuide(id: string) {
+    setLayoutGuides((current) => current.filter((guide) => guide.id !== id))
   }
 
   async function clipSelectionToShape() {
@@ -3148,7 +3188,11 @@ function App() {
       disabled: !selected,
       run: () => void combineSelectedBoolean('subtract'),
     },
-    { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns'], scope: 'canvas', run: () => setShowLayoutGrid((value) => !value) },
+    { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns', 'layout'], scope: 'canvas', run: () => keyActionsRef.current.toggleLayoutGrid() },
+    { id: 'baseline-grid', label: 'Toggle row grid', keywords: ['grid', 'baseline', 'rows'], scope: 'canvas', run: () => setShowBaselineGrid((value) => !value) },
+    { id: 'snap-grid', label: 'Toggle snap to grid', keywords: ['snap', 'grid'], scope: 'canvas', run: () => setSnapToGrid((value) => !value) },
+    { id: 'guide-v', label: 'Add vertical guide', keywords: ['guide', 'ruler'], scope: 'canvas', run: () => addLayoutGuide('v') },
+    { id: 'guide-h', label: 'Add horizontal guide', keywords: ['guide', 'ruler'], scope: 'canvas', run: () => addLayoutGuide('h') },
     { id: 'print-guides', label: 'Toggle print guides', keywords: ['bleed', 'trim', 'print'], scope: 'canvas', run: () => setShowPrintGuides((value) => !value) },
   ]
 
@@ -3333,6 +3377,18 @@ function App() {
           }}
           onRestoreVariant={(variantId) => void restoreVariant(variantId)}
           onForkVariant={() => void forkVariation()}
+          showLayoutGrid={showLayoutGrid}
+          onToggleLayoutGrid={() => {
+            setShowLayoutGrid((value) => {
+              const next = !value
+              if (next) setInspectorTab('layout')
+              return next
+            })
+          }}
+          layoutGuides={layoutGuides}
+          onAddLayoutGuide={addLayoutGuide}
+          onMoveLayoutGuide={moveLayoutGuide}
+          onRemoveLayoutGuide={removeLayoutGuide}
         />
 
         <div className="inspector-column">
@@ -3467,12 +3523,20 @@ function App() {
           onDistributeSelection={distributeSelection}
           onClipSelectionToShape={() => void clipSelectionToShape()}
           gridOverlay={gridOverlay}
+          onGridOverlayChange={patchGridOverlay}
           onGridTensionChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
           onGridTensionCommit={commitTension}
           showLayoutGrid={showLayoutGrid}
           onToggleLayoutGrid={() => setShowLayoutGrid((value) => !value)}
           showBaselineGrid={showBaselineGrid}
           onToggleBaselineGrid={() => setShowBaselineGrid((value) => !value)}
+          snapToGrid={snapToGrid}
+          onToggleSnapToGrid={() => setSnapToGrid((value) => !value)}
+          layoutGuides={layoutGuides}
+          onAddVerticalGuide={() => addLayoutGuide('v')}
+          onAddHorizontalGuide={() => addLayoutGuide('h')}
+          onRemoveLayoutGuide={removeLayoutGuide}
+          onClearLayoutGuides={() => setLayoutGuides([])}
           onRestoreVariant={(variantId) => void restoreVariant(variantId)}
           onOpenVariantCompare={(variantId) => void openVariantCompare(variantId)}
           onMergeVariant={(variantId) => void mergeVariant(variantId)}

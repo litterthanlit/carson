@@ -35,10 +35,11 @@ export function computeSnap(
   others: SnapBounds[],
   canvas: { width: number; height: number },
   threshold: number,
+  extras?: { vLines?: number[]; hLines?: number[] },
 ): SnapResult {
   const movingEdges = edges(moving)
-  const targetXs = [0, canvas.width / 2, canvas.width]
-  const targetYs = [0, canvas.height / 2, canvas.height]
+  const targetXs = [0, canvas.width / 2, canvas.width, ...(extras?.vLines ?? [])]
+  const targetYs = [0, canvas.height / 2, canvas.height, ...(extras?.hLines ?? [])]
   for (const other of others) {
     const e = edges(other)
     targetXs.push(...e.xs)
