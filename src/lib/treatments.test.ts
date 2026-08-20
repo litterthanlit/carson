@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { addTreatment, buildTreatmentFilters, readTreatments, treatmentLabel } from './treatments'
+import {
+  addTreatment,
+  buildTreatmentFilters,
+  captureTransformBaseline,
+  patchTransformBaseline,
+  readTransformBaseline,
+  readTreatments,
+  treatmentLabel,
+} from './treatments'
 
 describe('treatments', () => {
   it('stores treatments on a plain object bag', () => {
@@ -74,6 +82,28 @@ describe('treatments', () => {
         params: { direction: 0, pieces: 5 },
       }),
     ).toBe('Slice·H·5')
+  })
+
+  it('patches pose on an existing transform baseline without touching scale or opacity', () => {
+    const object = {
+      left: 10,
+      top: 20,
+      angle: 0,
+      scaleX: 1,
+      scaleY: 1,
+      opacity: 0.8,
+      set: (values: Record<string, unknown>) => Object.assign(object, values),
+    } as never
+    captureTransformBaseline(object)
+    patchTransformBaseline(object, { left: 80, top: 90, angle: -12 })
+    expect(readTransformBaseline(object)).toEqual({
+      left: 80,
+      top: 90,
+      angle: -12,
+      scaleX: 1,
+      scaleY: 1,
+      opacity: 0.8,
+    })
   })
 
   it('stacks copy-machine generations instead of replacing', () => {

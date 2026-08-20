@@ -151,6 +151,23 @@ export function captureTransformBaseline(object: FabricObject): TransformBaselin
   return baseline
 }
 
+/** Rewrite pose on an existing baseline so treatments re-apply from the new composition. */
+export function patchTransformBaseline(
+  object: FabricObject,
+  pose: Pick<TransformBaseline, 'left' | 'top' | 'angle'>,
+): TransformBaseline | null {
+  const current = readTransformBaseline(object)
+  if (!current) return null
+  const baseline: TransformBaseline = {
+    ...current,
+    left: pose.left,
+    top: pose.top,
+    angle: pose.angle,
+  }
+  object.set({ transformBaseline: baseline } as Partial<FabricObject>)
+  return baseline
+}
+
 export function addTreatment(
   object: FabricObject,
   type: TreatmentType,

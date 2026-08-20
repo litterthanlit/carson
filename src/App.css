@@ -342,6 +342,18 @@ textarea:focus-visible {
   color: #fff;
 }
 
+.scramble-button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+.scramble-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
 .toolbar-button {
   font-weight: 500;
 }

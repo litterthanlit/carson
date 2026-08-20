@@ -38,6 +38,8 @@ export type InstrumentsPaletteProps = {
   onSliceHorizontal: () => void
   onSliceVertical: () => void
   onScatter: () => void
+  onScramble: () => void
+  scrambleDisabled?: boolean
   onApplyPosterStyle: (style: 'magazine' | 'type' | 'image' | 'minimal') => void
   onTypeLegibilityChange: (value: ExpressiveLegibility) => void
   onTypeIntensityChange: (value: number) => void
@@ -92,6 +94,8 @@ export function InstrumentsPalette({
   onSliceHorizontal,
   onSliceVertical,
   onScatter,
+  onScramble,
+  scrambleDisabled,
   onApplyPosterStyle,
   onTypeLegibilityChange,
   onTypeIntensityChange,
@@ -137,6 +141,14 @@ export function InstrumentsPalette({
       <div className="panel-section">
         <h2>Play</h2>
         <div className="preset-row">
+          <button
+            type="button"
+            title="Rearrange every layer into a new structure — Shift+R, then R to re-roll"
+            onClick={onScramble}
+            disabled={scrambleDisabled}
+          >
+            <Shuffle size={16} /> Scramble <ScopeAll />
+          </button>
           <button type="button" title="Scatter the selected layers — press R to re-roll" onClick={onScatter} disabled={!selected}>
             <Shuffle size={16} /> Scatter <ScopeSel />
           </button>

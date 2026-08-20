@@ -42,7 +42,15 @@ import {
   saveProject as persistProject,
   type StoredProject,
 } from './lib/storage'
-import { addTreatment, captureTransformBaseline, readTreatments, writeTreatments, type Treatment } from './lib/treatments'
+import {
+  addTreatment,
+  captureTransformBaseline,
+  patchTransformBaseline,
+  readTreatments,
+  writeTreatments,
+  type Treatment,
+} from './lib/treatments'
+import { isScrambleSourceLayer, scrambleLayout } from './lib/scramble'
 import { cropModeToParam, findCropFragments } from './lib/cropTreatment'
 import { sliceDirectionToParam } from './lib/sliceTreatment'
 import {
@@ -562,6 +570,7 @@ function App() {
     zoomIn: () => stepZoom(1),
     zoomOut: () => stepZoom(-1),
     reroll: () => void rerollLast(),
+    scramble: () => void scrambleCanvas(),
     commandPalette: () => setCommandOpen(true),
     forkVariant: () => void forkVariation(),
     togglePen: () => {
@@ -729,7 +738,12 @@ function App() {
       } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
         actions.togglePen()
       } else if (event.key.toLowerCase() === 'r') {
-        actions.reroll()
+        if (event.shiftKey) {
+          event.preventDefault()
+          actions.scramble()
+        } else {
+          actions.reroll()
+        }
       }
     }
 
@@ -2335,6 +2349,64 @@ function App() {
     commitHistory(`Nudged layout accident #${seed}`)
   }
 
+  function scrambleSourceObjects(): FabricObject[] {
+    const canvas = canvasRef.current
+    if (!canvas) return []
+    return canvas.getObjects().filter((object) => isScrambleSourceLayer(object as unknown as Record<string, unknown>))
+  }
+
+  async function scrambleCanvas(seed = newSeed()) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const targets = scrambleSourceObjects()
+    if (targets.length === 0) {
+      setStatus('Add a layer before scrambling')
+      return
+    }
+
+    const result = scrambleLayout(
+      targets.map((object) => ({
+        id: String(readObjectProp(object, 'id') ?? ''),
+        left: object.left ?? 0,
+        top: object.top ?? 0,
+        width: Math.max(8, Math.abs(object.getScaledWidth())),
+        height: Math.max(8, Math.abs(object.getScaledHeight())),
+        angle: object.angle ?? 0,
+      })),
+      poster,
+      { random: createSeededRandom(seed), tension: gridOverlay.tension },
+    )
+
+    const byId = new Map(result.transforms.map((transform) => [transform.id, transform]))
+    for (const object of targets) {
+      const transform = byId.get(String(readObjectProp(object, 'id') ?? ''))
+      if (!transform) continue
+      object.set({ left: transform.left, top: transform.top, angle: transform.angle })
+      object.setCoords()
+      patchTransformBaseline(object, { left: transform.left, top: transform.top, angle: transform.angle })
+    }
+
+    for (const transform of [...result.transforms].sort((a, b) => a.z - b.z)) {
+      const object = findObjectById(transform.id)
+      if (object) canvas.bringObjectToFront(object)
+    }
+
+    for (const object of targets) {
+      if (readTreatments(object).length > 0) {
+        await refreshTreatmentStack(object)
+      }
+    }
+
+    await refreshPosterTreatments()
+    canvas.discardActiveObject()
+    canvas.requestRenderAll()
+    syncLayers()
+    syncSelected()
+    trackChaos('Scramble', seed, [], (next) => scrambleCanvas(next))
+    commitHistory(`Scrambled into ${result.label} #${seed}`)
+    setStatus(`Scrambled into ${result.label} #${seed} — press R for another structure`)
+  }
+
   async function badCropAccident(seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -3045,6 +3117,14 @@ function App() {
       run: () => void applyCopyScatterCopyGesture(),
     },
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
+    {
+      id: 'scramble',
+      label: 'Scramble layout',
+      keywords: ['scramble', 'shuffle', 'rearrange', 'structure', 'layout', 'riff'],
+      scope: 'canvas',
+      disabled: scrambleSourceObjects().length === 0,
+      run: () => void scrambleCanvas(),
+    },
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => void applyLayerDecayToSelected() },
     { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
@@ -3107,6 +3187,8 @@ function App() {
         onRedo={redo}
         onSave={() => void saveProjectAction()}
         onOpenCommands={() => setCommandOpen(true)}
+        onScramble={() => void scrambleCanvas()}
+        scrambleDisabled={scrambleSourceObjects().length === 0}
         onExport={() => void exportPoster()}
       />
 
@@ -3149,6 +3231,8 @@ function App() {
             onSliceHorizontal={() => void sliceSelected('horizontal')}
             onSliceVertical={() => void sliceSelected('vertical')}
             onScatter={() => scatterSelected()}
+            onScramble={() => void scrambleCanvas()}
+            scrambleDisabled={scrambleSourceObjects().length === 0}
             onApplyPosterStyle={applyPosterStyle}
             onTypeLegibilityChange={setTypeLegibility}
             onTypeIntensityChange={setTypeIntensity}

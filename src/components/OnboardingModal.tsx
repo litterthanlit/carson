@@ -14,8 +14,8 @@ export function OnboardingModal({
       <div className="onboarding-modal glass-panel" role="dialog" aria-labelledby="onboarding-title">
         <h2 id="onboarding-title">Wreck this poster</h2>
         <p>
-          Carson teaches by play. You&apos;ll get a finished boring poster — then scatter it, xerox it, re-roll the
-          accident, and undo it. Precision and play are the same gesture.
+          Carson teaches by play. You&apos;ll get a finished boring poster — then scramble the structure, scatter it,
+          xerox it, re-roll the accident, and undo it. Precision and play are the same gesture.
         </p>
         <ol className="onboarding-steps">
           <li>Scatter the headline — watch the seed number</li>

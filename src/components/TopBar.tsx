@@ -1,4 +1,4 @@
-import { Download, Redo2, Save, Sparkles, Undo2 } from 'lucide-react'
+import { Download, Redo2, Save, Shuffle, Sparkles, Undo2 } from 'lucide-react'
 import { TensionDial } from './TensionDial'
 
 type TopBarProps = {
@@ -11,6 +11,8 @@ type TopBarProps = {
   onRedo: () => void
   onSave: () => void
   onOpenCommands: () => void
+  onScramble: () => void
+  scrambleDisabled?: boolean
   onExport: () => void
 }
 
@@ -24,6 +26,8 @@ export function TopBar({
   onRedo,
   onSave,
   onOpenCommands,
+  onScramble,
+  scrambleDisabled,
   onExport,
 }: TopBarProps) {
   return (
@@ -60,6 +64,17 @@ export function TopBar({
         </button>
         <button type="button" className="icon-button" title="Command palette (Cmd+K)" aria-label="Commands" onClick={onOpenCommands}>
           <Sparkles size={15} />
+        </button>
+        <button
+          type="button"
+          className="scramble-button"
+          title="Rearrange every layer into a new structure (Shift+R). Press R to try another."
+          aria-label="Scramble layout"
+          disabled={scrambleDisabled}
+          onClick={onScramble}
+        >
+          <Shuffle size={14} />
+          Scramble
         </button>
         <button type="button" className="primary-button" title="Export the poster (Cmd+E)" onClick={onExport}>
           <Download size={14} />

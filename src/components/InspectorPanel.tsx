@@ -1199,7 +1199,7 @@ export function InspectorPanel({
                 <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
               </li>
               <li>
-                <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>R</kbd> Re-roll
+                <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble
               </li>
               <li>
                 <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom
