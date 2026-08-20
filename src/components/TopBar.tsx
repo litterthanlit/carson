@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Download, Redo2, Save, Shuffle, Sparkles, Undo2 } from 'lucide-react'
 import { TensionDial } from './TensionDial'
 
@@ -16,7 +17,7 @@ type TopBarProps = {
   onExport: () => void
 }
 
-export function TopBar({
+export const TopBar = memo(function TopBar({
   projectName,
   onProjectNameChange,
   tension,
@@ -83,4 +84,4 @@ export function TopBar({
       </div>
     </header>
   )
-}
+})

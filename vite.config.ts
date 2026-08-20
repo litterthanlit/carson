@@ -5,4 +5,23 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   base: './',
   plugins: [react()],
+  build: {
+    modulePreload: {
+      resolveDependencies: (_filename, deps) =>
+        deps.filter(
+          (dep) =>
+            !/jspdf|html2canvas|purify|print-|FilterGallery|TextureGallery|CommandPalette|OnboardingModal|VariantCompare/.test(
+              dep,
+            ),
+        ),
+    },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/fabric')) return 'fabric'
+          if (id.includes('node_modules/jspdf')) return 'jspdf'
+        },
+      },
+    },
+  },
 })

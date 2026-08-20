@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActiveSelection,
   Canvas,
@@ -112,21 +112,16 @@ import {
   type Gesture,
 } from './lib/gestures'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
-import { downloadPdfFromImageData, rgbaToTiffBlob } from './lib/print'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
 import type { CommandAction } from './lib/commands'
-import { CommandPalette } from './components/CommandPalette'
 import { EditorCanvas } from './components/EditorCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
 import { InstrumentsPalette } from './components/InstrumentsPalette'
-import { OnboardingModal } from './components/OnboardingModal'
-import { SelectionHud } from './components/SelectionHud'
+import { LiveSelectionHud } from './components/LiveSelectionHud'
 import { ToolRail } from './components/ToolRail'
 import { TopBar } from './components/TopBar'
 import { TreatmentChips } from './components/TreatmentChips'
-import { VariantCompareModal } from './components/VariantCompareModal'
-import { FilterGalleryModal } from './components/FilterGalleryModal'
-import { TextureGalleryModal, type TexturePlacement } from './components/TextureGalleryModal'
+import type { TexturePlacement } from './components/TextureGalleryModal'
 import type { FilterPreset } from './lib/filterGallery'
 import { paramsForTreatment } from './lib/filterGallery'
 import { snapshotObjectToImage } from './lib/rasterizeLayer'
@@ -135,7 +130,8 @@ import { useCanvasEvents } from './hooks/useCanvasEvents'
 import { usePathEditing } from './hooks/usePathEditing'
 import { useTreatments } from './hooks/useTreatments'
 import { useEditorHistory } from './hooks/useEditorHistory'
-import { createLayerThumbnail } from './lib/layerThumbnail'
+import { createLayerThumbnail, invalidateLayerThumbnail } from './lib/layerThumbnail'
+import { isLayerSyncSuppressed } from './lib/layerSync'
 import { applySelectionChrome } from './lib/selectionChrome'
 import { cursorForTool, hoverCursorForTool } from './lib/editorTools'
 import {
@@ -162,6 +158,22 @@ import type {
   TextSelectionRange,
 } from './types/editor'
 import './App.css'
+
+const CommandPalette = lazy(() =>
+  import('./components/CommandPalette').then((module) => ({ default: module.CommandPalette })),
+)
+const OnboardingModal = lazy(() =>
+  import('./components/OnboardingModal').then((module) => ({ default: module.OnboardingModal })),
+)
+const VariantCompareModal = lazy(() =>
+  import('./components/VariantCompareModal').then((module) => ({ default: module.VariantCompareModal })),
+)
+const FilterGalleryModal = lazy(() =>
+  import('./components/FilterGalleryModal').then((module) => ({ default: module.FilterGalleryModal })),
+)
+const TextureGalleryModal = lazy(() =>
+  import('./components/TextureGalleryModal').then((module) => ({ default: module.TextureGalleryModal })),
+)
 
 type ChaosRun = {
   label: string
@@ -192,6 +204,7 @@ function App() {
   const lastChaosRef = useRef<ChaosRun | null>(null)
   const autosaveTimerRef = useRef<number | null>(null)
   const nudgeTimerRef = useRef<number | null>(null)
+  const layerSyncTimerRef = useRef<number | null>(null)
   const posterInitRef = useRef(true)
   const spaceDownRef = useRef(false)
   const panDragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
@@ -250,7 +263,6 @@ function App() {
   const [showPrintGuides, setShowPrintGuides] = useState(false)
   const [showCmykPreview, setShowCmykPreview] = useState(false)
   const [editorTool, setEditorTool] = useState<EditorTool>('move')
-  const [hudTick, setHudTick] = useState(0)
   const [penMode, setPenMode] = useState(false)
   const [pathEditMode, setPathEditMode] = useState(false)
   const [pathAddPointMode, setPathAddPointMode] = useState(false)
@@ -320,6 +332,7 @@ function App() {
     commitPosterTreatmentHistoryRef,
     activeObjectRef,
     tagObjectRef,
+    syncLayers,
   })
 
   refreshTreatmentStackRef.current = refreshTreatmentStack
@@ -387,7 +400,6 @@ function App() {
     commitHistory,
     tagObject,
     onTextSelectionChange: setTextSelection,
-    onLiveTransform: () => setHudTick((tick) => tick + 1),
     editorToolRef,
     onPlaceText: (point) => addTextRef.current(point),
   })
@@ -1027,7 +1039,16 @@ function App() {
     }, 2500)
   }
 
+  function scheduleSyncLayers() {
+    if (layerSyncTimerRef.current) window.clearTimeout(layerSyncTimerRef.current)
+    layerSyncTimerRef.current = window.setTimeout(() => {
+      layerSyncTimerRef.current = null
+      syncLayers()
+    }, 150)
+  }
+
   function syncLayers() {
+    if (isLayerSyncSuppressed()) return
     const canvas = canvasRef.current
     if (!canvas) return
     setLayers(
@@ -1144,7 +1165,8 @@ function App() {
     object.setCoords()
     canvas.requestRenderAll()
     syncSelected()
-    syncLayers()
+    invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
+    scheduleSyncLayers()
   }
 
   function finalizeActive(message: string) {
@@ -3048,10 +3070,12 @@ function App() {
       const baseName = safeFileName(projectName)
 
       if (format === 'pdf') {
-        downloadPdfFromImageData(dataUrl, `${baseName}@${exportScale}x.pdf`, width, height, printDpi, {
+        const { downloadPdfFromImageData } = await import('./lib/print')
+        await downloadPdfFromImageData(dataUrl, `${baseName}@${exportScale}x.pdf`, width, height, printDpi, {
           registrationMarks: pdfRegistrationMarks,
         })
       } else if (format === 'tiff') {
+        const { rgbaToTiffBlob } = await import('./lib/print')
         const image = new Image()
         image.onload = () => {
           const scratch = document.createElement('canvas')
@@ -3127,7 +3151,21 @@ function App() {
       ? isPathClosed((selectedObject as import('fabric').Path).path as PathData)
       : false
   void pathGeometryTick
-  void hudTick
+  const handleTensionChange = useCallback((value: number) => {
+    setGridOverlay((current) => ({ ...current, tension: value }))
+  }, [])
+  const handleOpenCommands = useCallback(() => setCommandOpen(true), [])
+  const handleToolChange = useCallback((next: EditorTool) => {
+    setEditorTool(next)
+    if (next !== 'shape') setPenMode(false)
+  }, [])
+  const handleTogglePenMode = useCallback(() => {
+    setPenMode((value) => {
+      const next = !value
+      if (next) setEditorTool('shape')
+      return next
+    })
+  }, [])
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
@@ -3198,39 +3236,49 @@ function App() {
 
   return (
     <main className="editor-shell">
-      <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
-      <OnboardingModal open={onboardingOpen} onStart={completeOnboarding} onSkip={completeOnboarding} />
-      <VariantCompareModal
-        open={variantCompare !== null}
-        variant={comparingVariant}
-        currentThumbnail={variantCompare?.currentThumbnail ?? null}
-        onRestore={() => {
-          if (variantCompare) void restoreVariant(variantCompare.variantId)
-        }}
-        onClose={() => setVariantCompare(null)}
-      />
-      <FilterGalleryModal
-        open={filterGalleryOpen}
-        source={selectedObject}
-        selectedIsImage={selectedIsImage}
-        onApply={applyFilterFromGallery}
-        onClose={() => setFilterGalleryOpen(false)}
-      />
-      <TextureGalleryModal
-        open={textureGalleryOpen}
-        onPlace={(placement) => void placeTextureFromGallery(placement)}
-        onClose={() => setTextureGalleryOpen(false)}
-      />
+      <Suspense fallback={null}>
+        {commandOpen ? <CommandPalette open commands={commands} onClose={() => setCommandOpen(false)} /> : null}
+        {onboardingOpen ? (
+          <OnboardingModal open onStart={completeOnboarding} onSkip={completeOnboarding} />
+        ) : null}
+        {variantCompare ? (
+          <VariantCompareModal
+            open
+            variant={comparingVariant}
+            currentThumbnail={variantCompare.currentThumbnail}
+            onRestore={() => {
+              void restoreVariant(variantCompare.variantId)
+            }}
+            onClose={() => setVariantCompare(null)}
+          />
+        ) : null}
+        {filterGalleryOpen ? (
+          <FilterGalleryModal
+            open
+            source={selectedObject}
+            selectedIsImage={selectedIsImage}
+            onApply={applyFilterFromGallery}
+            onClose={() => setFilterGalleryOpen(false)}
+          />
+        ) : null}
+        {textureGalleryOpen ? (
+          <TextureGalleryModal
+            open
+            onPlace={(placement) => void placeTextureFromGallery(placement)}
+            onClose={() => setTextureGalleryOpen(false)}
+          />
+        ) : null}
+      </Suspense>
       <TopBar
         projectName={projectName}
         onProjectNameChange={setProjectName}
         tension={gridOverlay.tension}
-        onTensionChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
+        onTensionChange={handleTensionChange}
         onTensionCommit={commitTension}
         onUndo={() => void undoAsync()}
         onRedo={redo}
         onSave={() => void saveProjectAction()}
-        onOpenCommands={() => setCommandOpen(true)}
+        onOpenCommands={handleOpenCommands}
         onScramble={() => void scrambleCanvas()}
         scrambleDisabled={scrambleSourceObjects().length === 0}
         onExport={() => void exportPoster()}
@@ -3241,21 +3289,12 @@ function App() {
           tool={editorTool}
           penMode={penMode}
           fileInputRef={fileInputRef}
-          onToolChange={(next) => {
-            setEditorTool(next)
-            if (next !== 'shape') setPenMode(false)
-          }}
+          onToolChange={handleToolChange}
           onAddShape={addShape}
           onAddEllipse={addEllipse}
           onAddLine={addLine}
           onAddStar={addStarShape}
-          onTogglePenMode={() => {
-            setPenMode((value) => {
-              const next = !value
-              if (next) setEditorTool('shape')
-              return next
-            })
-          }}
+          onTogglePenMode={handleTogglePenMode}
           onImageInputChange={(file) => void handleImageFile(file)}
           onClipToShape={() => void clipSelectionToShape()}
           onBrushMask={() => void paintBrushMask()}
@@ -3348,10 +3387,10 @@ function App() {
             />
           }
           hud={
-            selected && selectedObject ? (
-              <SelectionHud
+            selected ? (
+              <LiveSelectionHud
+                canvasRef={canvasRef}
                 selected={selected}
-                bounds={selectedObject.getBoundingRect()}
                 displayScale={displayScale}
                 customFonts={customFonts}
                 onLoadGoogleFont={loadGoogleFont}

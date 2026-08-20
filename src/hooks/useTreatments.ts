@@ -21,8 +21,11 @@ import {
 } from '../lib/treatments'
 import { cropModeFromParams } from '../lib/cropTreatment'
 import { stripCopyMachineCompanions } from '../lib/copyMachineTreatment'
+import { withLayerSyncSuppressed } from '../lib/layerSync'
 import type { LayerKind } from '../types/editor'
 import { newSeed } from '../lib/random'
+
+const TREATMENT_PREVIEW_DEBOUNCE_MS = 120
 
 type UseTreatmentsOptions = {
   canvasRef: MutableRefObject<Canvas | null>
@@ -38,6 +41,7 @@ type UseTreatmentsOptions = {
   >
   activeObjectRef: RefObject<() => FabricObject | null>
   tagObjectRef: RefObject<(object: FabricObject, kind: LayerKind, name: string) => void>
+  syncLayers: () => void
 }
 
 export function useTreatments({
@@ -50,6 +54,7 @@ export function useTreatments({
   commitPosterTreatmentHistoryRef,
   activeObjectRef,
   tagObjectRef,
+  syncLayers,
 }: UseTreatmentsOptions) {
   const activeObject = useCallback(() => activeObjectRef.current?.() ?? null, [activeObjectRef])
   const commitTreatmentHistory = useCallback(
@@ -77,51 +82,58 @@ export function useTreatments({
     } as Partial<FabricObject>)
   }, [])
   const treatmentParamBeforeRef = useRef<string | null>(null)
+  const previewTimerRef = useRef<number | null>(null)
 
   const refreshTreatmentStack = useCallback(
     async (object?: FabricObject | null) => {
       const canvas = canvasRef.current
       const target = object ?? activeObject()
       if (!canvas || !target || target.type === 'activeselection') return
-      await renderTreatmentStackOnCanvas(
-        canvas,
-        target,
-        {
-          slice: (fragment, index) => {
-            tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+      await withLayerSyncSuppressed(async () => {
+        await renderTreatmentStackOnCanvas(
+          canvas,
+          target,
+          {
+            slice: (fragment, index) => {
+              tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+            },
+            crop: (fragment, treatment) => {
+              tagObject(fragment, 'fragment', `${cropModeFromParams(treatment.params)} crop`)
+            },
+            tear: (fragment, index) => {
+              tagObject(fragment, 'fragment', `Torn scrap ${index + 1}`)
+            },
+            badCrop: (fragment, index) => {
+              tagObject(fragment, 'fragment', `Bad crop ${index + 1}`)
+            },
+            glyph: (fragment, _index, glyphText) => {
+              tagObject(fragment, 'text', `Glyph ${glyphText}`)
+            },
           },
-          crop: (fragment, treatment) => {
-            tagObject(fragment, 'fragment', `${cropModeFromParams(treatment.params)} crop`)
-          },
-          tear: (fragment, index) => {
-            tagObject(fragment, 'fragment', `Torn scrap ${index + 1}`)
-          },
-          badCrop: (fragment, index) => {
-            tagObject(fragment, 'fragment', `Bad crop ${index + 1}`)
-          },
-          glyph: (fragment, _index, glyphText) => {
-            tagObject(fragment, 'text', `Glyph ${glyphText}`)
-          },
-        },
-        tensionScale(),
-      )
+          tensionScale(),
+        )
+      })
       canvas.requestRenderAll()
+      syncLayers()
     },
-    [activeObject, canvasRef, tagObject, tensionScale],
+    [activeObject, canvasRef, syncLayers, tagObject, tensionScale],
   )
 
   const reconcileArtifactTreatments = useCallback(async () => {
     const canvas = canvasRef.current
     if (!canvas) return
-    stripCopyMachineCompanions(canvas)
-    const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'copy-machine'])
-    const sources = canvas.getObjects().filter((object) =>
-      readTreatments(object).some((item) => artifactTypes.has(item.type)),
-    )
-    for (const object of sources) {
-      await refreshTreatmentStack(object)
-    }
-  }, [canvasRef, refreshTreatmentStack])
+    await withLayerSyncSuppressed(async () => {
+      stripCopyMachineCompanions(canvas)
+      const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'copy-machine'])
+      const sources = canvas.getObjects().filter((object) =>
+        readTreatments(object).some((item) => artifactTypes.has(item.type)),
+      )
+      for (const object of sources) {
+        await refreshTreatmentStack(object)
+      }
+    })
+    syncLayers()
+  }, [canvasRef, refreshTreatmentStack, syncLayers])
 
   const refreshPosterTreatments = useCallback(
     async (treatmentsOverride?: Treatment[]) => {
@@ -129,10 +141,13 @@ export function useTreatments({
       const board = documentMeta ? getActiveArtboard(documentMeta) : undefined
       if (!canvas || !board) return
       const treatments = treatmentsOverride ?? readPosterTreatments(board)
-      renderPosterTreatments(canvas, treatments, poster, tagPosterFragment)
+      await withLayerSyncSuppressed(() => {
+        renderPosterTreatments(canvas, treatments, poster, tagPosterFragment)
+      })
       canvas.requestRenderAll()
+      syncLayers()
     },
-    [canvasRef, documentMeta, poster, tagPosterFragment],
+    [canvasRef, documentMeta, poster, syncLayers, tagPosterFragment],
   )
 
   const rerollTreatment = useCallback(
@@ -198,6 +213,10 @@ export function useTreatments({
       if (!object) return
       const treatment = readTreatments(object).find((item) => item.id === treatmentId)
       if (!treatment) return
+      if (previewTimerRef.current) {
+        window.clearTimeout(previewTimerRef.current)
+        previewTimerRef.current = null
+      }
       const objectId = String(object.get('id') ?? '')
       const before = treatmentParamBeforeRef.current ?? JSON.stringify(readTreatments(object))
       updateTreatment(object, treatmentId, { params: { ...treatment.params, ...params } })
@@ -209,7 +228,7 @@ export function useTreatments({
   )
 
   const previewLayerTreatmentParams = useCallback(
-    async (treatmentId: string, params: Record<string, number>) => {
+    (treatmentId: string, params: Record<string, number>) => {
       const object = activeObject()
       if (!object) return
       const treatment = readTreatments(object).find((item) => item.id === treatmentId)
@@ -218,7 +237,11 @@ export function useTreatments({
         treatmentParamBeforeRef.current = JSON.stringify(readTreatments(object))
       }
       updateTreatment(object, treatmentId, { params: { ...treatment.params, ...params } })
-      await refreshTreatmentStack(object)
+      if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current)
+      previewTimerRef.current = window.setTimeout(() => {
+        previewTimerRef.current = null
+        void refreshTreatmentStack(object)
+      }, TREATMENT_PREVIEW_DEBOUNCE_MS)
     },
     [activeObject, refreshTreatmentStack],
   )

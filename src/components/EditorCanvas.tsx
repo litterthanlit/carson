@@ -1,4 +1,4 @@
-import type { CSSProperties, DragEvent, MouseEvent, ReactNode, RefObject } from 'react'
+import { memo, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import { LayoutGuidesOverlay } from './LayoutGuidesOverlay'
 import type { LayoutGuide } from '../lib/grid'
 import { Dices, Grid3x3, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
@@ -42,7 +42,7 @@ type EditorCanvasProps = {
   onRemoveLayoutGuide: (id: string) => void
 }
 
-export function EditorCanvas({
+export const EditorCanvas = memo(function EditorCanvas({
   poster,
   displayScale,
   status,
@@ -239,4 +239,4 @@ export function EditorCanvas({
       />
     </section>
   )
-}
+})

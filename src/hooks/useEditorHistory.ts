@@ -14,6 +14,7 @@ import {
   type HistoryOp,
   type HistoryState,
 } from '../lib/historyLog'
+import { withLayerSyncSuppressed } from '../lib/layerSync'
 
 type UseEditorHistoryOptions = {
   canvasRef: MutableRefObject<Canvas | null>
@@ -64,9 +65,11 @@ export function useEditorHistory({
       restoringRef.current = true
       const parsed = JSON.parse(snapshot) as Record<string, unknown>
       await ensureLibraryFonts(collectFontFamilies(parsed))
-      await canvas.loadFromJSON(parsed)
+      await withLayerSyncSuppressed(async () => {
+        await canvas.loadFromJSON(parsed)
+        await onAfterRestore()
+      })
       restoringRef.current = false
-      await onAfterRestore()
       canvas.requestRenderAll()
       captureStyleBaseline()
       syncSelected()

@@ -1,12 +1,6 @@
 import { FontPicker } from './FontPicker'
+import type { HudBounds } from '../lib/hudBounds'
 import type { SelectedState } from '../types/editor'
-
-type HudBounds = {
-  left: number
-  top: number
-  width: number
-  height: number
-}
 
 type SelectionHudProps = {
   selected: SelectedState

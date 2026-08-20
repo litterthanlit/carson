@@ -98,6 +98,78 @@ export function stripCopyMachineCompanions(canvas: Canvas) {
   }
 }
 
+export type CopyMachineBakeCacheEntry = {
+  imageData: ImageData
+  dataUrl: string
+  sourceImageData?: ImageData
+}
+
+const bakeCache = new Map<string, CopyMachineBakeCacheEntry>()
+
+function cloneImageData(imageData: ImageData): ImageData {
+  return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height)
+}
+
+export function copyMachineBakeCacheKey(
+  sourceId: string,
+  treatments: Treatment[],
+  exportScale: number,
+  tensionScale: number,
+  sourceSignature = '',
+): string {
+  const payload = treatments
+    .filter((item) => item.type === 'copy-machine')
+    .map((item) => ({
+      id: item.id,
+      seed: item.seed,
+      enabled: item.enabled,
+      params: item.params,
+    }))
+  return `${sourceId}::${JSON.stringify({ exportScale, tensionScale, sourceSignature, payload })}`
+}
+
+export function copyMachineSourceSignature(source: FabricObject): string {
+  const record = source as unknown as Record<string, unknown>
+  return JSON.stringify({
+    text: record.text ?? '',
+    width: source.width ?? 0,
+    height: source.height ?? 0,
+    scaleX: source.scaleX ?? 1,
+    scaleY: source.scaleY ?? 1,
+    angle: source.angle ?? 0,
+    fill: record.fill ?? '',
+  })
+}
+
+export function clearCopyMachineBakeCache() {
+  bakeCache.clear()
+}
+
+export function invalidateCopyMachineBakesForSource(sourceId: string) {
+  const prefix = `${sourceId}::`
+  for (const key of [...bakeCache.keys()]) {
+    if (key.startsWith(prefix)) bakeCache.delete(key)
+  }
+}
+
+export function readCopyMachineBakeCache(key: string): CopyMachineBakeCacheEntry | null {
+  const cached = bakeCache.get(key)
+  if (!cached) return null
+  return {
+    imageData: cloneImageData(cached.imageData),
+    dataUrl: cached.dataUrl,
+    sourceImageData: cached.sourceImageData ? cloneImageData(cached.sourceImageData) : undefined,
+  }
+}
+
+export function writeCopyMachineBakeCache(key: string, entry: CopyMachineBakeCacheEntry) {
+  bakeCache.set(key, {
+    imageData: cloneImageData(entry.imageData),
+    dataUrl: entry.dataUrl,
+    sourceImageData: entry.sourceImageData ? cloneImageData(entry.sourceImageData) : undefined,
+  })
+}
+
 /** Persist seed+params only — never the baked bitmap. Reload re-renders from seed. */
 export function omitCopyMachineCompanionsFromCanvasJSON<T extends { objects?: unknown[] }>(json: T): T {
   if (!Array.isArray(json.objects)) return json
@@ -144,13 +216,13 @@ function imageDataToDataUrl(imageData: ImageData): string {
   return canvas.toDataURL('image/png')
 }
 
-export function renderCopyMachineChain(
+export function applyCopyMachineChain(
+  sourceImageData: ImageData,
   treatments: Treatment[],
-  source: FabricObject,
   exportScale = 1,
   tensionScale = 1,
 ): ImageData {
-  let imageData = sourceToImageData(source, exportScale)
+  let imageData = sourceImageData
   for (const treatment of treatments) {
     if (!treatment.enabled) continue
     const params = scaleCopyMachineParams(copyMachineParamsFromRecord(treatment.params), tensionScale)
@@ -158,6 +230,15 @@ export function renderCopyMachineChain(
     imageData = renderCopyMachinePass(imageData, params, random, exportScale)
   }
   return imageData
+}
+
+export function renderCopyMachineChain(
+  treatments: Treatment[],
+  source: FabricObject,
+  exportScale = 1,
+  tensionScale = 1,
+): ImageData {
+  return applyCopyMachineChain(sourceToImageData(source, exportScale), treatments, exportScale, tensionScale)
 }
 
 /** Prefer the last enabled treatment — stacking is generational; ghost is the final drum echo. */
@@ -229,10 +310,26 @@ export async function renderCopyMachineTreatment(
     return
   }
 
-  revealSourceForRaster(source)
   const chain = treatments.filter((item) => item.type === 'copy-machine')
-  const imageData = renderCopyMachineChain(chain, source, exportScale, tensionScale)
-  const dataUrl = imageDataToDataUrl(imageData)
+  const cacheKey = copyMachineBakeCacheKey(
+    sourceId,
+    chain,
+    exportScale,
+    tensionScale,
+    copyMachineSourceSignature(source),
+  )
+  const cached = readCopyMachineBakeCache(cacheKey)
+  let sourcePixels = cached?.sourceImageData
+  let dataUrl = cached?.dataUrl
+
+  if (!cached || !dataUrl) {
+    revealSourceForRaster(source)
+    sourcePixels = sourceToImageData(source, exportScale)
+    const imageData = applyCopyMachineChain(sourcePixels, chain, exportScale, tensionScale)
+    dataUrl = imageDataToDataUrl(imageData)
+    writeCopyMachineBakeCache(cacheKey, { imageData, dataUrl, sourceImageData: sourcePixels })
+  }
+
   const bounds = source.getBoundingRect()
   const sourceIndex = canvas.getObjects().indexOf(source)
 
@@ -251,11 +348,8 @@ export async function renderCopyMachineTreatment(
     const ghostOpacity = copyMachineGhostOpacity(ghostParams.ghost)
     if (ghostOpacity > 0.01) {
       const ghostRandom = createSeededRandom((ghostSpec.seed ^ GHOST_SEED_OFFSET) >>> 0)
-      const ghostPixels = renderCopyMachineGhostPass(
-        sourceToImageData(source, exportScale),
-        ghostParams,
-        ghostRandom,
-      )
+      const ghostSource = sourcePixels ?? sourceToImageData(source, exportScale)
+      const ghostPixels = renderCopyMachineGhostPass(ghostSource, ghostParams, ghostRandom)
       const { dx, dy } = copyMachineGhostDelta(ghostParams.ghostOffset)
       const mainIndex = canvas.getObjects().indexOf(main)
       await placeCompanionImage(canvas, imageDataToDataUrl(ghostPixels), source, bounds, {

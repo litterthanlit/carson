@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { GripVertical, Lock, LockOpen, Eye, EyeOff, Pencil } from 'lucide-react'
 
 export type LayerRow = {
@@ -25,7 +26,7 @@ type LayersPanelProps = {
   onZoomToLayer: (id: string) => void
 }
 
-export function LayersPanel({
+export const LayersPanel = memo(function LayersPanel({
   layers,
   selectedIds,
   renamingLayerId,
@@ -133,4 +134,4 @@ export function LayersPanel({
       ))}
     </div>
   )
-}
+})

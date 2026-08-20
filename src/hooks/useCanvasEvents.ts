@@ -3,11 +3,12 @@ import type { Canvas, FabricObject, Path as FabricPath } from 'fabric'
 import type { MutableRefObject } from 'react'
 import { SNAP_SCREEN_THRESHOLD } from '../lib/editorConstants'
 import { buildLayoutGrid, layoutSnapLines, type GridOverlay, type LayoutGuide } from '../lib/grid'
-import { buildPrintGuides } from '../lib/print'
+import { buildPrintGuides } from '../lib/printGuides'
 import { SELECTION_ACCENT } from '../lib/selectionChrome'
 import { computeSnap } from '../lib/snapping'
 import { constrainMoveDelta, constrainUniformScale, snapRotation } from '../lib/transformConstraints'
 import { applyPathData, simplifyPathData, type PathData } from '../lib/pathEditing'
+import { isLayerSyncSuppressed } from '../lib/layerSync'
 import type { EditorTool, LayerKind, TextSelectionRange } from '../types/editor'
 
 type UseCanvasEventsOptions = {
@@ -66,8 +67,11 @@ export function useCanvasEvents({
       canvas.on('selection:updated', sync)
       canvas.on('selection:cleared', sync)
       canvas.on('object:modified', () => commitHistory('Changed layer'))
-      canvas.on('object:added', syncLayers)
-      canvas.on('object:removed', syncLayers)
+      const syncLayersIfAllowed = () => {
+        if (!isLayerSyncSuppressed()) syncLayers()
+      }
+      canvas.on('object:added', syncLayersIfAllowed)
+      canvas.on('object:removed', syncLayersIfAllowed)
 
       const syncTextSelection = (event: { target?: FabricObject }) => {
         const target = event.target

@@ -1,63 +1,9 @@
 /**
- * Print pipeline — bleed/trim guides, export helpers (Horizon 2.6).
+ * Print export helpers (Horizon 2.6) — loaded on demand from export.
  */
-import { jsPDF } from 'jspdf'
-import { mmToPx } from './document'
+import { registrationMarks } from './printGuides'
 
-export type PrintGuideKind = 'bleed' | 'trim' | 'safe' | 'registration'
-
-export type PrintGuideRect = {
-  kind: PrintGuideKind
-  left: number
-  top: number
-  width: number
-  height: number
-}
-
-export function buildPrintGuides(
-  canvas: { width: number; height: number },
-  dpi: number,
-  bleedMm: number,
-): PrintGuideRect[] {
-  const bleed = mmToPx(bleedMm, dpi)
-  const safe = bleed + mmToPx(5, dpi)
-  return [
-    {
-      kind: 'bleed',
-      left: -bleed,
-      top: -bleed,
-      width: canvas.width + bleed * 2,
-      height: canvas.height + bleed * 2,
-    },
-    { kind: 'trim', left: 0, top: 0, width: canvas.width, height: canvas.height },
-    {
-      kind: 'safe',
-      left: safe,
-      top: safe,
-      width: canvas.width - safe * 2,
-      height: canvas.height - safe * 2,
-    },
-  ]
-}
-
-export function registrationMarks(
-  canvas: { width: number; height: number },
-  inset: number,
-  size: number,
-): Array<{ left: number; top: number; width: number; height: number }> {
-  const corners = [
-    { left: inset, top: inset },
-    { left: canvas.width - inset - size, top: inset },
-    { left: inset, top: canvas.height - inset - size },
-    { left: canvas.width - inset - size, top: canvas.height - inset - size },
-  ]
-  return corners.flatMap(({ left, top }) => [
-    { left, top: top + size / 2 - 1, width: size, height: 2 },
-    { left: left + size / 2 - 1, top, width: 2, height: size },
-  ])
-}
-
-export function downloadPdfFromImageData(
+export async function downloadPdfFromImageData(
   dataUrl: string,
   fileName: string,
   widthPx: number,
@@ -65,6 +11,7 @@ export function downloadPdfFromImageData(
   dpi: number,
   options?: { registrationMarks?: boolean },
 ) {
+  const { jsPDF } = await import('jspdf')
   const widthMm = (widthPx / dpi) * 25.4
   const heightMm = (heightPx / dpi) * 25.4
   const orientation = widthMm >= heightMm ? 'landscape' : 'portrait'
@@ -73,7 +20,11 @@ export function downloadPdfFromImageData(
   if (options?.registrationMarks) {
     const inset = 4
     const size = 6
-    const marks = registrationMarks({ width: widthPx, height: heightPx }, (inset / widthPx) * widthMm, (size / widthPx) * widthMm)
+    const marks = registrationMarks(
+      { width: widthPx, height: heightPx },
+      (inset / widthPx) * widthMm,
+      (size / widthPx) * widthMm,
+    )
     pdf.setDrawColor(0)
     pdf.setLineWidth(0.2)
     for (const mark of marks) {
@@ -96,7 +47,7 @@ export function rgbaToTiffBlob(width: number, height: number, rgba: Uint8Clamped
   const stripSize = width * height * 3
   const buffer = new ArrayBuffer(stripOffset + stripSize)
   const view = new DataView(buffer)
-  const bytes = new Uint8Array(buffer)
+  const bytes = new Uint8ClampedArray(buffer)
 
   view.setUint16(0, 0x4949, true)
   view.setUint32(4, headerSize, true)

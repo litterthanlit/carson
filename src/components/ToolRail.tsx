@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { memo, useEffect, useRef, useState, type RefObject } from 'react'
 import {
   BoxSelect,
   Circle,
@@ -33,7 +33,7 @@ type ToolRailProps = {
   onWhiteScrapes: () => void
 }
 
-export function ToolRail({
+export const ToolRail = memo(function ToolRail({
   tool,
   penMode,
   fileInputRef,
@@ -199,4 +199,4 @@ export function ToolRail({
       />
     </nav>
   )
-}
+})
