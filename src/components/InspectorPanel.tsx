@@ -24,7 +24,7 @@ import type { DocumentMeta } from '../lib/document'
 import type { StoredAsset } from '../lib/assets'
 import type { StoredProject } from '../lib/storage'
 import type { GridOverlay, LayoutGuide } from '../lib/grid'
-import { BLEND_MODES, FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
+import { FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
 import { legibilityBand } from '../lib/color'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
@@ -42,6 +42,7 @@ import type {
 } from '../types/editor'
 import { LayersPanel } from './LayersPanel'
 import { FontPicker } from './FontPicker'
+import { BlendModePicker } from './BlendModePicker'
 import { Slider } from './Slider'
 import { ScopeSel } from './ScopeBadge'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
@@ -118,6 +119,8 @@ export type InspectorPanelProps = {
   textContrast: number | null
   onUpdateActive: (values: Partial<SelectedState>) => void
   onFinalizeActive: (message: string) => void
+  onPreviewBlendMode: (mode: string | null) => void
+  onApplyBlendMode: (mode: string) => void
   onLoadGoogleFont: (family: string) => Promise<void>
   openTypeFeatures: OpenTypeFeatures
   onOpenTypeChange: (features: Partial<OpenTypeFeatures>) => void
@@ -259,6 +262,8 @@ export function InspectorPanel({
   textContrast,
   onUpdateActive,
   onFinalizeActive,
+  onPreviewBlendMode,
+  onApplyBlendMode,
   onLoadGoogleFont,
   openTypeFeatures,
   onOpenTypeChange,
@@ -1135,22 +1140,15 @@ export function InspectorPanel({
                     ))}
                   </div>
                 ) : null}
-                <label>
+                <label className="font-picker-label">
                   Blend
-                  <select
+                  <BlendModePicker
                     value={selected.blendMode ?? 'source-over'}
-                    onChange={(event) => {
-                      onUpdateActive({ blendMode: event.target.value })
-                      onFinalizeActive('Changed blend mode')
-                    }}
-                  >
-                    {BLEND_MODES.map((mode) => (
-                      <option key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </option>
-                    ))}
-                  </select>
+                    onPreview={onPreviewBlendMode}
+                    onChange={onApplyBlendMode}
+                  />
                 </label>
+                <p className="hint">Hover a mode to preview it on the canvas. Click to apply.</p>
                 <div className="button-row">
                   <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
                     <BringToFront size={16} />

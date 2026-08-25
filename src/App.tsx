@@ -68,7 +68,7 @@ import {
   type DocumentMeta,
 } from './lib/document'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
-import { contrastRatio } from './lib/color'
+import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
 import { alignObjects, clampGridOverlay, distributeObjects, gridTensionScale, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
 import {
@@ -291,6 +291,7 @@ function App() {
   >(() => {})
   const commitLayerOrderHistoryRef = useRef<(label: string, before: string, after: string) => void>(() => {})
   const objectEditSessionRef = useRef<{ objectId: string; before: string } | null>(null)
+  const blendPreviewBaselineRef = useRef<{ objectId: string; blendMode: string } | null>(null)
   const nudgeSessionRef = useRef<{ objectId: string; before: string } | null>(null)
   const refreshTreatmentStackRef = useRef<(object?: FabricObject | null) => Promise<void>>(async () => {})
   const reconcileArtifactTreatmentsRef = useRef<() => Promise<void>>(async () => {})
@@ -572,8 +573,14 @@ function App() {
   // Keyboard layer: full shortcut coverage. Stable listener reads handlers via ref.
   const keyActionsRef = useRef<Record<string, () => void>>({})
   keyActionsRef.current = {
-    undo: () => void undoAsync(),
-    redo,
+    undo: () => {
+      clearBlendPreview({ render: false })
+      void undoAsync()
+    },
+    redo: () => {
+      clearBlendPreview({ render: false })
+      redo()
+    },
     save: () => void saveProjectAction(),
     export: () => void exportPoster(),
     duplicate: () => void duplicateSelected(),
@@ -630,7 +637,7 @@ function App() {
   useEffect(() => {
     const isTypingContext = (target: EventTarget | null) => {
       const element = target as HTMLElement | null
-      if (element?.closest?.('input, textarea, select, [contenteditable="true"]')) return true
+      if (element?.closest?.('input, textarea, select, [contenteditable="true"], [role="listbox"], .blend-picker, .font-picker')) return true
       const active = canvasRef.current?.getActiveObject() as (FabricObject & { isEditing?: boolean }) | null
       return Boolean(active?.isEditing)
     }
@@ -1065,24 +1072,31 @@ function App() {
   function syncSelected() {
     const canvas = canvasRef.current
     if (!canvas) {
+      clearBlendPreview({ render: false })
       setSelected(null)
       setSelectedLayerIds([])
       return
     }
     const active = canvas.getActiveObject()
     if (!active) {
+      clearBlendPreview({ render: false })
       setSelected(null)
       setSelectedLayerIds([])
       return
     }
     if (active.type === 'activeselection') {
+      clearBlendPreview({ render: false })
       const objects = canvas.getActiveObjects()
       setSelectedLayerIds(objects.map((object) => String(readObjectProp(object, 'id') ?? '')))
       setSelected(objects[0] ? toSelectedState(objects[0]) : null)
       return
     }
+    const activeId = String(readObjectProp(active, 'id') ?? '')
+    if (blendPreviewBaselineRef.current && blendPreviewBaselineRef.current.objectId !== activeId) {
+      clearBlendPreview({ render: false })
+    }
     setSelected(toSelectedState(active))
-    setSelectedLayerIds([String(readObjectProp(active, 'id') ?? '')])
+    setSelectedLayerIds([activeId])
   }
 
   function toSelectedState(object: FabricObject): SelectedState {
@@ -1107,7 +1121,10 @@ function App() {
       fill: readObjectProp(object, 'fill') as string | undefined,
       skewX: readObjectProp(object, 'skewX') as number | undefined,
       skewY: readObjectProp(object, 'skewY') as number | undefined,
-      blendMode: String(readObjectProp(object, 'globalCompositeOperation') ?? 'source-over'),
+      blendMode:
+        blendPreviewBaselineRef.current?.objectId === String(readObjectProp(object, 'id') ?? '')
+          ? blendPreviewBaselineRef.current.blendMode
+          : String(readObjectProp(object, 'globalCompositeOperation') ?? 'source-over'),
       stroke: readObjectProp(object, 'stroke') as string | undefined,
       strokeWidth: readObjectProp(object, 'strokeWidth') as number | undefined,
       textAlign: readObjectProp(object, 'textAlign') as SelectedState['textAlign'],
@@ -1151,6 +1168,50 @@ function App() {
     commitLayerOrderHistoryRef.current(label, before, after)
   }
 
+  function clearBlendPreview(options: { render?: boolean } = {}) {
+    const baseline = blendPreviewBaselineRef.current
+    if (!baseline) return
+    blendPreviewBaselineRef.current = null
+    const object = findObjectById(baseline.objectId)
+    if (object) {
+      object.set({
+        globalCompositeOperation: baseline.blendMode as GlobalCompositeOperation,
+      })
+    }
+    if (options.render !== false) canvasRef.current?.requestRenderAll()
+  }
+
+  function previewBlendMode(mode: string | null) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object) {
+      clearBlendPreview()
+      return
+    }
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    if (!mode) {
+      clearBlendPreview()
+      return
+    }
+    if (!blendPreviewBaselineRef.current || blendPreviewBaselineRef.current.objectId !== objectId) {
+      clearBlendPreview({ render: false })
+      blendPreviewBaselineRef.current = {
+        objectId,
+        blendMode: String(object.globalCompositeOperation ?? 'source-over'),
+      }
+    }
+    const next = resolveBlendPreview(blendPreviewBaselineRef.current.blendMode, mode)
+    object.set({ globalCompositeOperation: next as GlobalCompositeOperation })
+    canvas.requestRenderAll()
+    setStatus(`Previewing ${blendModeLabel(next)}`)
+  }
+
+  function applyBlendMode(mode: string) {
+    clearBlendPreview({ render: false })
+    updateActive({ blendMode: mode })
+    finalizeActive('Changed blend mode')
+  }
+
   function updateActive(values: Partial<SelectedState>) {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -1192,6 +1253,7 @@ function App() {
     const last = lastChaosRef.current
     const canvas = canvasRef.current
     if (!last || !canvas) return
+    clearBlendPreview({ render: false })
     await undoAsync()
     if (last.targetIds.length > 0) {
       const objects = canvas
@@ -3275,8 +3337,14 @@ function App() {
         tension={gridOverlay.tension}
         onTensionChange={handleTensionChange}
         onTensionCommit={commitTension}
-        onUndo={() => void undoAsync()}
-        onRedo={redo}
+        onUndo={() => {
+          clearBlendPreview({ render: false })
+          void undoAsync()
+        }}
+        onRedo={() => {
+          clearBlendPreview({ render: false })
+          redo()
+        }}
         onSave={() => void saveProjectAction()}
         onOpenCommands={handleOpenCommands}
         onScramble={() => void scrambleCanvas()}
@@ -3527,6 +3595,8 @@ function App() {
           textContrast={textContrast}
           onUpdateActive={updateActive}
           onFinalizeActive={finalizeActive}
+          onPreviewBlendMode={previewBlendMode}
+          onApplyBlendMode={applyBlendMode}
           onLoadGoogleFont={loadGoogleFont}
           openTypeFeatures={selected?.openTypeFeatures ?? DEFAULT_OPEN_TYPE_FEATURES}
           onOpenTypeChange={updateOpenTypeFeatures}

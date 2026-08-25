@@ -70,3 +70,17 @@ export const FULL_BLEND_MODES: Array<{ value: string; label: string }> = [
   { value: 'color', label: 'Color' },
   { value: 'luminosity', label: 'Luminosity' },
 ]
+
+export function isBlendMode(value: string): boolean {
+  return FULL_BLEND_MODES.some((mode) => mode.value === value)
+}
+
+export function blendModeLabel(value: string): string {
+  return FULL_BLEND_MODES.find((mode) => mode.value === value)?.label ?? value
+}
+
+/** Hovered mode wins; invalid hover falls back to the committed blend. */
+export function resolveBlendPreview(committed: string, hovered: string | null): string {
+  if (hovered && isBlendMode(hovered)) return hovered
+  return isBlendMode(committed) ? committed : 'source-over'
+}

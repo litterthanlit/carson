@@ -4,15 +4,47 @@ import { applyObjectPatch, captureObjectPatch, capturePathEditPatch } from './hi
 
 describe('historyObject', () => {
   it('round-trips object patches', () => {
-    const object = new Rect({ left: 10, top: 20, width: 40, height: 40, opacity: 0.8 })
+    const object = new Rect({
+      left: 10,
+      top: 20,
+      width: 40,
+      height: 40,
+      opacity: 0.8,
+      globalCompositeOperation: 'multiply',
+    })
     object.set({ name: 'Block', visible: true, selectable: true, evented: true } as Partial<Rect>)
     const before = captureObjectPatch(object)
-    object.set({ left: 30, top: 50, opacity: 0.4, name: 'Moved' } as Partial<Rect>)
+    object.set({
+      left: 30,
+      top: 50,
+      opacity: 0.4,
+      name: 'Moved',
+      globalCompositeOperation: 'screen',
+    } as Partial<Rect>)
     applyObjectPatch(object, before)
     expect(object.left).toBe(10)
     expect(object.top).toBe(20)
     expect(object.opacity).toBe(0.8)
+    expect(object.globalCompositeOperation).toBe('multiply')
     expect((object as unknown as { name: string }).name).toBe('Block')
+  })
+
+  it('keeps the current blend mode when restoring a legacy patch', () => {
+    const object = new Rect({ width: 40, height: 40, globalCompositeOperation: 'difference' })
+    applyObjectPatch(
+      object,
+      JSON.stringify({
+        left: 12,
+        top: 8,
+        opacity: 1,
+        name: 'Legacy',
+        visible: true,
+        selectable: true,
+        evented: true,
+      }),
+    )
+    expect(object.left).toBe(12)
+    expect(object.globalCompositeOperation).toBe('difference')
   })
 
   it('round-trips path geometry in path edit patches', () => {

@@ -2167,6 +2167,23 @@ input[type='color'] {
 }
 
 .font-picker-option:hover,
-.font-picker-option.active {
+.font-picker-option.active,
+.font-picker-option.previewing {
   background: var(--accent-soft);
+}
+
+.blend-picker {
+  position: relative;
+}
+
+.blend-picker-menu {
+  max-height: 280px;
+}
+
+.blend-picker-menu:focus {
+  outline: none;
+}
+
+.blend-picker-menu:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent);
 }

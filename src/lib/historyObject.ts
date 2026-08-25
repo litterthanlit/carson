@@ -13,6 +13,7 @@ export type ObjectPatch = {
   scaleX?: number
   scaleY?: number
   opacity: number
+  blendMode?: string
   name: string
   visible: boolean
   selectable: boolean
@@ -25,6 +26,7 @@ export function captureObjectPatch(object: FabricObject): string {
     left: object.left ?? 0,
     top: object.top ?? 0,
     opacity: object.opacity ?? 1,
+    blendMode: String(object.globalCompositeOperation ?? 'source-over'),
     name: String(readObjectProp(object, 'name') ?? 'Layer'),
     visible: object.visible !== false,
     selectable: object.selectable !== false,
@@ -58,6 +60,7 @@ export function applyObjectPatch(object: FabricObject, patchJson: string): void 
     scaleX: patch.scaleX ?? object.scaleX ?? 1,
     scaleY: patch.scaleY ?? object.scaleY ?? 1,
     opacity: patch.opacity,
+    globalCompositeOperation: patch.blendMode ?? object.globalCompositeOperation ?? 'source-over',
     name: patch.name,
     visible: patch.visible,
     selectable: patch.selectable,
