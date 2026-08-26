@@ -7,6 +7,7 @@ export const HISTORY_PROPS = [
   'selectable',
   'evented',
   'treatments',
+  'layerMask',
   'transformBaseline',
   'stroke',
   'strokeWidth',

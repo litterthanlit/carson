@@ -10,8 +10,9 @@ export function cursorForTool(
     case 'text':
       return 'text'
     case 'shape':
-    case 'mask':
       return 'crosshair'
+    case 'mask':
+      return 'cell'
     default:
       return 'default'
   }

@@ -150,7 +150,7 @@ export const ToolRail = memo(function ToolRail({
         <button
           type="button"
           className={tool === 'mask' ? 'active' : undefined}
-          title="Mask (M) — clip, brush, scrapes"
+          title="Mask (M) — paint alpha, clip to shape, scrapes"
           aria-label="Mask tool"
           aria-pressed={tool === 'mask'}
           aria-expanded={flyout === 'mask'}
@@ -166,8 +166,8 @@ export const ToolRail = memo(function ToolRail({
             <button type="button" role="menuitem" title="Clip the selection to a shape" onClick={() => { onClipToShape(); setFlyout(null) }}>
               <Crop size={14} /> Clip to shape
             </button>
-            <button type="button" role="menuitem" title="Paint an ellipse clip mask" onClick={() => { onBrushMask(); setFlyout(null) }}>
-              <Circle size={14} /> Brush mask
+            <button type="button" role="menuitem" title="Paint a soft alpha mask on the selected layer" onClick={() => { onBrushMask(); setFlyout(null) }}>
+              <Circle size={14} /> Paint mask
             </button>
             <button type="button" role="menuitem" title="Scrape white bands across the poster" onClick={() => { onWhiteScrapes(); setFlyout(null) }}>
               <Eraser size={14} /> White scrapes

@@ -20,6 +20,7 @@ import {
   type Treatment,
 } from '../lib/treatments'
 import { cropModeFromParams } from '../lib/cropTreatment'
+import { applyAllLayerMasks } from '../lib/layerMask'
 import { stripCopyMachineCompanions } from '../lib/copyMachineTreatment'
 import { withLayerSyncSuppressed } from '../lib/layerSync'
 import type { LayerKind } from '../types/editor'
@@ -124,6 +125,7 @@ export function useTreatments({
     if (!canvas) return
     await withLayerSyncSuppressed(async () => {
       stripCopyMachineCompanions(canvas)
+      await applyAllLayerMasks(canvas.getObjects())
       const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'copy-machine'])
       const sources = canvas.getObjects().filter((object) =>
         readTreatments(object).some((item) => artifactTypes.has(item.type)),

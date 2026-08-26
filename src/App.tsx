@@ -80,6 +80,17 @@ import {
 } from './lib/editorConstants'
 import { addPosterTreatment, readPosterTreatments, writePosterTreatments } from './lib/posterTreatments'
 import { captureLayerOrder, captureObjectPatch } from './lib/historyObject'
+import {
+  applyLayerMask,
+  brushRadiusForSize,
+  canvasPointToMaskLocal,
+  captureClipGeom,
+  emptyLayerMask,
+  hasMaskContent,
+  readLayerMask,
+  stampsAlongSegment,
+  writeLayerMask,
+} from './lib/layerMask'
 import type { PathEditActions } from './hooks/usePathEditing'
 import { applyPathData, isPathClosed, type PathData } from './lib/pathEditing'
 import {
@@ -264,6 +275,8 @@ function App() {
   const [showCmykPreview, setShowCmykPreview] = useState(false)
   const [editorTool, setEditorTool] = useState<EditorTool>('move')
   const [penMode, setPenMode] = useState(false)
+  const [maskBrushSize, setMaskBrushSize] = useState(36)
+  const [maskHardness, setMaskHardness] = useState(35)
   const [pathEditMode, setPathEditMode] = useState(false)
   const [pathAddPointMode, setPathAddPointMode] = useState(false)
   const [pathGeometryTick, setPathGeometryTick] = useState(0)
@@ -291,6 +304,18 @@ function App() {
   >(() => {})
   const commitLayerOrderHistoryRef = useRef<(label: string, before: string, after: string) => void>(() => {})
   const objectEditSessionRef = useRef<{ objectId: string; before: string } | null>(null)
+  const maskPaintSessionRef = useRef<{
+    objectId: string
+    before: string
+    last: { x: number; y: number } | null
+    reveal: boolean
+  } | null>(null)
+  const maskTargetRef = useRef<string | null>(null)
+  const maskPaintRafRef = useRef<number | null>(null)
+  const maskBrushSizeRef = useRef(maskBrushSize)
+  const maskHardnessRef = useRef(maskHardness)
+  maskBrushSizeRef.current = maskBrushSize
+  maskHardnessRef.current = maskHardness
   const blendPreviewBaselineRef = useRef<{ objectId: string; blendMode: string } | null>(null)
   const nudgeSessionRef = useRef<{ objectId: string; before: string } | null>(null)
   const refreshTreatmentStackRef = useRef<(object?: FabricObject | null) => Promise<void>>(async () => {})
@@ -308,6 +333,9 @@ function App() {
   const tagObjectRef = useRef<(object: FabricObject, kind: LayerKind, name: string) => void>(() => {})
   const editorToolRef = useRef<EditorTool>('move')
   const addTextRef = useRef<(position?: { left: number; top: number }) => void>(() => {})
+  const maskPaintRef = useRef<
+    (phase: 'down' | 'move' | 'up', point: { x: number; y: number }, reveal: boolean) => void
+  >(() => {})
 
   const {
     refreshTreatmentStack,
@@ -403,6 +431,7 @@ function App() {
     onTextSelectionChange: setTextSelection,
     editorToolRef,
     onPlaceText: (point) => addTextRef.current(point),
+    onMaskPaint: (phase, point, reveal) => maskPaintRef.current(phase, point, reveal),
   })
 
   usePathEditing({
@@ -517,6 +546,7 @@ function App() {
     canvas.defaultCursor = cursor
     canvas.hoverCursor = hover
     canvas.selection = (editorTool === 'move' || editorTool === 'instruments') && !penMode && !isPanMode
+    canvas.skipTargetFind = editorTool === 'mask' || penMode || isPanMode
     canvas.requestRenderAll()
   }, [editorTool, penMode, isPanMode])
 
@@ -626,6 +656,7 @@ function App() {
     maskTool: () => {
       setPenMode(false)
       setEditorTool('mask')
+      setStatus('Mask — paint to conceal, Alt to reveal, clip from the flyout')
     },
     instrumentsTool: () => {
       setPenMode(false)
@@ -764,6 +795,14 @@ function App() {
       } else if (event.key.toLowerCase() === 'm') {
         event.preventDefault()
         actions.maskTool()
+      } else if (event.key === '[' && editorToolRef.current === 'mask') {
+        event.preventDefault()
+        setMaskBrushSize((value) => Math.max(4, value - 6))
+        setStatus('Mask brush smaller')
+      } else if (event.key === ']' && editorToolRef.current === 'mask') {
+        event.preventDefault()
+        setMaskBrushSize((value) => Math.min(100, value + 6))
+        setStatus('Mask brush larger')
       } else if (event.key.toLowerCase() === 'i') {
         event.preventDefault()
         actions.instrumentsTool()
@@ -791,8 +830,10 @@ function App() {
         setIsPanMode(false)
         const canvas = canvasRef.current
         if (canvas) {
-          canvas.selection = true
-          canvas.skipTargetFind = false
+          const masking = editorToolRef.current === 'mask'
+          canvas.selection =
+            (editorToolRef.current === 'move' || editorToolRef.current === 'instruments') && !canvas.isDrawingMode
+          canvas.skipTargetFind = masking || canvas.isDrawingMode
         }
       }
     }
@@ -999,8 +1040,9 @@ function App() {
   restoreCanvasSelectionRef.current = () => {
     const canvas = canvasRef.current
     if (!canvas || penMode || spaceDownRef.current) return
-    canvas.selection = true
-    canvas.skipTargetFind = false
+    const masking = editorToolRef.current === 'mask'
+    canvas.selection = !masking
+    canvas.skipTargetFind = masking
   }
 
   function captureStyleBaseline() {
@@ -1092,6 +1134,7 @@ function App() {
       return
     }
     const activeId = String(readObjectProp(active, 'id') ?? '')
+    if (activeId) maskTargetRef.current = activeId
     if (blendPreviewBaselineRef.current && blendPreviewBaselineRef.current.objectId !== activeId) {
       clearBlendPreview({ render: false })
     }
@@ -1415,17 +1458,197 @@ function App() {
     if (!canvas || !active) return
     const objects = canvas.getActiveObjects()
     if (objects.length < 2) {
-      setStatus('Select a content layer and a shape mask (Shift+click)')
+      setStatus('Select a content layer and a shape or type mask (Shift+click)')
       return
     }
-    const mask = objects.find((item) => item.type === 'rect' || item.type === 'ellipse' || item.type === 'polygon')
+    const mask = objects.find(
+      (item) =>
+        item.type === 'rect' ||
+        item.type === 'ellipse' ||
+        item.type === 'polygon' ||
+        item.type === 'path' ||
+        item.type === 'textbox',
+    )
     const content = objects.find((item) => item !== mask)
-    if (!mask || !content) return
-    const clip = await mask.clone()
-    clip.set({ absolutePositioned: true, inverted: false })
-    content.set({ clipPath: clip })
+    if (!mask || !content) {
+      setStatus('Select a content layer and a shape or type mask (Shift+click)')
+      return
+    }
+    const objectId = String(readObjectProp(content, 'id') ?? '')
+    const before = captureObjectPatch(content)
+    const clipJson = mask.toObject() as Record<string, unknown>
+    const current = readLayerMask(content) ?? emptyLayerMask()
+    writeLayerMask(content, {
+      ...current,
+      enabled: true,
+      clipJson,
+      clipGeom: captureClipGeom(mask, content),
+    })
+    await applyLayerMask(content)
+    canvas.setActiveObject(content)
     canvas.requestRenderAll()
-    commitHistory('Applied clipping mask')
+    commitObjectPatchHistoryRef.current(objectId, 'Applied clipping mask', before, captureObjectPatch(content))
+    syncSelected()
+  }
+
+  function paintBrushMask() {
+    setPenMode(false)
+    setEditorTool('mask')
+    const object = activeObject()
+    if (object && object.type !== 'activeselection') {
+      const id = String(readObjectProp(object, 'id') ?? '')
+      if (id) maskTargetRef.current = id
+    }
+    if (!maskTargetRef.current && (!object || object.type === 'activeselection')) {
+      setStatus('Select a layer, then paint the mask')
+      return
+    }
+    setStatus('Paint mask — drag to conceal, Alt-drag to reveal · [ ] brush size')
+  }
+
+  function stampMaskStrokes(
+    object: FabricObject,
+    stamps: { x: number; y: number }[],
+    reveal: boolean,
+  ) {
+    const current = readLayerMask(object) ?? emptyLayerMask()
+    const radius = brushRadiusForSize(maskBrushSizeRef.current)
+    const hardness = maskHardnessRef.current / 100
+    writeLayerMask(object, {
+      ...current,
+      enabled: true,
+      strokes: [
+        ...current.strokes,
+        ...stamps.map((stamp) => ({ ...stamp, radius, hardness, reveal })),
+      ],
+    })
+  }
+
+  function resolveMaskTarget() {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const active = canvas.getActiveObject()
+    if (active && active.type !== 'activeselection') {
+      const id = String(readObjectProp(active, 'id') ?? '')
+      if (id) maskTargetRef.current = id
+      return active
+    }
+    const remembered = maskTargetRef.current ? findObjectById(maskTargetRef.current) : null
+    if (remembered) return remembered
+    return null
+  }
+
+  function handleMaskPaint(phase: 'down' | 'move' | 'up', point: { x: number; y: number }, reveal: boolean) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const sessionObject =
+      phase === 'down' ? null : findObjectById(maskPaintSessionRef.current?.objectId ?? '')
+    const object = sessionObject ?? resolveMaskTarget()
+    if (!object) {
+      if (phase === 'down') setStatus('Select a layer, then paint the mask')
+      return
+    }
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    if (phase === 'down') {
+      maskTargetRef.current = objectId
+      if (canvas.getActiveObject() !== object) {
+        canvas.setActiveObject(object)
+      }
+      maskPaintSessionRef.current = {
+        objectId,
+        before: captureObjectPatch(object),
+        last: point,
+        reveal,
+      }
+      stampMaskStrokes(object, [canvasPointToMaskLocal(object, point.x, point.y)], reveal)
+      void applyLayerMask(object).then(() => canvas.requestRenderAll())
+      return
+    }
+    if (phase === 'move' && maskPaintSessionRef.current) {
+      const last = maskPaintSessionRef.current.last ?? point
+      const radius = brushRadiusForSize(maskBrushSizeRef.current)
+      const stamps = stampsAlongSegment(
+        canvasPointToMaskLocal(object, last.x, last.y),
+        canvasPointToMaskLocal(object, point.x, point.y),
+        radius * 0.38,
+      )
+      stampMaskStrokes(object, stamps, reveal)
+      maskPaintSessionRef.current.last = point
+      if (maskPaintRafRef.current) cancelAnimationFrame(maskPaintRafRef.current)
+      maskPaintRafRef.current = requestAnimationFrame(() => {
+        void applyLayerMask(object).then(() => canvas.requestRenderAll())
+      })
+      return
+    }
+    if (phase === 'up' && maskPaintSessionRef.current) {
+      const session = maskPaintSessionRef.current
+      maskPaintSessionRef.current = null
+      if (maskPaintRafRef.current) {
+        cancelAnimationFrame(maskPaintRafRef.current)
+        maskPaintRafRef.current = null
+      }
+      void applyLayerMask(object).then(() => {
+        if (canvas.getActiveObject() !== object) canvas.setActiveObject(object)
+        canvas.requestRenderAll()
+        const after = captureObjectPatch(object)
+        if (session.before === after) return
+        commitObjectPatchHistoryRef.current(
+          session.objectId,
+          session.reveal ? 'Revealed layer mask' : 'Painted layer mask',
+          session.before,
+          after,
+        )
+        syncSelected()
+      })
+    }
+  }
+
+  maskPaintRef.current = handleMaskPaint
+
+  async function invertSelectedMask() {
+    const object = activeObject()
+    const canvas = canvasRef.current
+    const mask = readLayerMask(object)
+    if (!canvas || !object || !hasMaskContent(mask)) return
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    writeLayerMask(object, { ...mask, inverted: !mask.inverted })
+    await applyLayerMask(object)
+    canvas.requestRenderAll()
+    commitObjectPatchHistoryRef.current(objectId, 'Inverted layer mask', before, captureObjectPatch(object))
+    syncSelected()
+  }
+
+  async function toggleSelectedMask() {
+    const object = activeObject()
+    const canvas = canvasRef.current
+    const mask = readLayerMask(object)
+    if (!canvas || !object || !hasMaskContent(mask)) return
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    writeLayerMask(object, { ...mask, enabled: !mask.enabled })
+    await applyLayerMask(object)
+    canvas.requestRenderAll()
+    commitObjectPatchHistoryRef.current(
+      objectId,
+      mask.enabled ? 'Bypassed layer mask' : 'Enabled layer mask',
+      before,
+      captureObjectPatch(object),
+    )
+    syncSelected()
+  }
+
+  async function clearSelectedMask() {
+    const object = activeObject()
+    const canvas = canvasRef.current
+    if (!canvas || !object || !hasMaskContent(readLayerMask(object))) return
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    writeLayerMask(object, null)
+    await applyLayerMask(object)
+    canvas.requestRenderAll()
+    commitObjectPatchHistoryRef.current(objectId, 'Removed layer mask', before, captureObjectPatch(object))
+    syncSelected()
   }
 
   async function combineSelectedBoolean(mode: 'union' | 'subtract') {
@@ -1811,24 +2034,6 @@ function App() {
     } as Partial<FabricObject>)
     canvasRef.current?.requestRenderAll()
     finalizeActive(`Stroke ${preset}`)
-  }
-
-  async function paintBrushMask() {
-    const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object) return
-    const bounds = object.getBoundingRect()
-    const mask = new Ellipse({
-      left: bounds.left + bounds.width * 0.35,
-      top: bounds.top + bounds.height * 0.25,
-      rx: bounds.width * 0.18,
-      ry: bounds.height * 0.22,
-      absolutePositioned: true,
-      inverted: true,
-    })
-    object.set({ clipPath: mask, objectCaching: true } as Partial<FabricObject>)
-    canvas.requestRenderAll()
-    commitHistory('Painted soft brush mask')
   }
 
   function updatePaletteSwatch(index: number, color: string) {
@@ -3197,6 +3402,7 @@ function App() {
 
   const selectedObject = selected ? findObjectById(selected.id) : null
   const selectedTreatments = readTreatments(selectedObject)
+  const selectedLayerMask = readLayerMask(selectedObject)
   const activeBoard = documentMeta ? getActiveArtboard(documentMeta) : undefined
   const posterTreatments = readPosterTreatments(activeBoard)
   const selectedIsPath = selectedObject?.type === 'path' || selectedObject?.type === 'line'
@@ -3220,6 +3426,7 @@ function App() {
   const handleToolChange = useCallback((next: EditorTool) => {
     setEditorTool(next)
     if (next !== 'shape') setPenMode(false)
+    if (next === 'mask') setStatus('Mask — paint to conceal, Alt to reveal · [ ] size')
   }, [])
   const handleTogglePenMode = useCallback(() => {
     setPenMode((value) => {
@@ -3272,6 +3479,9 @@ function App() {
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
+    { id: 'paint-mask', label: 'Paint layer mask', keywords: ['mask', 'brush', 'eraser', 'alpha'], scope: 'selection', disabled: !selected, run: () => paintBrushMask() },
+    { id: 'invert-mask', label: 'Invert layer mask', keywords: ['mask', 'invert'], scope: 'selection', disabled: !selected, run: () => void invertSelectedMask() },
+    { id: 'clear-mask', label: 'Remove layer mask', keywords: ['mask', 'clear', 'remove'], scope: 'selection', disabled: !selected, run: () => void clearSelectedMask() },
     {
       id: 'boolean-union',
       label: 'Combine shapes (union)',
@@ -3444,6 +3654,10 @@ function App() {
               posterTreatments={posterTreatments}
               selectedTreatments={selectedTreatments}
               selectedObject={selectedObject}
+              layerMask={selectedLayerMask}
+              onToggleLayerMask={() => void toggleSelectedMask()}
+              onInvertLayerMask={() => void invertSelectedMask()}
+              onRemoveLayerMask={() => void clearSelectedMask()}
               onReorderPosterTreatment={reorderPosterTreatmentAction}
               onRerollPosterTreatment={rerollPosterTreatment}
               onTogglePosterTreatment={togglePosterTreatment}
@@ -3503,6 +3717,10 @@ function App() {
             posterTreatments={posterTreatments}
             selectedTreatments={selectedTreatments}
             selectedObject={selectedObject}
+            layerMask={selectedLayerMask}
+            onToggleLayerMask={() => void toggleSelectedMask()}
+            onInvertLayerMask={() => void invertSelectedMask()}
+            onRemoveLayerMask={() => void clearSelectedMask()}
             onReorderPosterTreatment={reorderPosterTreatmentAction}
             onRerollPosterTreatment={rerollPosterTreatment}
             onTogglePosterTreatment={togglePosterTreatment}
@@ -3616,7 +3834,15 @@ function App() {
           onApplyTextOnPath={applyTextOnPath}
           onApplyGradientFill={applyGradientFill}
           onApplyStrokeDash={applyStrokeDash}
-          onPaintBrushMask={() => void paintBrushMask()}
+          onPaintBrushMask={() => paintBrushMask()}
+          layerMask={selectedLayerMask}
+          maskBrushSize={maskBrushSize}
+          onMaskBrushSizeChange={setMaskBrushSize}
+          maskHardness={maskHardness}
+          onMaskHardnessChange={setMaskHardness}
+          onInvertLayerMask={() => void invertSelectedMask()}
+          onToggleLayerMask={() => void toggleSelectedMask()}
+          onClearLayerMask={() => void clearSelectedMask()}
           penStrokeWidth={penStrokeWidth}
           onPenStrokeColorChange={setPenStrokeColor}
           onPenStrokeWidthChange={setPenStrokeWidth}

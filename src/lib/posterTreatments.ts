@@ -4,7 +4,12 @@
 import type { Canvas } from 'fabric'
 import type { PosterPreset } from './editorModel'
 import { newTreatmentId, type Treatment } from './treatments'
-import { removeAllScrapeFragments, removeScrapeFragments, renderScrapeTreatment } from './scrapeTreatment'
+import {
+  clearScrapeClipPath,
+  removeAllScrapeFragments,
+  removeScrapeFragments,
+  renderScrapeTreatment,
+} from './scrapeTreatment'
 import type { Artboard } from './document'
 import type { FabricObject } from 'fabric'
 
@@ -84,6 +89,10 @@ export function renderPosterTreatments(
     }
   }
 
+  const scrapes = treatments.filter((item) => item.type === 'scrape')
+  if (scrapes.length === 0) {
+    clearScrapeClipPath(canvas)
+  }
   for (const treatment of treatments) {
     if (treatment.type === 'scrape') {
       renderScrapeTreatment(canvas, treatment, poster, tagObject)
@@ -95,4 +104,5 @@ export function renderPosterTreatments(
 
 export function reconcilePosterTreatments(canvas: Canvas) {
   removeAllScrapeFragments(canvas)
+  clearScrapeClipPath(canvas)
 }

@@ -28,6 +28,7 @@ import { FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
 import { legibilityBand } from '../lib/color'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
+import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
 import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
 import type { Gesture } from '../lib/gestures'
@@ -141,6 +142,14 @@ export type InspectorPanelProps = {
   onApplyGradientFill: (mode: 'linear' | 'radial') => void
   onApplyStrokeDash: (preset: StrokeDashPreset) => void
   onPaintBrushMask: () => void
+  layerMask: LayerMask | null
+  maskBrushSize: number
+  onMaskBrushSizeChange: (size: number) => void
+  maskHardness: number
+  onMaskHardnessChange: (hardness: number) => void
+  onInvertLayerMask: () => void
+  onToggleLayerMask: () => void
+  onClearLayerMask: () => void
   penStrokeWidth: number
   onPenStrokeColorChange: (color: string) => void
   onPenStrokeWidthChange: (width: number) => void
@@ -284,6 +293,14 @@ export function InspectorPanel({
   onApplyGradientFill,
   onApplyStrokeDash,
   onPaintBrushMask,
+  layerMask,
+  maskBrushSize,
+  onMaskBrushSizeChange,
+  maskHardness,
+  onMaskHardnessChange,
+  onInvertLayerMask,
+  onToggleLayerMask,
+  onClearLayerMask,
   penStrokeWidth,
   onPenStrokeColorChange,
   onPenStrokeWidthChange,
@@ -477,12 +494,29 @@ export function InspectorPanel({
           ) : null}
           {!selected ? (
             <p className="empty">Select a layer to view its treatment stack.</p>
-          ) : selectedTreatments.length === 0 ? (
-            <p className="empty">No layer treatments yet. Try Xerox or Scatter from Instruments.</p>
+          ) : selectedTreatments.length === 0 && !hasMaskContent(layerMask) ? (
+            <p className="empty">No layer treatments yet. Try Xerox, Scatter, or paint a mask.</p>
           ) : (
             <>
               <h3 className="property-kicker">Layer treatments</h3>
               <ul className="treatment-stack">
+                {hasMaskContent(layerMask) && layerMask ? (
+                  <li className={layerMask.enabled ? undefined : 'bypassed'}>
+                    <span>{layerMaskLabel(layerMask)}</span>
+                    <small>{layerMask.inverted ? 'inv' : 'alpha'}</small>
+                    <span className="treatment-actions">
+                      <button type="button" title="Invert mask" onClick={onInvertLayerMask}>
+                        Inv
+                      </button>
+                      <button type="button" title={layerMask.enabled ? 'Bypass' : 'Enable'} onClick={onToggleLayerMask}>
+                        {layerMask.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
+                      </button>
+                      <button type="button" title="Remove" onClick={onClearLayerMask}>
+                        <Trash2 size={12} />
+                      </button>
+                    </span>
+                  </li>
+                ) : null}
                 {selectedTreatments.map((treatment, index) => (
                   <li key={treatment.id} className={treatment.enabled ? undefined : 'bypassed'}>
                     <span>{treatmentLabel(treatment)}</span>
@@ -1047,9 +1081,51 @@ export function InspectorPanel({
                     <button type="button" onClick={() => onApplyStrokeDash('dotted')}>
                       Dotted
                     </button>
-                    <button type="button" onClick={onPaintBrushMask}>
-                      Brush mask
-                    </button>
+                  </div>
+                ) : null}
+                {selected ? (
+                  <div className="property-card">
+                    <h3 className="property-kicker">Layer mask</h3>
+                    <p className="hint">
+                      {hasMaskContent(layerMask)
+                        ? `${layerMaskLabel(layerMask)} · ${layerMask?.enabled === false ? 'bypassed' : 'live'}`
+                        : 'Paint to conceal. Alt-paint to reveal. Clip keeps the source.'}
+                    </p>
+                    <Slider
+                      label="Brush"
+                      value={maskBrushSize}
+                      min={4}
+                      max={100}
+                      onChange={onMaskBrushSizeChange}
+                      onCommit={() => undefined}
+                    />
+                    <Slider
+                      label="Softness"
+                      value={100 - maskHardness}
+                      min={0}
+                      max={90}
+                      onChange={(value) => onMaskHardnessChange(100 - value)}
+                      onCommit={() => undefined}
+                    />
+                    <div className="button-row">
+                      <button type="button" onClick={onPaintBrushMask}>
+                        Paint
+                      </button>
+                      <button type="button" onClick={onClipSelectionToShape}>
+                        Clip to shape
+                      </button>
+                    </div>
+                    <div className="button-row">
+                      <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onInvertLayerMask}>
+                        Invert
+                      </button>
+                      <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onToggleLayerMask}>
+                        {layerMask?.enabled === false ? 'Enable' : 'Bypass'}
+                      </button>
+                      <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onClearLayerMask}>
+                        Clear
+                      </button>
+                    </div>
                   </div>
                 ) : null}
                 {canBooleanUnion || canBooleanSubtract ? (
@@ -1211,6 +1287,9 @@ export function InspectorPanel({
               </li>
               <li>
                 <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
+              </li>
+              <li>
+                Mask: drag conceal · <kbd>Alt</kbd>-drag reveal · <kbd>[</kbd> <kbd>]</kbd> brush size
               </li>
               <li>
                 <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>G</kbd> Grid · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble

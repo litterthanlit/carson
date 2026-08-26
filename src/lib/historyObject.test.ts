@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Path, Rect } from 'fabric'
 import { applyObjectPatch, captureObjectPatch, capturePathEditPatch } from './historyObject'
+import { readLayerMask, writeLayerMask } from './layerMask'
 
 describe('historyObject', () => {
   it('round-trips object patches', () => {
@@ -27,6 +28,24 @@ describe('historyObject', () => {
     expect(object.opacity).toBe(0.8)
     expect(object.globalCompositeOperation).toBe('multiply')
     expect((object as unknown as { name: string }).name).toBe('Block')
+  })
+
+  it('round-trips layer masks', () => {
+    const object = new Rect({ width: 80, height: 40 })
+    object.set({ name: 'Masked' } as Partial<Rect>)
+    writeLayerMask(object, {
+      enabled: true,
+      inverted: false,
+      clipJson: null,
+      clipGeom: null,
+      strokes: [{ x: 0.4, y: 0.5, radius: 0.2, hardness: 0.3, reveal: false }],
+    })
+    const before = captureObjectPatch(object)
+    writeLayerMask(object, null)
+    applyObjectPatch(object, before)
+    const restored = readLayerMask(object)
+    expect(restored?.strokes).toHaveLength(1)
+    expect(restored?.strokes[0]?.x).toBe(0.4)
   })
 
   it('keeps the current blend mode when restoring a legacy patch', () => {

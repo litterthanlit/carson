@@ -32,6 +32,11 @@ type UseCanvasEventsOptions = {
   onLiveTransform?: () => void
   editorToolRef?: MutableRefObject<EditorTool>
   onPlaceText?: (point: { left: number; top: number }) => void
+  onMaskPaint?: (
+    phase: 'down' | 'move' | 'up',
+    point: { x: number; y: number },
+    reveal: boolean,
+  ) => void
 }
 
 export function useCanvasEvents({
@@ -55,6 +60,7 @@ export function useCanvasEvents({
   onLiveTransform,
   editorToolRef,
   onPlaceText,
+  onMaskPaint,
 }: UseCanvasEventsOptions) {
   const registerCanvasEvents = useCallback(
     (canvas: Canvas) => {
@@ -93,12 +99,31 @@ export function useCanvasEvents({
       canvas.on('text:editing:exited', () => onTextSelectionChange?.(null))
 
       canvas.on('mouse:down', (event) => {
+        const native = event.e as MouseEvent
+        const point = canvas.getScenePoint(native)
+        if (editorToolRef?.current === 'mask') {
+          onMaskPaint?.('down', { x: point.x, y: point.y }, Boolean(native.altKey))
+          return
+        }
         if (editorToolRef?.current !== 'text') return
         if (canvas.isDrawingMode || canvas.skipTargetFind) return
         if (event.target) return
+        onPlaceText?.({ left: point.x, top: point.y })
+      })
+
+      canvas.on('mouse:move', (event) => {
+        if (editorToolRef?.current !== 'mask') return
+        const native = event.e as MouseEvent
+        if (!native.buttons) return
+        const point = canvas.getScenePoint(native)
+        onMaskPaint?.('move', { x: point.x, y: point.y }, Boolean(native.altKey))
+      })
+
+      canvas.on('mouse:up', (event) => {
+        if (editorToolRef?.current !== 'mask') return
         const native = event.e as MouseEvent
         const point = canvas.getScenePoint(native)
-        onPlaceText?.({ left: point.x, top: point.y })
+        onMaskPaint?.('up', { x: point.x, y: point.y }, Boolean(native.altKey))
       })
 
       canvas.on('path:created', (event) => {
@@ -312,6 +337,7 @@ export function useCanvasEvents({
       onLiveTransform,
       editorToolRef,
       onPlaceText,
+      onMaskPaint,
     ],
   )
 

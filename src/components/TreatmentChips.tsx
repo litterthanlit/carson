@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, Dices, Eye, EyeOff, Trash2 } from 'lucide-react
 import type { FabricObject } from 'fabric'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
+import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
 
 type TreatmentChipsProps = {
   posterTreatments: Treatment[]
@@ -16,6 +17,10 @@ type TreatmentChipsProps = {
   onRerollLayerTreatment: (id: string) => void
   onToggleLayerTreatment: (id: string) => void
   onRemoveLayerTreatment: (object: FabricObject, id: string) => void
+  layerMask?: LayerMask | null
+  onToggleLayerMask?: () => void
+  onInvertLayerMask?: () => void
+  onRemoveLayerMask?: () => void
 }
 
 function Chip({
@@ -79,8 +84,13 @@ export function TreatmentChips({
   onRerollLayerTreatment,
   onToggleLayerTreatment,
   onRemoveLayerTreatment,
+  layerMask,
+  onToggleLayerMask,
+  onInvertLayerMask,
+  onRemoveLayerMask,
 }: TreatmentChipsProps) {
-  if (posterTreatments.length === 0 && selectedTreatments.length === 0) return null
+  const showMask = hasMaskContent(layerMask ?? null)
+  if (posterTreatments.length === 0 && selectedTreatments.length === 0 && !showMask) return null
 
   return (
     <div className={compact ? 'treatment-chips compact' : 'treatment-chips'} aria-label="Treatment stack">
@@ -123,6 +133,25 @@ export function TreatmentChips({
               }}
             />
           ))}
+        </ul>
+      ) : null}
+      {showMask && layerMask ? (
+        <ul className="treatment-chip-row">
+          <li className={layerMask.enabled ? 'treatment-chip' : 'treatment-chip bypassed'}>
+            <span className="treatment-chip-label">{layerMaskLabel(layerMask)}</span>
+            <small>{layerMask.inverted ? 'inv' : 'mask'}</small>
+            <span className="treatment-actions">
+              <button type="button" title="Invert mask" onClick={onInvertLayerMask}>
+                Inv
+              </button>
+              <button type="button" title={layerMask.enabled ? 'Bypass' : 'Enable'} onClick={onToggleLayerMask}>
+                {layerMask.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
+              </button>
+              <button type="button" title="Remove" onClick={onRemoveLayerMask}>
+                <Trash2 size={12} />
+              </button>
+            </span>
+          </li>
         </ul>
       ) : null}
     </div>
