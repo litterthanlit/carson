@@ -65,6 +65,7 @@ import {
   addArtboard,
   updateArtboardPreset,
   normalizeDocumentMeta,
+  withPrintSettings,
   type DocumentMeta,
 } from './lib/document'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
@@ -102,11 +103,14 @@ import {
 import {
   buildStarPoints,
   computeFitScale,
+  downloadBlob,
+  downloadDataUrl,
   readFileAsDataUrl,
   readObjectProp,
   round,
   safeFileName,
 } from './lib/canvasUtils'
+import { canvasElementToRgba, canvasToSvgMarkup, rasterizeCanvasTiled } from './lib/exportRaster'
 import { legibilityToParam } from './lib/glyphBreakTreatment'
 import {
   COPY_MACHINE_DEFAULTS,
@@ -1083,7 +1087,7 @@ function App() {
         savedAt: new Date().toISOString(),
         preset: currentPoster,
         canvas: serializeCanvasForSave(),
-        document: documentMeta ?? undefined,
+        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
       }).catch(() => setStatus('Autosave failed — storage may be full'))
     }, 2500)
   }
@@ -2335,9 +2339,24 @@ function App() {
     commitLayerOrderChange('Reordered layers', before)
   }
 
+  function patchPrintSettings(next: { dpi?: number; bleedMm?: number }) {
+    const dpi =
+      next.dpi !== undefined ? Math.max(72, Math.min(600, Math.round(next.dpi) || 72)) : undefined
+    const nextBleed =
+      next.bleedMm !== undefined ? Math.max(0, Math.min(20, Number.isFinite(next.bleedMm) ? next.bleedMm : 0)) : undefined
+    if (dpi !== undefined) setPrintDpi(dpi)
+    if (nextBleed !== undefined) setBleedMm(nextBleed)
+    setDocumentMeta((doc) => {
+      if (!doc) return doc
+      return withPrintSettings(doc, dpi ?? doc.dpi, nextBleed ?? doc.bleedMm)
+    })
+  }
+
   function handlePresetChange(nextPresetId: PosterPresetId) {
     setPresetId(nextPresetId)
-    setPoster(applyPosterPreset(nextPresetId, customSize))
+    const next = applyPosterPreset(nextPresetId, customSize)
+    setPoster(next)
+    if (next.dpi) patchPrintSettings({ dpi: next.dpi })
   }
 
   function applyCustomSize(nextSize = customSize) {
@@ -3217,7 +3236,7 @@ function App() {
         savedAt: new Date().toISOString(),
         preset: poster,
         canvas: serializeCanvasForSave(),
-        document: documentMeta ?? undefined,
+        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
       })
       setSavedProjects(await listProjects())
       await clearAutosave()
@@ -3310,8 +3329,11 @@ function App() {
   async function exportPoster() {
     const canvas = canvasRef.current
     if (!canvas) return
-    const previousBackground = canvas.backgroundColor
     const format = exportFormat
+    const baseName = safeFileName(projectName)
+    const previousBackground = canvas.backgroundColor
+    const previousActive = canvas.getActiveObject()
+    const previousRenderOnAddRemove = canvas.renderOnAddRemove
     const rasterFormat = format === 'jpeg' ? 'jpeg' : 'png'
     const background =
       exportBackground === 'white' || (rasterFormat === 'jpeg' && exportBackground === 'transparent')
@@ -3319,52 +3341,40 @@ function App() {
         : exportBackground === 'transparent'
           ? ''
           : '#f6f1e6'
-    const needsExportBake = exportScale !== 1
+    const needsExportBake = format !== 'svg' && exportScale !== 1
     const tensionScale = gridTensionScale(gridOverlay.tension)
 
     try {
+      canvas.renderOnAddRemove = false
       canvas.discardActiveObject()
       canvas.backgroundColor = background
+
+      if (format === 'svg') {
+        const svg = canvasToSvgMarkup(canvas)
+        downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${baseName}.svg`)
+        setStatus(`Exported SVG ${poster.width} x ${poster.height}`)
+        return
+      }
+
       if (needsExportBake) await rebakeCopyMachineTreatments(canvas, exportScale, tensionScale)
-      canvas.requestRenderAll()
-      const width = poster.width * exportScale
-      const height = poster.height * exportScale
-      const dataUrl = canvas.toDataURL({
-        format: rasterFormat,
-        multiplier: exportScale,
-        quality: exportQuality / 100,
-      })
-      const baseName = safeFileName(projectName)
+      const raster = rasterizeCanvasTiled(canvas, exportScale)
+      const width = raster.width
+      const height = raster.height
 
       if (format === 'pdf') {
         const { downloadPdfFromImageData } = await import('./lib/print')
-        await downloadPdfFromImageData(dataUrl, `${baseName}@${exportScale}x.pdf`, width, height, printDpi, {
-          registrationMarks: pdfRegistrationMarks,
+        await downloadPdfFromImageData(raster.toDataURL('image/png'), `${baseName}@${exportScale}x.pdf`, poster.width, poster.height, printDpi, {
+          printerMarks: pdfRegistrationMarks,
+          bleedMm,
         })
       } else if (format === 'tiff') {
         const { rgbaToTiffBlob } = await import('./lib/print')
-        const image = new Image()
-        image.onload = () => {
-          const scratch = document.createElement('canvas')
-          scratch.width = width
-          scratch.height = height
-          const ctx = scratch.getContext('2d')
-          ctx?.drawImage(image, 0, 0, width, height)
-          const rgba = ctx?.getImageData(0, 0, width, height).data
-          if (!rgba) return
-          const blob = rgbaToTiffBlob(width, height, rgba)
-          const link = document.createElement('a')
-          link.href = URL.createObjectURL(blob)
-          link.download = `${baseName}@${exportScale}x.tiff`
-          link.click()
-          URL.revokeObjectURL(link.href)
-        }
-        image.src = dataUrl
+        const blob = rgbaToTiffBlob(width, height, canvasElementToRgba(raster))
+        downloadBlob(blob, `${baseName}@${exportScale}x.tiff`)
+      } else if (format === 'jpeg') {
+        downloadDataUrl(raster.toDataURL('image/jpeg', exportQuality / 100), `${baseName}@${exportScale}x.jpg`)
       } else {
-        const link = document.createElement('a')
-        link.href = dataUrl
-        link.download = `${baseName}@${exportScale}x.${rasterFormat === 'jpeg' ? 'jpg' : 'png'}`
-        link.click()
+        downloadDataUrl(raster.toDataURL('image/png'), `${baseName}@${exportScale}x.png`)
       }
       setStatus(`Exported ${format.toUpperCase()} ${width} x ${height}`)
     } catch {
@@ -3372,6 +3382,10 @@ function App() {
     } finally {
       if (needsExportBake) await rebakeCopyMachineTreatments(canvas, 1, tensionScale)
       canvas.backgroundColor = previousBackground
+      canvas.renderOnAddRemove = previousRenderOnAddRemove
+      if (previousActive && canvas.getObjects().includes(previousActive)) {
+        canvas.setActiveObject(previousActive)
+      }
       canvas.requestRenderAll()
       syncSelected()
     }
@@ -3475,7 +3489,7 @@ function App() {
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => void applyLayerDecayToSelected() },
     { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
-    { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf'], scope: 'canvas', run: () => void exportPoster() },
+    { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
@@ -3877,9 +3891,9 @@ function App() {
           onMergeVariant={(variantId) => void mergeVariant(variantId)}
           onRenameVariant={(variantId) => renameVariantById(variantId)}
           printDpi={printDpi}
-          onPrintDpiChange={setPrintDpi}
+          onPrintDpiChange={(dpi) => patchPrintSettings({ dpi })}
           bleedMm={bleedMm}
-          onBleedMmChange={setBleedMm}
+          onBleedMmChange={(mm) => patchPrintSettings({ bleedMm: mm })}
           showPrintGuides={showPrintGuides}
           onTogglePrintGuides={() => setShowPrintGuides((value) => !value)}
           showCmykPreview={showCmykPreview}

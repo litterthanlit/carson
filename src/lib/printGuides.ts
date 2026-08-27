@@ -4,6 +4,8 @@
  */
 import { mmToPx } from './document'
 
+export const PRINT_SLUG_MM = 10
+
 export type PrintGuideKind = 'bleed' | 'trim' | 'safe' | 'registration'
 
 export type PrintGuideRect = {

@@ -177,3 +177,7 @@ export function bleedInsetsPx(dpi: number, bleedMm: number) {
   const bleed = mmToPx(bleedMm, dpi)
   return { bleed, trim: bleed, safe: bleed + mmToPx(5, dpi) }
 }
+
+export function withPrintSettings(doc: DocumentMeta, dpi: number, bleedMm: number): DocumentMeta {
+  return { ...doc, dpi, bleedMm }
+}

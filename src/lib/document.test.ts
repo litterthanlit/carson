@@ -7,6 +7,7 @@ import {
   mergeVariantCanvas,
   normalizeDocumentMeta,
   renameVariant,
+  withPrintSettings,
   type DocumentMeta,
 } from './document'
 
@@ -71,5 +72,13 @@ describe('document variants', () => {
     const doc = sampleDoc()
     const legacy = { ...doc, gestures: undefined } as unknown as DocumentMeta
     expect(normalizeDocumentMeta(legacy).gestures).toEqual([])
+  })
+})
+
+describe('print settings', () => {
+  it('withPrintSettings writes dpi and bleed onto the document', () => {
+    const next = withPrintSettings(sampleDoc(), 150, 5)
+    expect(next.dpi).toBe(150)
+    expect(next.bleedMm).toBe(5)
   })
 })

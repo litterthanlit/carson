@@ -1,7 +1,99 @@
 /**
- * Print export helpers (Horizon 2.6) — loaded on demand from export.
+ * Print export helpers (Horizon 2.6) — PDF page geometry, printer's marks, TIFF.
+ * jsPDF stays behind a dynamic import so first paint stays light.
  */
-import { registrationMarks } from './printGuides'
+import { PRINT_SLUG_MM } from './printGuides'
+
+export type PrintPageLayout = {
+  trimWidthMm: number
+  trimHeightMm: number
+  bleedMm: number
+  slugMm: number
+  pageWidthMm: number
+  pageHeightMm: number
+  artworkLeftMm: number
+  artworkTopMm: number
+  trimLeftMm: number
+  trimTopMm: number
+  trimRightMm: number
+  trimBottomMm: number
+}
+
+export type CropMarkLine = { x1: number; y1: number; x2: number; y2: number }
+export type RegistrationTarget = { x: number; y: number; radius: number }
+
+export const CROP_MARK_MM = 5
+
+export function pxToMm(px: number, dpi: number) {
+  const safeDpi = dpi > 0 ? dpi : 300
+  return (px / safeDpi) * 25.4
+}
+
+export function printPageLayout(
+  widthPx: number,
+  heightPx: number,
+  dpi: number,
+  options?: { bleedMm?: number; slugMm?: number; printerMarks?: boolean },
+): PrintPageLayout {
+  const trimWidthMm = pxToMm(widthPx, dpi)
+  const trimHeightMm = pxToMm(heightPx, dpi)
+  const printerMarks = options?.printerMarks ?? false
+  const bleedMm = printerMarks ? Math.max(0, options?.bleedMm ?? 0) : 0
+  const slugMm = printerMarks ? Math.max(0, options?.slugMm ?? PRINT_SLUG_MM) : 0
+  const trimLeftMm = slugMm + bleedMm
+  const trimTopMm = slugMm + bleedMm
+  return {
+    trimWidthMm,
+    trimHeightMm,
+    bleedMm,
+    slugMm,
+    pageWidthMm: trimWidthMm + 2 * (bleedMm + slugMm),
+    pageHeightMm: trimHeightMm + 2 * (bleedMm + slugMm),
+    artworkLeftMm: trimLeftMm,
+    artworkTopMm: trimTopMm,
+    trimLeftMm,
+    trimTopMm,
+    trimRightMm: trimLeftMm + trimWidthMm,
+    trimBottomMm: trimTopMm + trimHeightMm,
+  }
+}
+
+/** Crop marks sit in the slug, pointing at trim — never drawn on artwork. */
+export function printerMarkGeometry(layout: PrintPageLayout): {
+  crop: CropMarkLine[]
+  registration: RegistrationTarget[]
+} {
+  if (layout.slugMm <= 0) return { crop: [], registration: [] }
+
+  const mark = Math.min(CROP_MARK_MM, layout.slugMm - 0.5)
+  if (mark <= 0) return { crop: [], registration: [] }
+
+  const { trimLeftMm: left, trimTopMm: top, trimRightMm: right, trimBottomMm: bottom, bleedMm } = layout
+  const outer = bleedMm
+  const crop: CropMarkLine[] = [
+    { x1: left - outer - mark, y1: top, x2: left - outer, y2: top },
+    { x1: left, y1: top - outer - mark, x2: left, y2: top - outer },
+    { x1: right + outer, y1: top, x2: right + outer + mark, y2: top },
+    { x1: right, y1: top - outer - mark, x2: right, y2: top - outer },
+    { x1: left - outer - mark, y1: bottom, x2: left - outer, y2: bottom },
+    { x1: left, y1: bottom + outer, x2: left, y2: bottom + outer + mark },
+    { x1: right + outer, y1: bottom, x2: right + outer + mark, y2: bottom },
+    { x1: right, y1: bottom + outer, x2: right, y2: bottom + outer + mark },
+  ]
+
+  const radius = 1.6
+  const midX = (left + right) / 2
+  const midY = (top + bottom) / 2
+  const slugCenter = layout.slugMm / 2
+  const registration: RegistrationTarget[] = [
+    { x: midX, y: slugCenter, radius },
+    { x: midX, y: layout.pageHeightMm - slugCenter, radius },
+    { x: slugCenter, y: midY, radius },
+    { x: layout.pageWidthMm - slugCenter, y: midY, radius },
+  ]
+
+  return { crop, registration }
+}
 
 export async function downloadPdfFromImageData(
   dataUrl: string,
@@ -9,32 +101,36 @@ export async function downloadPdfFromImageData(
   widthPx: number,
   heightPx: number,
   dpi: number,
-  options?: { registrationMarks?: boolean },
+  options?: { printerMarks?: boolean; registrationMarks?: boolean; bleedMm?: number },
 ) {
   const { jsPDF } = await import('jspdf')
-  const widthMm = (widthPx / dpi) * 25.4
-  const heightMm = (heightPx / dpi) * 25.4
-  const orientation = widthMm >= heightMm ? 'landscape' : 'portrait'
-  const pdf = new jsPDF({ orientation, unit: 'mm', format: [widthMm, heightMm] })
-  pdf.addImage(dataUrl, 'PNG', 0, 0, widthMm, heightMm)
-  if (options?.registrationMarks) {
-    const inset = 4
-    const size = 6
-    const marks = registrationMarks(
-      { width: widthPx, height: heightPx },
-      (inset / widthPx) * widthMm,
-      (size / widthPx) * widthMm,
-    )
+  const printerMarks = options?.printerMarks ?? options?.registrationMarks ?? false
+  const layout = printPageLayout(widthPx, heightPx, dpi, {
+    printerMarks,
+    bleedMm: options?.bleedMm,
+  })
+  const orientation = layout.pageWidthMm >= layout.pageHeightMm ? 'landscape' : 'portrait'
+  const pdf = new jsPDF({
+    orientation,
+    unit: 'mm',
+    format: [layout.pageWidthMm, layout.pageHeightMm],
+  })
+  pdf.addImage(dataUrl, 'PNG', layout.artworkLeftMm, layout.artworkTopMm, layout.trimWidthMm, layout.trimHeightMm)
+
+  if (printerMarks) {
+    const marks = printerMarkGeometry(layout)
     pdf.setDrawColor(0)
-    pdf.setLineWidth(0.2)
-    for (const mark of marks) {
-      const x = (mark.left / widthPx) * widthMm
-      const y = (mark.top / heightPx) * heightMm
-      const w = (mark.width / widthPx) * widthMm
-      const h = (mark.height / heightPx) * heightMm
-      pdf.rect(x, y, w, h, 'F')
+    pdf.setLineWidth(0.15)
+    for (const line of marks.crop) {
+      pdf.line(line.x1, line.y1, line.x2, line.y2)
+    }
+    for (const target of marks.registration) {
+      pdf.circle(target.x, target.y, target.radius, 'S')
+      pdf.line(target.x - target.radius - 1.2, target.y, target.x + target.radius + 1.2, target.y)
+      pdf.line(target.x, target.y - target.radius - 1.2, target.x, target.y + target.radius + 1.2)
     }
   }
+
   pdf.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`)
 }
 
@@ -82,9 +178,9 @@ export function rgbaToTiffBlob(width: number, height: number, rgba: Uint8Clamped
 
   let cursor = stripOffset
   for (let i = 0; i < rgba.length; i += 4) {
-    bytes[cursor++] = rgba[i]
-    bytes[cursor++] = rgba[i + 1]
-    bytes[cursor++] = rgba[i + 2]
+    bytes[cursor++] = rgba[i] ?? 0
+    bytes[cursor++] = rgba[i + 1] ?? 0
+    bytes[cursor++] = rgba[i + 2] ?? 0
   }
 
   return new Blob([buffer], { type: 'image/tiff' })

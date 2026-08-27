@@ -19,6 +19,22 @@ export function safeFileName(projectName: string) {
   )
 }
 
+export function downloadBlob(blob: Blob, fileName: string) {
+  const link = document.createElement('a')
+  const href = URL.createObjectURL(blob)
+  link.href = href
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(href)
+}
+
+export function downloadDataUrl(dataUrl: string, fileName: string) {
+  const link = document.createElement('a')
+  link.href = dataUrl
+  link.download = fileName
+  link.click()
+}
+
 export function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()

@@ -3,7 +3,7 @@ export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'star' | 'pen'
 export type MaskKind = 'clip' | 'brush' | 'scrape'
 
 export type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
-export type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff'
+export type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff' | 'svg'
 export type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'layout' | 'print'
 export type StrokeDashPreset = 'solid' | 'dashed' | 'dotted'
 export type ExportBackground = 'paper' | 'white' | 'transparent'

@@ -26,6 +26,7 @@ import type { StoredProject } from '../lib/storage'
 import type { GridOverlay, LayoutGuide } from '../lib/grid'
 import { FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
 import { legibilityBand } from '../lib/color'
+import { formatCmyk, gamutReadout } from '../lib/cmykPreview'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
@@ -199,6 +200,18 @@ export type InspectorPanelProps = {
   onExportAllArtboards: () => void
 }
 
+function PrintGamutReadout({ hex }: { hex: string | undefined }) {
+  const readout = hex ? gamutReadout(hex) : null
+  if (!readout) return null
+  return (
+    <p className="hint gamut-readout">
+      <span className="gamut-swatch" style={{ background: readout.proof }} aria-hidden />
+      Print · {formatCmyk(readout.cmyk)}
+      {readout.outOfGamut ? ' · shifts on press' : ' · holds on press'}
+    </p>
+  )
+}
+
 export function InspectorPanel({
   inspectorTab,
   onInspectorTabChange,
@@ -366,11 +379,16 @@ export function InspectorPanel({
               <option value="jpeg">JPG</option>
               <option value="pdf">PDF</option>
               <option value="tiff">TIFF</option>
+              <option value="svg">SVG</option>
             </select>
           </label>
           <label>
             Size
-            <select value={exportScale} onChange={(event) => onExportScaleChange(Number(event.target.value))}>
+            <select
+              value={exportScale}
+              disabled={exportFormat === 'svg'}
+              onChange={(event) => onExportScaleChange(Number(event.target.value))}
+            >
               <option value={1}>1x</option>
               <option value={2}>2x</option>
               <option value={3}>3x</option>
@@ -401,7 +419,9 @@ export function InspectorPanel({
         ) : null}
         <button type="button" className="primary-button export-button" onClick={onExport}>
           <Download size={17} />
-          Export {posterWidth * exportScale} x {posterHeight * exportScale}
+          {exportFormat === 'svg'
+            ? `Export SVG ${posterWidth} x ${posterHeight}`
+            : `Export ${posterWidth * exportScale} x ${posterHeight * exportScale}`}
         </button>
       </div>
       <div className="saved-list">
@@ -1033,6 +1053,9 @@ export function InspectorPanel({
                     </button>
                   </span>
                 </label>
+                {!selectedIsImage ? (
+                  <PrintGamutReadout hex={typeof selected.fill === 'string' ? selected.fill : undefined} />
+                ) : null}
                 <div className="swatch-row" aria-label="Document palette">
                   {documentPalette.map((color, index) => (
                     <label key={`${color}-${index}`} className="swatch-edit" title={`Document swatch ${index + 1}`}>
@@ -1534,6 +1557,13 @@ export function InspectorPanel({
       {inspectorTab === 'print' ? (
         <div className="panel-section">
           <h2>Print pipeline</h2>
+          <p className="hint">
+            {Math.round((posterWidth / printDpi) * 25.4)} × {Math.round((posterHeight / printDpi) * 25.4)} mm
+            {' · '}
+            {printDpi} dpi
+            {' · '}
+            {bleedMm} mm bleed
+          </p>
           <label>
             Document DPI
             <input type="number" value={printDpi} min={72} max={600} onChange={(event) => onPrintDpiChange(Number(event.target.value))} />
@@ -1548,9 +1578,10 @@ export function InspectorPanel({
           <button type="button" onClick={onToggleCmykPreview}>
             {showCmykPreview ? 'Disable CMYK soft-proof' : 'Enable CMYK soft-proof'}
           </button>
+          <PrintGamutReadout hex={typeof selected?.fill === 'string' ? selected.fill : undefined} />
           <label>
             <input type="checkbox" checked={pdfRegistrationMarks} onChange={(event) => onPdfRegistrationMarksChange(event.target.checked)} />
-            Registration marks in PDF export
+            Printer’s marks in PDF export
           </label>
           <button type="button" onClick={onAddArtboard}>
             Add artboard
@@ -1568,7 +1599,7 @@ export function InspectorPanel({
           <button type="button" onClick={onExportAllArtboards}>
             Export all artboards
           </button>
-          <p className="hint">Print guides are document chrome — they never bake into artwork. Export PDF for print shops.</p>
+          <p className="hint">Bleed, trim, and safe are document chrome — they never bake into artwork. PDF marks sit in the slug; SVG keeps type and vectors editable.</p>
         </div>
       ) : null}
     </aside>
