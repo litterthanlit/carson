@@ -8,6 +8,8 @@ export type LayerRow = {
   visible: boolean
   locked: boolean
   thumbnail?: string | null
+  depth?: number
+  parentId?: string | null
 }
 
 type LayersPanelProps = {
@@ -57,10 +59,12 @@ export const LayersPanel = memo(function LayersPanel({
             'layer-row',
             selectedSet.has(layer.id) ? 'active' : '',
             dragLayerId === layer.id ? 'dragging' : '',
+            (layer.depth ?? 0) > 0 ? 'nested' : '',
           ]
             .filter(Boolean)
             .join(' ')}
-          draggable
+          style={{ paddingLeft: 8 + (layer.depth ?? 0) * 14 }}
+          draggable={(layer.depth ?? 0) === 0}
           onDragStart={() => onDragStart(layer.id)}
           onDragOver={(event) => {
             event.preventDefault()

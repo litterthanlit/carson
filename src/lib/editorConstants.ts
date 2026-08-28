@@ -34,6 +34,9 @@ export const HISTORY_PROPS = [
   'textAlign',
   'fontStyle',
   'underline',
+  'componentId',
+  'componentSlotId',
+  'componentOverrides',
 ] as const
 
 export const FONT_STACKS = [

@@ -2,7 +2,7 @@ export type EditorTool = 'move' | 'text' | 'shape' | 'image' | 'mask' | 'instrum
 export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'star' | 'pen'
 export type MaskKind = 'clip' | 'brush' | 'scrape'
 
-export type LayerKind = 'text' | 'image' | 'shape' | 'fragment'
+export type LayerKind = 'text' | 'image' | 'shape' | 'fragment' | 'group'
 export type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff' | 'svg'
 export type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'layout' | 'print'
 export type StrokeDashPreset = 'solid' | 'dashed' | 'dotted'
@@ -48,4 +48,8 @@ export type SelectedState = {
   fontStyle?: '' | 'normal' | 'italic' | 'oblique'
   underline?: boolean
   openTypeFeatures?: OpenTypeFeatures
+  depth?: number
+  parentId?: string | null
+  componentId?: string
+  overrideCount?: number
 }

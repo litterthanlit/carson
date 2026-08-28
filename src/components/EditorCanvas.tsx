@@ -32,6 +32,7 @@ type EditorCanvasProps = {
   onPanMouseMove: (event: MouseEvent) => void
   onPanMouseUp: () => void
   onAssetDrop: (assetId: string) => void
+  onComponentDrop: (componentId: string) => void
   onRestoreVariant: (variantId: string) => void
   onForkVariant: () => void
   showLayoutGrid: boolean
@@ -68,6 +69,7 @@ export const EditorCanvas = memo(function EditorCanvas({
   onPanMouseMove,
   onPanMouseUp,
   onAssetDrop,
+  onComponentDrop,
   onRestoreVariant,
   onForkVariant,
   showLayoutGrid,
@@ -81,6 +83,8 @@ export const EditorCanvas = memo(function EditorCanvas({
     event.preventDefault()
     const assetId = event.dataTransfer.getData('text/carson-asset')
     if (assetId) onAssetDrop(assetId)
+    const componentId = event.dataTransfer.getData('text/carson-component')
+    if (componentId) onComponentDrop(componentId)
   }
 
   return (

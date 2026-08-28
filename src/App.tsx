@@ -12,6 +12,7 @@ import {
   Polygon,
   Rect,
   Textbox,
+  Group as FabricGroup,
   filters,
 } from 'fabric'
 import {
@@ -66,6 +67,9 @@ import {
   updateArtboardPreset,
   normalizeDocumentMeta,
   withPrintSettings,
+  newComponentId,
+  findComponent,
+  upsertComponent,
   type DocumentMeta,
 } from './lib/document'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
@@ -149,6 +153,28 @@ import { createLayerThumbnail, invalidateLayerThumbnail } from './lib/layerThumb
 import { isLayerSyncSuppressed } from './lib/layerSync'
 import { applySelectionChrome } from './lib/selectionChrome'
 import { cursorForTool, hoverCursorForTool } from './lib/editorTools'
+import {
+  canGroupObjects,
+  findObjectInTree,
+  flattenLayerTree,
+  isLayerGroup,
+  topLevelLayer,
+} from './lib/layerGroups'
+import {
+  applySlotOverrides,
+  collectInstanceRoots,
+  detachInstance,
+  ensureComponentSlotIds,
+  overrideCount,
+  readComponentId,
+  readComponentOverrides,
+  recordOverrideFromPatch,
+  retargetObjectIds,
+  treatmentsFromSnapshot,
+  writeComponentId,
+  writeComponentOverrides,
+} from './lib/components'
+import { reviveSerializedObject } from './lib/fabricRevive'
 import {
   applyCharacterStyleToText,
   applyParagraphStyleToText,
@@ -662,6 +688,8 @@ function App() {
       setEditorTool('mask')
       setStatus('Mask — paint to conceal, Alt to reveal, clip from the flyout')
     },
+    group: () => void groupSelection(),
+    ungroup: () => void ungroupSelection(),
     instrumentsTool: () => {
       setPenMode(false)
       setEditorTool((current) => (current === 'instruments' ? 'move' : 'instruments'))
@@ -755,6 +783,10 @@ function App() {
         } else if (key === 'b') {
           event.preventDefault()
           actions.forkVariant()
+        } else if (key === 'g' && !isTypingContext(event.target)) {
+          event.preventDefault()
+          if (event.shiftKey) actions.ungroup()
+          else actions.group()
         } else if (key === 'f') {
           event.preventDefault()
           actions.filterGallery()
@@ -1105,13 +1137,12 @@ function App() {
     const canvas = canvasRef.current
     if (!canvas) return
     setLayers(
-      canvas
-        .getObjects()
-        .map((object) => ({
-          ...toSelectedState(object),
-          thumbnail: createLayerThumbnail(object, canvas),
-        }))
-        .reverse(),
+      flattenLayerTree(canvas.getObjects()).map((row) => ({
+        ...toSelectedState(row.object),
+        thumbnail: createLayerThumbnail(row.object, canvas),
+        depth: row.depth,
+        parentId: row.parentId,
+      })),
     )
   }
 
@@ -1178,6 +1209,8 @@ function App() {
       fontStyle: readObjectProp(object, 'fontStyle') as SelectedState['fontStyle'],
       underline: Boolean(readObjectProp(object, 'underline')),
       openTypeFeatures: readOpenTypeFeatures(object),
+      componentId: readComponentId(object) ?? undefined,
+      overrideCount: overrideCount(readComponentOverrides(object)),
     }
   }
 
@@ -1270,6 +1303,13 @@ function App() {
       delete (patch as Partial<SelectedState>).blendMode
     }
     object.set(patch)
+    if (values.text !== undefined || values.fill !== undefined || values.stroke !== undefined) {
+      recordOverrideFromPatch(object, {
+        text: values.text,
+        fill: values.fill,
+        stroke: values.stroke,
+      })
+    }
     object.setCoords()
     canvas.requestRenderAll()
     syncSelected()
@@ -1288,7 +1328,17 @@ function App() {
   }
 
   function findObjectById(id: string) {
-    return canvasRef.current?.getObjects().find((item) => readObjectProp(item, 'id') === id) ?? null
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    return findObjectInTree(canvas.getObjects(), id)
+  }
+
+  function nextIdForKind(kind: string) {
+    const mapped: LayerKind =
+      kind === 'text' || kind === 'image' || kind === 'shape' || kind === 'fragment' || kind === 'group'
+        ? kind
+        : 'shape'
+    return nextId(mapped)
   }
 
   function trackChaos(label: string, seed: number, targetIds: string[], perform: (seed: number) => void | Promise<void>) {
@@ -1733,38 +1783,249 @@ function App() {
     setStatus(mode === 'union' ? 'Combined shapes' : 'Subtracted shapes')
   }
 
+  async function groupSelection() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const active = activeObject()
+    const objects =
+      active?.type === 'activeselection'
+        ? canvas.getActiveObjects().filter((object) => !readObjectProp(object, 'scrapeFragment'))
+        : []
+    if (!canGroupObjects(objects)) {
+      setStatus('Select two or more layers to group')
+      return
+    }
+    canvas.discardActiveObject()
+    for (const object of objects) canvas.remove(object)
+    const group = new FabricGroup(objects)
+    tagObject(group, 'group', 'Group')
+    canvas.add(group)
+    canvas.setActiveObject(group)
+    canvas.requestRenderAll()
+    syncSelected()
+    syncLayers()
+    commitHistory('Grouped layers')
+    setStatus('Grouped layers')
+  }
+
+  async function ungroupSelection() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || !isLayerGroup(object)) {
+      setStatus('Select a group to ungroup')
+      return
+    }
+    if (readComponentId(object)) detachInstance(object)
+    const children = object.removeAll()
+    canvas.remove(object)
+    for (const child of children) canvas.add(child)
+    if (children.length > 1) canvas.setActiveObject(new ActiveSelection(children, { canvas }))
+    else if (children[0]) canvas.setActiveObject(children[0])
+    canvas.requestRenderAll()
+    syncSelected()
+    syncLayers()
+    commitHistory('Ungrouped layers')
+    setStatus('Ungrouped layers')
+  }
+
+  async function thumbnailForObject(object: FabricObject) {
+    try {
+      const dataUrl = object.toDataURL({ format: 'jpeg', quality: 0.72, multiplier: 0.18 })
+      return await createThumbnail(dataUrl, 96)
+    } catch {
+      return undefined
+    }
+  }
+
   async function saveSelectionAsComponent() {
     const canvas = canvasRef.current
     const active = activeObject()
-    if (!canvas || !active) return
+    if (!canvas || !active || active.type === 'activeselection' && canvas.getActiveObjects().length === 0) return
     const name = window.prompt('Component name', selected?.name ?? 'Component')
     if (!name) return
-    const clone = await active.clone()
+
+    let source = active
+    if (active.type === 'activeselection') {
+      await groupSelection()
+      source = activeObject() ?? source
+    }
+    if (!source || source.type === 'activeselection') return
+    ensureComponentSlotIds(source)
+    const clone = await source.clone()
     const snapshot = clone.toObject(HISTORY_PROPS as unknown as string[]) as Record<string, unknown>
-    setDocumentMeta((current) => {
-      const base = current ?? createDefaultDocument(poster, {})
-      return {
-        ...base,
-        components: [
-          { id: `component-${Date.now()}`, name, canvas: snapshot },
-          ...base.components,
-        ].slice(0, 16),
-      }
-    })
+    const thumbnail = await thumbnailForObject(source)
+    const component = {
+      id: newComponentId(),
+      name,
+      canvas: snapshot,
+      thumbnail,
+      kind: 'object' as const,
+    }
+    writeComponentId(source, component.id)
+    writeComponentOverrides(source, {})
+    setDocumentMeta((current) => upsertComponent(current ?? createDefaultDocument(poster, {}), component))
     commitHistory(`Saved component “${name}”`)
+    setStatus(`Saved component “${name}” — instances stay linked`)
+    syncSelected()
+  }
+
+  async function placeComponentInstance(componentId: string, position?: { left: number; top: number }) {
+    const canvas = canvasRef.current
+    const component = documentMeta ? findComponent(documentMeta, componentId) : undefined
+    if (!canvas || !component) return
+
+    if (component.kind === 'stack') {
+      const object = activeObject()
+      if (!object || object.type === 'activeselection') {
+        setStatus('Select a layer to apply this stack')
+        return
+      }
+      const stack = treatmentsFromSnapshot(component.canvas)
+      if (stack.length === 0) {
+        setStatus('That stack has no treatments')
+        return
+      }
+      for (const treatment of stack) {
+        addTreatment(object, treatment.type, treatment.params, newSeed(), { fxKind: treatment.fxKind })
+      }
+      await refreshTreatmentStack(object)
+      commitHistory(`Applied stack “${component.name}”`)
+      setStatus(`Applied stack “${component.name}”`)
+      return
+    }
+
+    let object: FabricObject
+    try {
+      object = await reviveSerializedObject(component.canvas as Record<string, unknown>)
+    } catch (error) {
+      console.error(error)
+      setStatus('Could not insert that component')
+      return
+    }
+    retargetObjectIds(object, nextIdForKind)
+    writeComponentId(object, component.id)
+    writeComponentOverrides(object, {})
+    object.set({
+      left: position?.left ?? poster.width * 0.2,
+      top: position?.top ?? poster.height * 0.2,
+    })
+    tagObject(object, (readObjectProp(object, 'kind') as LayerKind) ?? (isLayerGroup(object) ? 'group' : 'shape'), component.name)
+    writeComponentId(object, component.id)
+    canvas.add(object)
+    canvas.setActiveObject(object)
+    canvas.requestRenderAll()
+    commitHistory(`Inserted “${component.name}”`)
+    setStatus(`Instance of “${component.name}”`)
+    syncSelected()
+    syncLayers()
   }
 
   async function insertComponent(componentId: string) {
+    await placeComponentInstance(componentId)
+  }
+
+  function detachSelectedInstance() {
+    const object = activeObject()
+    if (!object || !readComponentId(object)) {
+      setStatus('Select a component instance to detach')
+      return
+    }
+    const name = String(readObjectProp(object, 'name') ?? 'instance')
+    detachInstance(object)
+    commitHistory(`Detached “${name}”`)
+    setStatus(`Detached “${name}”`)
+    syncSelected()
+  }
+
+  async function resetSelectedInstance() {
     const canvas = canvasRef.current
-    const component = documentMeta?.components.find((item) => item.id === componentId)
-    if (!canvas || !component) return
-    const object = (await FabricObject.fromObject(component.canvas as object)) as FabricObject
-    object.set({ left: poster.width * 0.2, top: poster.height * 0.2 })
-    tagObject(object, (readObjectProp(object, 'kind') as LayerKind) ?? 'shape', component.name)
-    canvas.add(object as FabricObject)
-    canvas.setActiveObject(object as FabricObject)
+    const object = activeObject()
+    const componentId = object ? readComponentId(object) : null
+    const component = componentId && documentMeta ? findComponent(documentMeta, componentId) : undefined
+    if (!canvas || !object || !component) {
+      setStatus('Select a component instance to reset')
+      return
+    }
+    let replacement: FabricObject
+    try {
+      replacement = await reviveSerializedObject(component.canvas as Record<string, unknown>)
+    } catch (error) {
+      console.error(error)
+      setStatus('Could not reset that instance')
+      return
+    }
+    retargetObjectIds(replacement, nextIdForKind)
+    writeComponentId(replacement, component.id)
+    writeComponentOverrides(replacement, {})
+    replacement.set({
+      left: object.left ?? 0,
+      top: object.top ?? 0,
+      angle: object.angle ?? 0,
+      scaleX: object.scaleX ?? 1,
+      scaleY: object.scaleY ?? 1,
+    })
+    tagObject(replacement, (readObjectProp(replacement, 'kind') as LayerKind) ?? 'group', component.name)
+    writeComponentId(replacement, component.id)
+    canvas.remove(object)
+    canvas.add(replacement)
+    canvas.setActiveObject(replacement)
     canvas.requestRenderAll()
-    commitHistory(`Inserted component “${component.name}”`)
+    commitHistory(`Reset instance “${component.name}”`)
+    setStatus(`Reset “${component.name}”`)
+    syncSelected()
+    syncLayers()
+  }
+
+  async function updateComponentFromInstance() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    const componentId = object ? readComponentId(object) : null
+    const existing = componentId && documentMeta ? findComponent(documentMeta, componentId) : undefined
+    if (!canvas || !object || !componentId || !existing) {
+      setStatus('Select a component instance to update')
+      return
+    }
+    ensureComponentSlotIds(object)
+    writeComponentOverrides(object, {})
+    const clone = await object.clone()
+    const snapshot = clone.toObject(HISTORY_PROPS as unknown as string[]) as Record<string, unknown>
+    const thumbnail = await thumbnailForObject(object)
+    const updated = { ...existing, canvas: snapshot, thumbnail, kind: 'object' as const }
+    setDocumentMeta((current) => (current ? upsertComponent(current, updated) : current))
+
+    const others = collectInstanceRoots(canvas.getObjects(), componentId).filter((item) => item !== object)
+    try {
+      for (const other of others) {
+        const overrides = readComponentOverrides(other)
+        const pose = {
+          left: other.left ?? 0,
+          top: other.top ?? 0,
+          angle: other.angle ?? 0,
+          scaleX: other.scaleX ?? 1,
+          scaleY: other.scaleY ?? 1,
+        }
+        const rebuilt = await reviveSerializedObject(snapshot)
+        retargetObjectIds(rebuilt, nextIdForKind)
+        writeComponentId(rebuilt, componentId)
+        applySlotOverrides(rebuilt, overrides)
+        writeComponentOverrides(rebuilt, overrides)
+        rebuilt.set(pose)
+        tagObject(rebuilt, (readObjectProp(rebuilt, 'kind') as LayerKind) ?? 'group', existing.name)
+        writeComponentId(rebuilt, componentId)
+        writeComponentOverrides(rebuilt, overrides)
+        canvas.remove(other)
+        canvas.add(rebuilt)
+      }
+    } catch (error) {
+      console.error(error)
+      setStatus('Updated the component, but could not refresh other instances')
+      return
+    }
+    canvas.requestRenderAll()
+    commitHistory(`Updated component “${existing.name}”`)
+    setStatus(`Updated component “${existing.name}”`)
+    syncSelected()
+    syncLayers()
   }
 
   async function forkVariation() {
@@ -2058,12 +2319,16 @@ function App() {
     if (!name) return
     const clone = await object.clone()
     const snapshot = clone.toObject(HISTORY_PROPS as unknown as string[]) as Record<string, unknown>
+    const thumbnail = await thumbnailForObject(object)
     setDocumentMeta((current) => {
       const base = current ?? createDefaultDocument(poster, {})
-      return {
-        ...base,
-        components: [{ id: `component-${Date.now()}`, name, canvas: snapshot }, ...base.components],
-      }
+      return upsertComponent(base, {
+        id: newComponentId(),
+        name,
+        canvas: snapshot,
+        thumbnail,
+        kind: 'stack',
+      })
     })
     commitHistory(`Saved treatment stack “${name}”`)
   }
@@ -2156,7 +2421,10 @@ function App() {
       left: (object.left ?? 0) + 28,
       top: (object.top ?? 0) + 28,
     })
+    const linkedId = readComponentId(object)
+    retargetObjectIds(clone, nextIdForKind)
     tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'shape', `${readObjectProp(object, 'name') ?? 'Layer'} copy`)
+    if (linkedId) writeComponentId(clone, linkedId)
     canvas.add(clone)
     canvas.setActiveObject(clone)
     commitHistory('Duplicated layer')
@@ -2251,6 +2519,7 @@ function App() {
     const canvas = canvasRef.current
     const object = findObjectById(id)
     if (!canvas || !object) return
+    const target = additive ? object : topLevelLayer(object)
     if (additive) {
       const current = canvas.getActiveObjects()
       const alreadySelected = current.some((item) => readObjectProp(item, 'id') === id)
@@ -2265,7 +2534,7 @@ function App() {
         canvas.setActiveObject(new ActiveSelection(next, { canvas }))
       }
     } else {
-      canvas.setActiveObject(object)
+      canvas.setActiveObject(target)
     }
     canvas.requestRenderAll()
     syncSelected()
@@ -3428,6 +3697,11 @@ function App() {
         : []
   const canBooleanUnion = booleanSelection.length >= 2
   const canBooleanSubtract = booleanSelection.length === 2
+  const activeOnCanvas = canvasRef.current?.getActiveObject() ?? null
+  const canGroupLayers = canGroupObjects(
+    activeOnCanvas?.type === 'activeselection' ? (canvasRef.current?.getActiveObjects() ?? []) : [],
+  )
+  const canUngroupLayers = Boolean(activeOnCanvas && isLayerGroup(activeOnCanvas))
   const pathIsClosed =
     selectedObject?.type === 'path'
       ? isPathClosed((selectedObject as import('fabric').Path).path as PathData)
@@ -3513,6 +3787,38 @@ function App() {
       run: () => void combineSelectedBoolean('subtract'),
     },
     { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns', 'layout'], scope: 'canvas', run: () => keyActionsRef.current.toggleLayoutGrid() },
+    {
+      id: 'group-layers',
+      label: 'Group layers',
+      keywords: ['group', 'folder', 'nest'],
+      scope: 'selection',
+      disabled: !canGroupLayers,
+      run: () => void groupSelection(),
+    },
+    {
+      id: 'ungroup-layers',
+      label: 'Ungroup',
+      keywords: ['ungroup', 'split'],
+      scope: 'selection',
+      disabled: !canUngroupLayers,
+      run: () => void ungroupSelection(),
+    },
+    {
+      id: 'save-component',
+      label: 'Save selection as component',
+      keywords: ['component', 'symbol', 'instance', 'asset'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => void saveSelectionAsComponent(),
+    },
+    {
+      id: 'detach-instance',
+      label: 'Detach component instance',
+      keywords: ['detach', 'unlink', 'component'],
+      scope: 'selection',
+      disabled: !selected?.componentId,
+      run: detachSelectedInstance,
+    },
     { id: 'baseline-grid', label: 'Toggle row grid', keywords: ['grid', 'baseline', 'rows'], scope: 'canvas', run: () => setShowBaselineGrid((value) => !value) },
     { id: 'snap-grid', label: 'Toggle snap to grid', keywords: ['snap', 'grid'], scope: 'canvas', run: () => setSnapToGrid((value) => !value) },
     { id: 'guide-v', label: 'Add vertical guide', keywords: ['guide', 'ruler'], scope: 'canvas', run: () => addLayoutGuide('v') },
@@ -3710,6 +4016,7 @@ function App() {
             const asset = storedAssets.find((item) => item.id === assetId)
             if (asset) void insertAsset(asset)
           }}
+          onComponentDrop={(componentId) => void placeComponentInstance(componentId)}
           onRestoreVariant={(variantId) => void restoreVariant(variantId)}
           onForkVariant={() => void forkVariation()}
           showLayoutGrid={showLayoutGrid}
@@ -3868,6 +4175,13 @@ function App() {
           onInsertAsset={(asset) => void insertAsset(asset)}
           onInsertComponent={(componentId) => void insertComponent(componentId)}
           onSaveSelectionAsComponent={() => void saveSelectionAsComponent()}
+          canGroupLayers={canGroupLayers}
+          canUngroupLayers={canUngroupLayers}
+          onGroupLayers={() => void groupSelection()}
+          onUngroupLayers={() => void ungroupSelection()}
+          onDetachInstance={detachSelectedInstance}
+          onResetInstance={() => void resetSelectedInstance()}
+          onUpdateComponent={() => void updateComponentFromInstance()}
           onAlignSelection={alignSelection}
           onDistributeSelection={distributeSelection}
           onClipSelectionToShape={() => void clipSelectionToShape()}

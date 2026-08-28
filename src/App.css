@@ -1707,12 +1707,30 @@ input[type='color'] {
   border-radius: 6px;
 }
 
-.asset-thumb span {
-  font-size: 10px;
+.layer-row.nested {
+  opacity: 0.92;
+}
+
+.layer-row.nested .layer-select small {
   color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.instance-card {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgb(255 255 255 / 0.03);
+}
+
+.asset-thumb-empty {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.28);
+  border: 1px solid var(--border);
 }
 
 .artboard-tabs {

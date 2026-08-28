@@ -17,6 +17,8 @@ import {
   SendToBack,
   SlidersHorizontal,
   Trash2,
+  Group,
+  Ungroup,
 } from 'lucide-react'
 import type { FabricObject } from 'fabric'
 import type { PosterPresetId } from '../lib/editorModel'
@@ -162,6 +164,13 @@ export type InspectorPanelProps = {
   onInsertAsset: (asset: StoredAsset) => void
   onInsertComponent: (componentId: string) => void
   onSaveSelectionAsComponent: () => void
+  canGroupLayers: boolean
+  canUngroupLayers: boolean
+  onGroupLayers: () => void
+  onUngroupLayers: () => void
+  onDetachInstance: () => void
+  onResetInstance: () => void
+  onUpdateComponent: () => void
   onAlignSelection: (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void
   onDistributeSelection: (mode: 'horizontal' | 'vertical') => void
   onClipSelectionToShape: () => void
@@ -325,6 +334,13 @@ export function InspectorPanel({
   onInsertAsset,
   onInsertComponent,
   onSaveSelectionAsComponent,
+  canGroupLayers,
+  canUngroupLayers,
+  onGroupLayers,
+  onUngroupLayers,
+  onDetachInstance,
+  onResetInstance,
+  onUpdateComponent,
   onAlignSelection,
   onDistributeSelection,
   onClipSelectionToShape,
@@ -714,6 +730,16 @@ export function InspectorPanel({
       {inspectorTab === 'layers' ? (
         <div className="panel-section">
           <h2>Layers</h2>
+          <div className="button-row">
+            <button type="button" title="Group selected layers (Cmd+G)" disabled={!canGroupLayers} onClick={onGroupLayers}>
+              <Group size={14} />
+              Group
+            </button>
+            <button type="button" title="Ungroup (Cmd+Shift+G)" disabled={!canUngroupLayers} onClick={onUngroupLayers}>
+              <Ungroup size={14} />
+              Ungroup
+            </button>
+          </div>
           <LayersPanel
             layers={layers}
             selectedIds={selectedLayerIds}
@@ -750,6 +776,34 @@ export function InspectorPanel({
                     <h3>{selected.name}</h3>
                     <span className="property-badge">{selected.kind}</span>
                   </div>
+                </div>
+                {selected.componentId ? (
+                  <div className="instance-card">
+                    <p className="property-kicker">Component instance</p>
+                    <p className="hint">
+                      {documentMeta?.components.find((item) => item.id === selected.componentId)?.name ?? 'Component'}
+                      {selected.overrideCount ? ` · ${selected.overrideCount} override${selected.overrideCount === 1 ? '' : 's'}` : ' · no overrides'}
+                    </p>
+                    <div className="button-row">
+                      <button type="button" title="Restore this instance from the component, keeping position" onClick={onResetInstance}>
+                        Reset
+                      </button>
+                      <button type="button" title="Unlink this instance so it is a regular layer" onClick={onDetachInstance}>
+                        Detach
+                      </button>
+                      <button type="button" title="Write this instance back to the component definition" onClick={onUpdateComponent}>
+                        Update
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="button-row">
+                  <button type="button" title="Group selected layers (Cmd+G)" disabled={!canGroupLayers} onClick={onGroupLayers}>
+                    Group
+                  </button>
+                  <button type="button" title="Ungroup (Cmd+Shift+G)" disabled={!canUngroupLayers} onClick={onUngroupLayers}>
+                    Ungroup
+                  </button>
                 </div>
                 <label>
                   Name
@@ -1318,6 +1372,9 @@ export function InspectorPanel({
                 <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>G</kbd> Grid · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble
               </li>
               <li>
+                <kbd>Cmd+G</kbd> Group · <kbd>Cmd+Shift+G</kbd> Ungroup
+              </li>
+              <li>
                 <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom
               </li>
               <li>
@@ -1334,9 +1391,9 @@ export function InspectorPanel({
       {inspectorTab === 'assets' ? (
         <div className="panel-section">
           <h2>Asset library</h2>
-          <p className="hint">Drag thumbnails to the canvas — or click to insert.</p>
-          {storedAssets.length === 0 ? (
-            <p className="empty">Import images to build your library.</p>
+          <p className="hint">Drag thumbnails to the canvas — or click to insert. Stacks apply to the selection.</p>
+          {storedAssets.length === 0 && (!documentMeta || documentMeta.components.filter((item) => item.kind !== 'stack').length === 0) ? (
+            <p className="empty">Import images or save a selection as a component.</p>
           ) : (
             <div className="asset-grid">
               {storedAssets.map((asset) => (
@@ -1355,21 +1412,51 @@ export function InspectorPanel({
                   <span>{asset.name}</span>
                 </button>
               ))}
-            </div>
-          )}
-          {documentMeta && documentMeta.components.length > 0 ? (
-            <>
-              <h3>Components</h3>
-              <div className="preset-row">
-                {documentMeta.components.map((component) => (
-                  <button key={component.id} type="button" onClick={() => onInsertComponent(component.id)}>
-                    {component.name}
+              {(documentMeta?.components ?? [])
+                .filter((component) => component.kind !== 'stack')
+                .map((component) => (
+                  <button
+                    key={component.id}
+                    type="button"
+                    className="asset-thumb"
+                    title={`Insert ${component.name} as a linked instance`}
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('text/carson-component', component.id)
+                    }}
+                    onClick={() => onInsertComponent(component.id)}
+                  >
+                    {component.thumbnail ? (
+                      <img src={component.thumbnail} alt="" />
+                    ) : (
+                      <span className="asset-thumb-empty" aria-hidden />
+                    )}
+                    <span>{component.name}</span>
                   </button>
                 ))}
+            </div>
+          )}
+          {documentMeta && documentMeta.components.some((component) => component.kind === 'stack') ? (
+            <>
+              <h3>Treatment stacks</h3>
+              <div className="preset-row">
+                {documentMeta.components
+                  .filter((component) => component.kind === 'stack')
+                  .map((component) => (
+                    <button
+                      key={component.id}
+                      type="button"
+                      title={`Apply “${component.name}” to the selected layer`}
+                      onClick={() => onInsertComponent(component.id)}
+                      disabled={!selected}
+                    >
+                      {component.name}
+                    </button>
+                  ))}
               </div>
             </>
           ) : null}
-          <button type="button" title="Save the current selection as a reusable component" onClick={onSaveSelectionAsComponent} disabled={!selected}>
+          <button type="button" title="Save the current selection as a reusable component with overrides" onClick={onSaveSelectionAsComponent} disabled={!selected}>
             Save selection as component
           </button>
         </div>

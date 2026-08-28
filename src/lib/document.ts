@@ -23,11 +23,14 @@ export type DocumentVariant = {
   thumbnail?: string
 }
 
+export type ComponentKind = 'object' | 'stack'
+
 export type SavedComponent = {
   id: string
   name: string
   canvas: Record<string, unknown>
   thumbnail?: string
+  kind?: ComponentKind
 }
 
 export type DocumentMeta = {
@@ -81,6 +84,21 @@ export function normalizeDocumentMeta(doc: DocumentMeta): DocumentMeta {
     gestures: doc.gestures ?? [],
     characterStyles: doc.characterStyles ?? [],
     paragraphStyles: doc.paragraphStyles ?? [],
+    components: (doc.components ?? []).map((component) => ({
+      ...component,
+      kind: component.kind ?? 'object',
+    })),
+  }
+}
+
+export function findComponent(doc: DocumentMeta, componentId: string): SavedComponent | undefined {
+  return doc.components.find((component) => component.id === componentId)
+}
+
+export function upsertComponent(doc: DocumentMeta, component: SavedComponent): DocumentMeta {
+  return {
+    ...doc,
+    components: [component, ...doc.components.filter((item) => item.id !== component.id)].slice(0, 24),
   }
 }
 

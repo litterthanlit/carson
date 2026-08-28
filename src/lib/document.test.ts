@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { applyPosterPreset } from './editorModel'
 import {
   createDefaultDocument,
+  findComponent,
   findVariant,
   forkVariant,
   mergeVariantCanvas,
   normalizeDocumentMeta,
   renameVariant,
+  upsertComponent,
   withPrintSettings,
   type DocumentMeta,
 } from './document'
@@ -72,6 +74,34 @@ describe('document variants', () => {
     const doc = sampleDoc()
     const legacy = { ...doc, gestures: undefined } as unknown as DocumentMeta
     expect(normalizeDocumentMeta(legacy).gestures).toEqual([])
+  })
+})
+
+describe('components', () => {
+  it('upsertComponent prepends and replaces by id', () => {
+    const first = upsertComponent(sampleDoc(), {
+      id: 'comp-1',
+      name: 'Mark',
+      canvas: { type: 'group' },
+      kind: 'object',
+    })
+    const updated = upsertComponent(first, {
+      id: 'comp-1',
+      name: 'Mark v2',
+      canvas: { type: 'group', objects: [] },
+      kind: 'object',
+    })
+    expect(updated.components).toHaveLength(1)
+    expect(findComponent(updated, 'comp-1')?.name).toBe('Mark v2')
+  })
+
+  it('normalizeDocumentMeta defaults legacy component kind to object', () => {
+    const doc = sampleDoc()
+    const legacy = {
+      ...doc,
+      components: [{ id: 'c1', name: 'Old', canvas: {} }],
+    } as DocumentMeta
+    expect(normalizeDocumentMeta(legacy).components[0]?.kind).toBe('object')
   })
 })
 
