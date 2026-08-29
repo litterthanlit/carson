@@ -893,6 +893,7 @@ input[type='color'] {
 }
 
 .canvas-stage {
+  position: relative;
   min-width: 0;
   min-height: calc(100dvh - 40px);
   display: grid;
@@ -1685,6 +1686,77 @@ input[type='color'] {
   margin: 12px 0 16px;
   padding-left: 18px;
   font-size: 13px;
+}
+
+.onboarding-coach {
+  position: absolute;
+  z-index: 16;
+  left: 50%;
+  bottom: 56px;
+  width: min(400px, calc(100% - 32px));
+  padding: 14px 16px 12px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.workspace:has(.instruments-palette) .onboarding-coach {
+  left: calc(50% + 124px);
+}
+
+.onboarding-coach h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.onboarding-coach p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.onboarding-coach-kicker {
+  margin: 0 0 4px;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.onboarding-coach-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.onboarding-coach-hint {
+  font: 500 12px/1.3 var(--font);
+  color: var(--text);
+}
+
+.onboarding-coach-row button {
+  flex-shrink: 0;
+}
+
+.editor-shell[data-tour='scatter'] [data-tour='scatter'],
+.editor-shell[data-tour='xerox'] [data-tour='xerox'],
+.editor-shell[data-tour='reroll'] [data-tour='reroll'],
+.editor-shell[data-tour='undo'] [data-tour='undo'] {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  animation: tour-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tour-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(20 115 230 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(20 115 230 / 0);
+  }
 }
 
 .asset-grid {

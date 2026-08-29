@@ -54,7 +54,7 @@ export const TopBar = memo(function TopBar({
       </div>
       <TensionDial value={tension} onChange={onTensionChange} onCommit={onTensionCommit} />
       <div className="top-actions" aria-label="Poster actions">
-        <button type="button" className="icon-button" aria-label="Undo" title="Undo (Cmd+Z)" onClick={onUndo}>
+        <button type="button" className="icon-button" data-tour="undo" aria-label="Undo" title="Undo (Cmd+Z)" onClick={onUndo}>
           <Undo2 size={15} />
         </button>
         <button type="button" className="icon-button" aria-label="Redo" title="Redo (Cmd+Shift+Z)" onClick={onRedo}>

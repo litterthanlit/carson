@@ -149,7 +149,13 @@ export function InstrumentsPalette({
           >
             <Shuffle size={16} /> Scramble <ScopeAll />
           </button>
-          <button type="button" title="Scatter the selected layers — press R to re-roll" onClick={onScatter} disabled={!selected}>
+          <button
+            type="button"
+            data-tour="scatter"
+            title="Scatter the selected layers — press R to re-roll"
+            onClick={onScatter}
+            disabled={!selected}
+          >
             <Shuffle size={16} /> Scatter <ScopeSel />
           </button>
           <button type="button" title="Browse blur, stylize, color, and Carson print filters with live preview" onClick={onOpenFilterGallery} disabled={!selected}>
@@ -225,7 +231,13 @@ export function InstrumentsPalette({
           <button type="button" title="Copy Machine, then Scatter, then Copy Machine" onClick={onApplyCopyScatterCopyGesture} disabled={!selected}>
             <Repeat size={16} /> Copy → Scatter → Copy <ScopeSel />
           </button>
-          <button type="button" title="Re-photocopy the selected layer" onClick={onApplyXerox} disabled={!selected}>
+          <button
+            type="button"
+            data-tour="xerox"
+            title="Re-photocopy the selected layer"
+            onClick={onApplyXerox}
+            disabled={!selected}
+          >
             <ScanLine size={16} /> Copy selected <ScopeSel />
           </button>
           <button type="button" title="Add a faint misregistered print echo" onClick={onAddMisprintDuplicate} disabled={!selected}>

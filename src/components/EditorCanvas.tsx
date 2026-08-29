@@ -20,6 +20,7 @@ type EditorCanvasProps = {
   scrollRef: RefObject<HTMLDivElement | null>
   hud?: ReactNode
   stackBar?: ReactNode
+  coach?: ReactNode
   onPresetChange: (presetId: PosterPresetId) => void
   onCustomSizeChange: (size: { width: number; height: number }) => void
   onSwitchArtboard: (artboardId: string) => void
@@ -57,6 +58,7 @@ export const EditorCanvas = memo(function EditorCanvas({
   scrollRef,
   hud,
   stackBar,
+  coach,
   onPresetChange,
   onCustomSizeChange,
   onSwitchArtboard,
@@ -183,6 +185,8 @@ export const EditorCanvas = memo(function EditorCanvas({
           <button
             type="button"
             className="reroll-button"
+            data-tour="reroll"
+            aria-label="Re-roll last accident"
             title={`Undo and re-run ${lastChaos.label} with a new seed (R)`}
             onClick={onReroll}
           >
@@ -241,6 +245,7 @@ export const EditorCanvas = memo(function EditorCanvas({
         onSelect={onRestoreVariant}
         onFork={onForkVariant}
       />
+      {coach}
     </section>
   )
 })

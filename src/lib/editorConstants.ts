@@ -50,7 +50,7 @@ export const FONT_STACKS = [
 ]
 
 export const BLEND_MODES = FULL_BLEND_MODES
-export const ONBOARDING_KEY = 'carson.onboarding.v1'
+export const ONBOARDING_KEY = 'carson.onboarding.v2'
 export const ACCENTS = ['#05b6d4', '#e11d48', '#a3e635']
 export const ZOOM_LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8]
 export const SNAP_SCREEN_THRESHOLD = 6

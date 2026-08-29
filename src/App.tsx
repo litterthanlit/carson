@@ -83,6 +83,12 @@ import {
   ONBOARDING_KEY,
   ZOOM_LEVELS,
 } from './lib/editorConstants'
+import {
+  advanceWalkthrough,
+  walkthroughCopy,
+  type WalkthroughEvent,
+  type WalkthroughStep,
+} from './lib/onboardingWalkthrough'
 import { addPosterTreatment, readPosterTreatments, writePosterTreatments } from './lib/posterTreatments'
 import { captureLayerOrder, captureObjectPatch } from './lib/historyObject'
 import {
@@ -140,6 +146,7 @@ import { LiveSelectionHud } from './components/LiveSelectionHud'
 import { ToolRail } from './components/ToolRail'
 import { TopBar } from './components/TopBar'
 import { TreatmentChips } from './components/TreatmentChips'
+import { OnboardingCoach } from './components/OnboardingCoach'
 import type { TexturePlacement } from './components/TextureGalleryModal'
 import type { FilterPreset } from './lib/filterGallery'
 import { paramsForTreatment } from './lib/filterGallery'
@@ -243,6 +250,7 @@ function App() {
   const displayScaleRef = useRef(1)
   const guidesRef = useRef<{ v: number[]; h: number[] }>({ v: [], h: [] })
   const lastChaosRef = useRef<ChaosRun | null>(null)
+  const walkthroughStepRef = useRef<WalkthroughStep | null>(null)
   const autosaveTimerRef = useRef<number | null>(null)
   const nudgeTimerRef = useRef<number | null>(null)
   const layerSyncTimerRef = useRef<number | null>(null)
@@ -317,6 +325,8 @@ function App() {
   const [printDpi, setPrintDpi] = useState(300)
   const [bleedMm, setBleedMm] = useState(3)
   const [onboardingOpen, setOnboardingOpen] = useState(() => !localStorage.getItem(ONBOARDING_KEY))
+  const [walkthroughStep, setWalkthroughStep] = useState<WalkthroughStep | null>(null)
+  walkthroughStepRef.current = walkthroughStep
   const [variantCompare, setVariantCompare] = useState<{
     variantId: string
     currentThumbnail: string
@@ -634,8 +644,7 @@ function App() {
   const keyActionsRef = useRef<Record<string, () => void>>({})
   keyActionsRef.current = {
     undo: () => {
-      clearBlendPreview({ render: false })
-      void undoAsync()
+      void handleUserUndo()
     },
     redo: () => {
       clearBlendPreview({ render: false })
@@ -1365,6 +1374,7 @@ function App() {
       canvas.requestRenderAll()
     }
     await last.perform(newSeed())
+    noteWalkthrough('reroll')
   }
 
   function selectedTargetIds() {
@@ -2409,7 +2419,49 @@ function App() {
   function completeOnboarding() {
     localStorage.setItem(ONBOARDING_KEY, 'done')
     setOnboardingOpen(false)
+    setWalkthroughStep(null)
+    walkthroughStepRef.current = null
     setStatus('Try Scatter, then Xerox — press R to re-roll')
+  }
+
+  function startWalkthrough() {
+    const canvas = canvasRef.current
+    const headline = canvas?.getObjects().find((object) => readObjectProp(object, 'name') === 'Oversized headline')
+    if (canvas && headline) {
+      canvas.setActiveObject(headline)
+      canvas.requestRenderAll()
+      syncSelected()
+    }
+    setPenMode(false)
+    setEditorTool('instruments')
+    setOnboardingOpen(false)
+    setWalkthroughStep('scatter')
+    walkthroughStepRef.current = 'scatter'
+    setStatus(walkthroughCopy('scatter').status)
+    scrollRef.current?.focus({ preventScroll: true })
+  }
+
+  function noteWalkthrough(event: WalkthroughEvent) {
+    const current = walkthroughStepRef.current
+    if (!current) return
+    const next = advanceWalkthrough(current, event)
+    if (next === current) return
+    if (next === 'done') {
+      localStorage.setItem(ONBOARDING_KEY, 'done')
+      setWalkthroughStep(null)
+      walkthroughStepRef.current = null
+      setStatus("That's the whole game — re-roll, undo, keep going")
+      return
+    }
+    setWalkthroughStep(next)
+    walkthroughStepRef.current = next
+    setStatus(walkthroughCopy(next).status)
+  }
+
+  async function handleUserUndo() {
+    clearBlendPreview({ render: false })
+    await undoAsync()
+    noteWalkthrough('undo')
   }
 
   async function duplicateSelected() {
@@ -2849,7 +2901,10 @@ function App() {
   }
 
   async function applyXeroxToSelected(seed = newSeed()) {
-    void applyTreatmentToSelection('xerox', { generation: xeroxGeneration }, 'xerox copy', seed)
+    const object = activeObject()
+    if (!object || object.type === 'activeselection') return
+    await applyTreatmentToSelection('xerox', { generation: xeroxGeneration }, 'xerox copy', seed)
+    noteWalkthrough('xerox')
   }
 
   async function applyCopyMachineToSelected(seed = newSeed()) {
@@ -3101,6 +3156,7 @@ function App() {
     await refreshTreatmentStack(object)
     trackChaos('Scatter', seed, targetIds, (next) => scatterSelected(next))
     commitHistory(`Scattered selection #${seed}`)
+    noteWalkthrough('scatter')
   }
 
   async function sliceSelected(direction: 'horizontal' | 'vertical', seed = newSeed()) {
@@ -3827,11 +3883,11 @@ function App() {
   ]
 
   return (
-    <main className="editor-shell">
+    <main className="editor-shell" data-tour={walkthroughStep ?? undefined}>
       <Suspense fallback={null}>
         {commandOpen ? <CommandPalette open commands={commands} onClose={() => setCommandOpen(false)} /> : null}
         {onboardingOpen ? (
-          <OnboardingModal open onStart={completeOnboarding} onSkip={completeOnboarding} />
+          <OnboardingModal open onStart={startWalkthrough} onSkip={completeOnboarding} />
         ) : null}
         {variantCompare ? (
           <VariantCompareModal
@@ -3868,8 +3924,7 @@ function App() {
         onTensionChange={handleTensionChange}
         onTensionCommit={commitTension}
         onUndo={() => {
-          clearBlendPreview({ render: false })
-          void undoAsync()
+          void handleUserUndo()
         }}
         onRedo={() => {
           clearBlendPreview({ render: false })
@@ -3999,6 +4054,11 @@ function App() {
                 onUpdateActive={updateActive}
                 onFinalizeActive={finalizeActive}
               />
+            ) : null
+          }
+          coach={
+            walkthroughStep ? (
+              <OnboardingCoach step={walkthroughStep} onSkip={completeOnboarding} />
             ) : null
           }
           onPresetChange={(id) => handlePresetChange(id)}

@@ -29,3 +29,7 @@ public/textures/catalog.json
 *.njsproj
 *.sln
 *.sw?
+
+# Verification run state (pid, vite log, Playwright profile)
+.cursor/skills/verify-carson/.run/
+
