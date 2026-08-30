@@ -162,6 +162,33 @@ const FEATURES = {
     await status.waitFor()
     await capture(page, outDir, 'after-undo')
   },
+
+  async 'variations-trail'(page, outDir) {
+    const trail = page.getByRole('region', { name: 'Exploration trail' })
+    await trail.waitFor()
+    await openTab(page, 'Layers')
+    await layerSelect(page, 'Oversized headline').click()
+    await page.getByRole('button', { name: 'Instruments' }).click()
+    await page.getByRole('complementary', { name: 'Instruments' }).waitFor()
+    await page.getByRole('button', { name: 'Scatter', exact: true }).click()
+    const scattered = trail.getByRole('button', { name: /Scattered selection/ })
+    await scattered.waitFor()
+    await page.getByRole('button', { name: 'Move tool' }).click()
+    await capture(page, outDir, 'after-scatter')
+    await trail.getByRole('button', { name: 'Fork', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: /Forked Variant/ }).waitFor()
+    await trail.getByRole('button', { name: /Started a new poster/ }).click()
+    await page.getByRole('status').filter({ hasText: /Started a new poster/ }).waitFor()
+    await trail.getByRole('button', { name: /Started a new poster \(current\)/ }).waitFor()
+    await capture(page, outDir, 'after-jump')
+    await trail.getByRole('button', { name: /Comps gallery/ }).click()
+    const gallery = page.getByRole('dialog', { name: 'Comps' })
+    await gallery.waitFor()
+    await gallery.getByRole('button', { name: 'Compare' }).click()
+    const compare = page.getByRole('dialog', { name: 'Compare variations' })
+    await compare.waitFor()
+    await capture(page, outDir, 'after-compare')
+  },
 }
 
 const args = parseArgs(process.argv.slice(2))

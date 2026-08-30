@@ -3,6 +3,7 @@ import {
   canRedo,
   canUndo,
   createHistoryState,
+  jumpRestoreActions,
   opsSinceLastSnapshot,
   pushHistoryOp,
   redoState,
@@ -15,6 +16,40 @@ import {
 } from './historyLog'
 
 describe('historyLog', () => {
+  it('assigns an id when pushing an op', () => {
+    const state = pushHistoryOp(createHistoryState(), { type: 'snapshot', label: 'Start', data: '{}' })
+    expect(state.ops[0]?.id).toMatch(/^hop-/)
+  })
+
+  it('jumps to a snapshot with a single restore', () => {
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{"a":1}' })
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Xerox', data: '{"a":2}' })
+    expect(jumpRestoreActions(state, 0)).toEqual([{ kind: 'snapshot', data: '{"a":1}', label: 'Start' }])
+    expect(jumpRestoreActions(state, 1)).toEqual([{ kind: 'snapshot', data: '{"a":2}', label: 'Xerox' }])
+  })
+
+  it('jumps to an incremental op by restoring the prior snapshot then replaying', () => {
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{"a":1}' })
+    state = pushHistoryOp(state, {
+      type: 'treatment',
+      label: 'Xerox',
+      objectId: 'layer-1',
+      before: '[]',
+      after: '[{"id":"t1"}]',
+    })
+    expect(jumpRestoreActions(state, 1)).toEqual([
+      { kind: 'snapshot', data: '{"a":1}', label: 'Start' },
+      {
+        kind: 'treatment',
+        objectId: 'layer-1',
+        treatmentsJson: '[{"id":"t1"}]',
+        label: 'Redo: Xerox',
+      },
+    ])
+  })
+
   it('tracks ops and supports undo/redo', () => {
     let state = createHistoryState()
     state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{}' })

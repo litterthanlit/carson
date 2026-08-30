@@ -5,6 +5,7 @@ import { Dices, Grid3x3, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { PosterPreset, PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
 import { ExplorationTrail } from './ExplorationTrail'
+import type { TrailFrame } from '../lib/explorationTrail'
 
 type EditorCanvasProps = {
   poster: PosterPreset
@@ -13,7 +14,6 @@ type EditorCanvasProps = {
   isPanMode: boolean
   documentMeta: DocumentMeta | null
   lastChaos: { label: string; seed: number } | null
-  projectName: string
   presetId: PosterPresetId
   customSize: { width: number; height: number }
   canvasEl: RefObject<HTMLCanvasElement | null>
@@ -34,8 +34,14 @@ type EditorCanvasProps = {
   onPanMouseUp: () => void
   onAssetDrop: (assetId: string) => void
   onComponentDrop: (componentId: string) => void
-  onRestoreVariant: (variantId: string) => void
+  trailFrames: TrailFrame[]
+  trailOpIds: string[]
+  trailCursor: number
+  trailCollapsed: boolean
+  onToggleTrailCollapsed: () => void
+  onJumpTrail: (opId: string) => void
   onForkVariant: () => void
+  onOpenCompsGallery: () => void
   showLayoutGrid: boolean
   onToggleLayoutGrid: () => void
   layoutGuides: LayoutGuide[]
@@ -51,7 +57,6 @@ export const EditorCanvas = memo(function EditorCanvas({
   isPanMode,
   documentMeta,
   lastChaos,
-  projectName,
   presetId,
   customSize,
   canvasEl,
@@ -72,8 +77,14 @@ export const EditorCanvas = memo(function EditorCanvas({
   onPanMouseUp,
   onAssetDrop,
   onComponentDrop,
-  onRestoreVariant,
+  trailFrames,
+  trailOpIds,
+  trailCursor,
+  trailCollapsed,
+  onToggleTrailCollapsed,
+  onJumpTrail,
   onForkVariant,
+  onOpenCompsGallery,
   showLayoutGrid,
   onToggleLayoutGrid,
   layoutGuides,
@@ -240,10 +251,15 @@ export const EditorCanvas = memo(function EditorCanvas({
         </div>
       </div>
       <ExplorationTrail
-        variants={documentMeta?.variants ?? []}
-        activeLabel={projectName}
-        onSelect={onRestoreVariant}
+        frames={trailFrames}
+        opIds={trailOpIds}
+        cursor={trailCursor}
+        collapsed={trailCollapsed}
+        variantCount={documentMeta?.variants.length ?? 0}
+        onToggleCollapsed={onToggleTrailCollapsed}
+        onJump={onJumpTrail}
         onFork={onForkVariant}
+        onOpenGallery={onOpenCompsGallery}
       />
       {coach}
     </section>

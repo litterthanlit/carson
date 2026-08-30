@@ -5,12 +5,14 @@ export function VariantCompareModal({
   variant,
   currentThumbnail,
   onRestore,
+  onMerge,
   onClose,
 }: {
   open: boolean
   variant: DocumentVariant | null
   currentThumbnail: string | null
   onRestore: () => void
+  onMerge: () => void
   onClose: () => void
 }) {
   if (!open || !variant) return null
@@ -46,6 +48,9 @@ export function VariantCompareModal({
         <div className="button-row">
           <button type="button" className="primary-button" onClick={onRestore}>
             Restore {variant.name}
+          </button>
+          <button type="button" onClick={onMerge}>
+            Merge into current
           </button>
           <button type="button" onClick={onClose}>
             Keep editing

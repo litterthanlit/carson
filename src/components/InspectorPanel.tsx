@@ -193,6 +193,7 @@ export type InspectorPanelProps = {
   onOpenVariantCompare: (variantId: string) => void
   onMergeVariant: (variantId: string) => void
   onRenameVariant: (variantId: string) => void
+  onOpenCompsGallery: () => void
   printDpi: number
   onPrintDpiChange: (dpi: number) => void
   bleedMm: number
@@ -363,6 +364,7 @@ export function InspectorPanel({
   onOpenVariantCompare,
   onMergeVariant,
   onRenameVariant,
+  onOpenCompsGallery,
   printDpi,
   onPrintDpiChange,
   bleedMm,
@@ -1354,7 +1356,7 @@ export function InspectorPanel({
                 <kbd>Cmd+D</kbd> Duplicate · <kbd>Delete</kbd> Remove
               </li>
               <li>
-                <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant · <kbd>Cmd+F</kbd> Filter gallery
+                <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant · <kbd>Cmd+Shift+B</kbd> Comps gallery · <kbd>Cmd+F</kbd> Filter gallery
               </li>
               <li>
                 <kbd>Tab</kbd> Cycle layers (canvas focused) · <kbd>Shift+Tab</kbd> Reverse
@@ -1601,13 +1603,17 @@ export function InspectorPanel({
               Clip to shape
             </button>
           </div>
+          <h3>Variations</h3>
+          <p className="hint">
+            Fork with <kbd>Cmd+B</kbd>. Trail under the canvas is spatial undo. Comps gallery compares named looks.
+          </p>
+          <div className="button-row">
+            <button type="button" onClick={onOpenCompsGallery}>
+              Comps gallery
+            </button>
+          </div>
           {documentMeta && documentMeta.variants.length > 0 ? (
-            <>
-              <h3>Variations</h3>
-              <p className="hint">
-                Fork with <kbd>Cmd+B</kbd>, then restore or compare a branch.
-              </p>
-              <ul className="variant-list">
+            <ul className="variant-list">
                 {documentMeta.variants.map((variant) => (
                   <li key={variant.id} className="variant-card">
                     {variant.thumbnail ? (
@@ -1635,9 +1641,10 @@ export function InspectorPanel({
                     </div>
                   </li>
                 ))}
-              </ul>
-            </>
-          ) : null}
+            </ul>
+          ) : (
+            <p className="hint">No named comps yet.</p>
+          )}
         </div>
       ) : null}
 

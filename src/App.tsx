@@ -138,6 +138,15 @@ import {
 } from './lib/gestures'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
+import {
+  commitTrailFrame,
+  isTrailWorthy,
+  liveOpIds,
+  newTrailFrameId,
+  patchTrailThumbnail,
+  pruneTrailToOps,
+  type TrailFrame,
+} from './lib/explorationTrail'
 import type { CommandAction } from './lib/commands'
 import { EditorCanvas } from './components/EditorCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
@@ -221,6 +230,9 @@ const FilterGalleryModal = lazy(() =>
 )
 const TextureGalleryModal = lazy(() =>
   import('./components/TextureGalleryModal').then((module) => ({ default: module.TextureGalleryModal })),
+)
+const CompsGalleryModal = lazy(() =>
+  import('./components/CompsGalleryModal').then((module) => ({ default: module.CompsGalleryModal })),
 )
 
 type ChaosRun = {
@@ -331,6 +343,11 @@ function App() {
     variantId: string
     currentThumbnail: string
   } | null>(null)
+  const [trailFrames, setTrailFrames] = useState<TrailFrame[]>([])
+  const [trailOpIds, setTrailOpIds] = useState<string[]>([])
+  const [trailCursor, setTrailCursor] = useState(-1)
+  const [trailCollapsed, setTrailCollapsed] = useState(false)
+  const [compsGalleryOpen, setCompsGalleryOpen] = useState(false)
   const fontInputRef = useRef<HTMLInputElement | null>(null)
   const commitHistoryRef = useRef<(message: string) => void>(() => {})
   const commitTreatmentHistoryRef = useRef<
@@ -408,7 +425,19 @@ function App() {
   reconcileArtifactTreatmentsRef.current = reconcileArtifactTreatments
   refreshPosterTreatmentsRef.current = refreshPosterTreatments
 
-  const { commitHistory, undoAsync, redo, restoringRef, resetHistory } = useEditorHistory({
+  const fillTrailThumbnail = useCallback(async (opId: string) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    try {
+      const preview = canvas.toDataURL({ format: 'jpeg', quality: 0.7, multiplier: 0.1 })
+      const thumbnail = await createThumbnail(preview, 96)
+      setTrailFrames((frames) => patchTrailThumbnail(frames, opId, thumbnail))
+    } catch {
+      return
+    }
+  }, [])
+
+  const { commitHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId } = useEditorHistory({
     canvasRef,
     setStatus,
     syncSelected: () => syncSelected(),
@@ -420,6 +449,30 @@ function App() {
     commitPosterTreatmentHistoryRef,
     commitObjectPatchHistoryRef,
     commitLayerOrderHistoryRef,
+    onHistoryCommit: ({ reason, op, ops, cursor }) => {
+      const ids = liveOpIds(ops)
+      setTrailOpIds(ids)
+      setTrailCursor(cursor)
+      const opId = op.id
+      if (!opId) return
+      if (reason === 'reset') {
+        setTrailFrames([{ id: newTrailFrameId(), opId, label: op.label }])
+        void fillTrailThumbnail(opId)
+        return
+      }
+      if (!isTrailWorthy(op)) {
+        setTrailFrames((frames) => pruneTrailToOps(frames, ids))
+        return
+      }
+      setTrailFrames((frames) =>
+        commitTrailFrame(frames, ids, { id: newTrailFrameId(), opId, label: op.label }),
+      )
+      void fillTrailThumbnail(opId)
+    },
+    onHistoryCursorChange: (opId, cursor) => {
+      setTrailCursor(cursor)
+      if (!opId) return
+    },
     onAfterRestore: async () => {
       await reconcileArtifactTreatmentsRef.current()
       await refreshPosterTreatmentsRef.current()
@@ -676,6 +729,7 @@ function App() {
     },
     commandPalette: () => setCommandOpen(true),
     forkVariant: () => void forkVariation(),
+    openCompsGallery: () => setCompsGalleryOpen(true),
     togglePen: () => {
       setPenMode((value) => {
         const next = !value
@@ -791,7 +845,8 @@ function App() {
           actions.commandPalette()
         } else if (key === 'b') {
           event.preventDefault()
-          actions.forkVariant()
+          if (event.shiftKey) actions.openCompsGallery()
+          else actions.forkVariant()
         } else if (key === 'g' && !isTypingContext(event.target)) {
           event.preventDefault()
           if (event.shiftKey) actions.ungroup()
@@ -2047,7 +2102,7 @@ function App() {
     const thumbnail = await createThumbnail(preview, 120)
     setDocumentMeta(forkVariant(documentMeta, snapshot, name, thumbnail))
     setInspectorTab('layout')
-    setStatus(`Forked ${name} — click Restore in Layout to switch`)
+    setStatus(`Forked ${name} — open Comps to compare`)
     commitHistory(`Forked ${name}`)
   }
 
@@ -3822,6 +3877,7 @@ function App() {
     { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
+    { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
     { id: 'paint-mask', label: 'Paint layer mask', keywords: ['mask', 'brush', 'eraser', 'alpha'], scope: 'selection', disabled: !selected, run: () => paintBrushMask() },
     { id: 'invert-mask', label: 'Invert layer mask', keywords: ['mask', 'invert'], scope: 'selection', disabled: !selected, run: () => void invertSelectedMask() },
@@ -3897,7 +3953,34 @@ function App() {
             onRestore={() => {
               void restoreVariant(variantCompare.variantId)
             }}
+            onMerge={() => {
+              void mergeVariant(variantCompare.variantId)
+              setVariantCompare(null)
+            }}
             onClose={() => setVariantCompare(null)}
+          />
+        ) : null}
+        {compsGalleryOpen ? (
+          <CompsGalleryModal
+            open
+            variants={documentMeta?.variants ?? []}
+            onRestore={(variantId) => {
+              void restoreVariant(variantId)
+              setCompsGalleryOpen(false)
+            }}
+            onCompare={(variantId) => {
+              setCompsGalleryOpen(false)
+              void openVariantCompare(variantId)
+            }}
+            onMerge={(variantId) => {
+              void mergeVariant(variantId)
+              setCompsGalleryOpen(false)
+            }}
+            onRename={(variantId) => renameVariantById(variantId)}
+            onFork={() => {
+              void forkVariation()
+            }}
+            onClose={() => setCompsGalleryOpen(false)}
           />
         ) : null}
         {filterGalleryOpen ? (
@@ -4018,7 +4101,6 @@ function App() {
           isPanMode={isPanMode}
           documentMeta={documentMeta}
           lastChaos={lastChaos}
-          projectName={projectName}
           presetId={presetId}
           customSize={customSize}
           canvasEl={canvasEl}
@@ -4077,8 +4159,16 @@ function App() {
             if (asset) void insertAsset(asset)
           }}
           onComponentDrop={(componentId) => void placeComponentInstance(componentId)}
-          onRestoreVariant={(variantId) => void restoreVariant(variantId)}
+          trailFrames={trailFrames}
+          trailOpIds={trailOpIds}
+          trailCursor={trailCursor}
+          trailCollapsed={trailCollapsed}
+          onToggleTrailCollapsed={() => setTrailCollapsed((value) => !value)}
+          onJumpTrail={(opId) => {
+            void jumpToOpId(opId)
+          }}
           onForkVariant={() => void forkVariation()}
+          onOpenCompsGallery={() => setCompsGalleryOpen(true)}
           showLayoutGrid={showLayoutGrid}
           onToggleLayoutGrid={() => {
             setShowLayoutGrid((value) => {
@@ -4264,6 +4354,7 @@ function App() {
           onOpenVariantCompare={(variantId) => void openVariantCompare(variantId)}
           onMergeVariant={(variantId) => void mergeVariant(variantId)}
           onRenameVariant={(variantId) => renameVariantById(variantId)}
+          onOpenCompsGallery={() => setCompsGalleryOpen(true)}
           printDpi={printDpi}
           onPrintDpiChange={(dpi) => patchPrintSettings({ dpi })}
           bleedMm={bleedMm}

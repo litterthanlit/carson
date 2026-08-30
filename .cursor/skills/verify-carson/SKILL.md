@@ -57,6 +57,8 @@ Stable handles:
 - Buttons `Group`, `Ungroup`, `Save selection as component`, `Detach`, `Scramble layout`, banner `Export`
 - Instruments tool, then `Copy selected`
 - Status region `.stage-status` (`role=status`)
+- Region `Exploration trail`, buttons `Fork` and `Comps gallery`
+- Dialog `Comps`, dialog `Compare variations`
 
 `window.prompt` during Save selection is accepted as `Mark` by the driver.
 
@@ -88,4 +90,4 @@ Kills only the pid recorded in `run.json`. Removes the Playwright profile under 
 | `scripts/drive.mjs --feature <id>` | Plays one mapped feature |
 | `scripts/cleanup.sh` | Stops this run's Vite pid |
 
-Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `export-png`.
+Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `export-png`, `variations-trail`.

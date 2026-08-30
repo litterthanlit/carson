@@ -7,6 +7,8 @@ import { collectFontFamilies, ensureLibraryFonts } from '../lib/fonts'
 import { applyLayerOrder, applyObjectPatch } from '../lib/historyObject'
 import {
   createHistoryState,
+  indexOfOp,
+  jumpRestoreActions,
   pushHistoryOp,
   restoreActionForRedo,
   restoreActionForUndo,
@@ -37,6 +39,13 @@ type UseEditorHistoryOptions = {
     (objectId: string, label: string, before: string, after: string) => void
   >
   commitLayerOrderHistoryRef: RefObject<(label: string, before: string, after: string) => void>
+  onHistoryCommit?: (info: {
+    reason: 'commit' | 'reset'
+    op: HistoryOp
+    ops: HistoryOp[]
+    cursor: number
+  }) => void
+  onHistoryCursorChange?: (opId: string | null, cursor: number) => void
 }
 
 export function useEditorHistory({
@@ -54,9 +63,27 @@ export function useEditorHistory({
   commitPosterTreatmentHistoryRef,
   commitObjectPatchHistoryRef,
   commitLayerOrderHistoryRef,
+  onHistoryCommit,
+  onHistoryCursorChange,
 }: UseEditorHistoryOptions) {
   const historyLogRef = useRef<HistoryState>(createHistoryState())
   const restoringRef = useRef(false)
+  const onHistoryCommitRef = useRef(onHistoryCommit)
+  const onHistoryCursorChangeRef = useRef(onHistoryCursorChange)
+  onHistoryCommitRef.current = onHistoryCommit
+  onHistoryCursorChangeRef.current = onHistoryCursorChange
+
+  const notifyCursor = useCallback(() => {
+    const state = historyLogRef.current
+    onHistoryCursorChangeRef.current?.(state.ops[state.cursor]?.id ?? null, state.cursor)
+  }, [])
+
+  const notifyCommit = useCallback((reason: 'commit' | 'reset') => {
+    const state = historyLogRef.current
+    const op = state.ops[state.cursor]
+    if (!op) return
+    onHistoryCommitRef.current?.({ reason, op, ops: state.ops, cursor: state.cursor })
+  }, [])
 
   const restoreSnapshot = useCallback(
     async (snapshot: string, message: string) => {
@@ -159,8 +186,9 @@ export function useEditorHistory({
       syncSelected()
       syncLayers()
       setStatus(message)
+      notifyCommit('commit')
     },
-    [canvasRef, captureStyleBaseline, scheduleAutosave, setStatus, syncLayers, syncSelected],
+    [canvasRef, captureStyleBaseline, notifyCommit, scheduleAutosave, setStatus, syncLayers, syncSelected],
   )
 
   const pushIncrementalOp = useCallback(
@@ -184,8 +212,9 @@ export function useEditorHistory({
       syncSelected()
       syncLayers()
       setStatus(label)
+      notifyCommit('commit')
     },
-    [canvasRef, scheduleAutosave, setStatus, syncLayers, syncSelected],
+    [canvasRef, notifyCommit, scheduleAutosave, setStatus, syncLayers, syncSelected],
   )
 
   const commitTreatmentHistory = useCallback(
@@ -224,7 +253,8 @@ export function useEditorHistory({
       cursor: historyLogRef.current.cursor - 1,
     }
     await applyRestoreAction(action)
-  }, [applyRestoreAction])
+    notifyCursor()
+  }, [applyRestoreAction, notifyCursor])
 
   const redo = useCallback(() => {
     const action = restoreActionForRedo(historyLogRef.current)
@@ -233,16 +263,44 @@ export function useEditorHistory({
       ...historyLogRef.current,
       cursor: historyLogRef.current.cursor + 1,
     }
-    void applyRestoreAction(action)
-  }, [applyRestoreAction])
+    void applyRestoreAction(action).then(() => notifyCursor())
+  }, [applyRestoreAction, notifyCursor])
 
-  const resetHistory = useCallback((snapshot: string, label: string) => {
-    historyLogRef.current = pushHistoryOp(createHistoryState(), {
-      type: 'snapshot',
-      label,
-      data: snapshot,
-    })
-  }, [])
+  const resetHistory = useCallback(
+    (snapshot: string, label: string) => {
+      historyLogRef.current = pushHistoryOp(createHistoryState(), {
+        type: 'snapshot',
+        label,
+        data: snapshot,
+      })
+      notifyCommit('reset')
+    },
+    [notifyCommit],
+  )
+
+  const jumpToOpId = useCallback(
+    async (opId: string) => {
+      const state = historyLogRef.current
+      const target = indexOfOp(state, opId)
+      if (target < 0 || target === state.cursor) return
+      const actions = jumpRestoreActions(state, target)
+      historyLogRef.current = { ...state, cursor: target }
+      restoringRef.current = true
+      try {
+        for (const action of actions) {
+          if (!action) continue
+          await applyRestoreAction(action)
+          restoringRef.current = true
+        }
+      } finally {
+        restoringRef.current = false
+      }
+      const op = historyLogRef.current.ops[target]
+      if (op) setStatus(op.label)
+      notifyCursor()
+    },
+    [applyRestoreAction, notifyCursor, setStatus],
+  )
 
   commitHistoryRef.current = commitHistory
   commitTreatmentHistoryRef.current = commitTreatmentHistory
@@ -262,5 +320,6 @@ export function useEditorHistory({
     undoAsync,
     redo,
     resetHistory,
+    jumpToOpId,
   }
 }

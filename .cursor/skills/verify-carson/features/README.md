@@ -48,3 +48,4 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Component instances](./component-instances.md) covers save, insert, and detach of a linked mark.
 - [Xerox treatment](./xerox-treatment.md) covers Copy selected from Instruments and the Treatments tab.
 - [Export PNG](./export-png.md) covers the header Export control and a downloaded PNG.
+- [Variations trail](./variations-trail.md) covers the history filmstrip, fork, comps gallery, and compare.
