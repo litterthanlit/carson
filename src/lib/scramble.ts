@@ -67,6 +67,7 @@ const ARTIFACT_KEYS = [
   'glyphSourceId',
   'copyMachineSourceId',
   'copyGhostSourceId',
+  'decayMarkSourceId',
 ] as const
 
 /** Content layers only — skip locked, hidden, treatment artifacts, and copier ghosts. */

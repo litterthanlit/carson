@@ -47,6 +47,18 @@ describe('treatments', () => {
     expect(filters.length).toBeGreaterThan(2)
   })
 
+  it('lets Tension strengthen Age selected without changing stored amount', () => {
+    const treatment = { id: '2', type: 'decay' as const, seed: 2, enabled: true, params: { amount: 40 } }
+    const rested = buildTreatmentFilters([treatment], 1)
+    const restless = buildTreatmentFilters([treatment], 2)
+    const restedNoise = rested.find((filter) => filter.type === 'Noise')
+    const restlessNoise = restless.find((filter) => filter.type === 'Noise')
+    expect(Number((restlessNoise as { noise?: number } | undefined)?.noise)).toBeGreaterThan(
+      Number((restedNoise as { noise?: number } | undefined)?.noise),
+    )
+    expect(treatment.params.amount).toBe(40)
+  })
+
   it('builds cold-wash filter stack', () => {
     const filters = buildTreatmentFilters([
       { id: '1', type: 'cold-wash', seed: 1, enabled: true, params: {} },

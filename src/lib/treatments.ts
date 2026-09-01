@@ -63,10 +63,21 @@ import {
   renderCopyMachineTreatment,
   restoreCopyMachineSource,
 } from './copyMachineTreatment'
+import {
+  DECAY_MARK_SOURCE_ID_KEY,
+  DECAY_MARK_TREATMENT_ID_KEY,
+  decayMarkKindFromParams,
+  removeDecayMarkFragments,
+  removeDecayMarkFragmentsForSource,
+  renderDecayMarksTreatment,
+  type DecayMarkFragmentTagger,
+} from './decayMarksTreatment'
+import { scaleTreatmentParams } from './instruments'
 
 export type TreatmentType =
   | 'xerox'
   | 'decay'
+  | 'decay-marks'
   | 'distress'
   | 'scatter'
   | 'cold-wash'
@@ -97,7 +108,7 @@ export type TransformBaseline = {
   opacity: number
 }
 
-const ARTIFACT_TYPES = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
+const ARTIFACT_TYPES = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'decay-marks'])
 const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
 
 const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
@@ -106,6 +117,7 @@ const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
   tear: TEAR_SOURCE_ID_KEY,
   'bad-crop': BAD_CROP_SOURCE_ID_KEY,
   'glyph-break': GLYPH_SOURCE_ID_KEY,
+  'decay-marks': DECAY_MARK_SOURCE_ID_KEY,
 }
 
 const ARTIFACT_TREATMENT_KEYS: Partial<Record<TreatmentType, string>> = {
@@ -114,6 +126,7 @@ const ARTIFACT_TREATMENT_KEYS: Partial<Record<TreatmentType, string>> = {
   tear: TEAR_TREATMENT_ID_KEY,
   'bad-crop': BAD_CROP_TREATMENT_ID_KEY,
   'glyph-break': GLYPH_TREATMENT_ID_KEY,
+  'decay-marks': DECAY_MARK_TREATMENT_ID_KEY,
 }
 
 export function newTreatmentId(): string {
@@ -226,6 +239,13 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Xerox·${treatment.params.generation ?? 5}`
     case 'decay':
       return `Decay·${treatment.params.amount ?? 55}`
+    case 'decay-marks': {
+      const kind = decayMarkKindFromParams(treatment.params)
+      const amount = treatment.params.amount ?? 55
+      if (kind === 'fold') return `Fold·${amount}`
+      if (kind === 'all') return `Wear·${amount}`
+      return `Ink loss·${amount}`
+    }
     case 'distress':
       return `Distress·${treatment.params.intensity ?? 70}`
     case 'scatter':
@@ -255,22 +275,26 @@ export function treatmentLabel(treatment: Treatment): string {
   }
 }
 
-export function buildTreatmentFilters(treatments: Treatment[]): filters.BaseFilter<string, object>[] {
+export function buildTreatmentFilters(
+  treatments: Treatment[],
+  tensionScale = 1,
+): filters.BaseFilter<string, object>[] {
   const output: filters.BaseFilter<string, object>[] = []
   for (const treatment of treatments.filter((item) => item.enabled)) {
+    const params = scaleTreatmentParams(treatment.type, treatment.params, tensionScale)
     if (treatment.type === 'xerox') {
-      const profile = getPrintScanProfile(treatment.params.generation ?? 5)
+      const profile = getPrintScanProfile(params.generation ?? 5)
       output.push(markTreatmentFilter(new filters.Grayscale()))
       output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
       output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
       output.push(markTreatmentFilter(new filters.Blur({ blur: profile.blur })))
     } else if (treatment.type === 'decay') {
-      const profile = getLayerDecayProfile(treatment.params.amount ?? 55)
+      const profile = getLayerDecayProfile(params.amount ?? 55)
       output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
       output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
       output.push(markTreatmentFilter(new filters.Blur({ blur: profile.blur })))
     } else if (treatment.type === 'distress') {
-      const intensity = (treatment.params.intensity ?? 70) / 100
+      const intensity = (params.intensity ?? 70) / 100
       output.push(markTreatmentFilter(new filters.Contrast({ contrast: 0.2 + intensity * 0.5 })))
       output.push(markTreatmentFilter(new filters.Noise({ noise: 40 + intensity * 180 })))
       output.push(markTreatmentFilter(new filters.Blur({ blur: 0.05 + intensity * 0.12 })))
@@ -280,7 +304,7 @@ export function buildTreatmentFilters(treatments: Treatment[]): filters.BaseFilt
       output.push(markTreatmentFilter(new filters.BlendColor({ color: '#2f6f8f', mode: 'tint', alpha: 0.22 })))
       output.push(markTreatmentFilter(new filters.Noise({ noise: 85 })))
     } else if (treatment.type === 'fx' && isFxKind(treatment.fxKind)) {
-      output.push(...buildFxFilters(treatment.fxKind, treatment.params))
+      output.push(...buildFxFilters(treatment.fxKind, params))
     }
   }
   return output
@@ -328,7 +352,7 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
   }
   if (scatter) applyScatterTransform(object, scatter, tensionScale)
 
-  const built = buildTreatmentFilters(filterTreatments)
+  const built = buildTreatmentFilters(filterTreatments, tensionScale)
   const filterable = object as FabricImage
   if (typeof filterable.applyFilters === 'function') {
     const existing = (filterable.filters ?? []).filter((filter) => !isTreatmentFilter(filter))
@@ -337,11 +361,12 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
   }
 
   for (const treatment of filterTreatments) {
+    const params = scaleTreatmentParams(treatment.type, treatment.params, tensionScale)
     if (treatment.type === 'xerox') {
-      const profile = getPrintScanProfile(treatment.params.generation ?? 5)
+      const profile = getPrintScanProfile(params.generation ?? 5)
       object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
     } else if (treatment.type === 'decay') {
-      const profile = getLayerDecayProfile(treatment.params.amount ?? 55)
+      const profile = getLayerDecayProfile(params.amount ?? 55)
       object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
     } else if (treatment.type === 'cold-wash') {
       object.set({ opacity: 0.92, globalCompositeOperation: 'multiply' })
@@ -386,6 +411,7 @@ function removeAllArtifactsForSource(canvas: Canvas, sourceId: string) {
   removeTearFragmentsForSource(canvas, sourceId)
   removeBadCropFragmentsForSource(canvas, sourceId)
   removeGlyphFragmentsForSource(canvas, sourceId)
+  removeDecayMarkFragmentsForSource(canvas, sourceId)
 }
 
 export type ArtifactFragmentTaggers = {
@@ -394,6 +420,7 @@ export type ArtifactFragmentTaggers = {
   tear: TearFragmentTagger
   badCrop: BadCropFragmentTagger
   glyph: GlyphFragmentTagger
+  decayMarks: DecayMarkFragmentTagger
 }
 
 export async function renderTreatmentStackOnCanvas(
@@ -430,6 +457,10 @@ export async function renderTreatmentStackOnCanvas(
   for (const treatment of treatments.filter((item) => item.type === 'glyph-break')) {
     if (treatment.enabled) renderGlyphBreakTreatment(canvas, object, treatment, taggers.glyph)
     else removeGlyphFragments(canvas, treatment.id)
+  }
+  for (const treatment of treatments.filter((item) => item.type === 'decay-marks')) {
+    if (treatment.enabled) renderDecayMarksTreatment(canvas, object, treatment, taggers.decayMarks, tensionScale)
+    else removeDecayMarkFragments(canvas, treatment.id)
   }
 
   const copyMachineTreatments = treatments.filter((item) => item.type === 'copy-machine')

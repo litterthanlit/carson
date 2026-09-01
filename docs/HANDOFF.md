@@ -1,9 +1,12 @@
 # Carson — Agent Handoff
 
 **Repo:** https://github.com/litterthanlit/carson  
-**Branch:** `main` · latest: `fbd2606`  
+**Branch:** `main` · latest: `72dfc01`  
 **Read first:** [`docs/REIMAGINED.md`](./REIMAGINED.md) (vision + roadmap — source of truth)  
-**Horizon 2 work:** [`HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md) · **Phase B:** [`HANDOFF-HORIZON-2-PHASE-B.md`](./HANDOFF-HORIZON-2-PHASE-B.md) ← **start here**
+**Current work:** Horizon 3 — [`HANDOFF-HORIZON-3.md`](./HANDOFF-HORIZON-3.md) ← **start here**  
+**Horizon 2:** program closed (12/12 items have user-facing paths). Historical: [`HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md)
+
+The sections below are a **historical snapshot** (test counts, `App.tsx` size, session logs). Current architecture, leftovers, and the next PR live in the Horizon 3 handoff.
 
 ---
 
@@ -129,21 +132,20 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 
 ---
 
-## Next session — Horizon 2
+## Next session — Horizon 3
 
-See **[`docs/HANDOFF-HORIZON-2.md`](./HANDOFF-HORIZON-2.md)** for full scorecard, phases, and first-PR scope.
+See **[`docs/HANDOFF-HORIZON-3.md`](./HANDOFF-HORIZON-3.md)** for scorecard, phases, and first-PR scope.
 
-**Quick start:** Phase B — vectors & pen → [`HANDOFF-HORIZON-2-PHASE-B.md`](./HANDOFF-HORIZON-2-PHASE-B.md) (extract `usePathEditing` first).
+**Quick start:** Phase A — Serendipity Engine. Registry + decay marks landed. Next: remaining one-shots, then Gestures as performances, then Press Check. Do not start cloud, AI, marketplace, or tablet.
 
 ---
 
 ## Still open from REIMAGINED.md (high level)
 
-- **Horizon 2 gaps:** OpenType/styles, vector booleans, blend-mode hover preview, component overrides, tiled/CMYK/SVG export, editorial layout, layer groups
-- **§9 UX vision:** six-tool toolbar, floating treatment chips, global Tension dial, scope hover preview, exploration trail replacing status line
-- **Horizon 3:** cloud/CRDT, Serendipity Engine, Press Check, AI assistant, WebGPU, marketplace, native shell
+- **Horizon 2 leftovers:** canvas-drag snapshots; misprint/type strips still one-shot; click-to-place bezier; true CMYK plates
+- **Horizon 3:** Serendipity Engine + Press Check, cloud/CRDT, AI assistant (covenant), WebGPU, native shell, marketplace, cross-device
 
-REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, ~55–65% Horizon 2, 0% Horizon 3.
+REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, Horizon 2 **program closed**, ~12% Horizon 3.
 
 ---
 

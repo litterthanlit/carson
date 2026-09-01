@@ -27,6 +27,8 @@ export const HISTORY_PROPS = [
   'scrapeFragment',
   'copyMachineSourceId',
   'copyGhostSourceId',
+  'decayMarkSourceId',
+  'decayMarkTreatmentId',
   'path',
   'originalFill',
   'openTypeFeatures',

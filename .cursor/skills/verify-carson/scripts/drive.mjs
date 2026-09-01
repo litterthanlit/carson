@@ -123,6 +123,28 @@ const FEATURES = {
     await capture(page, outDir, 'treatments')
   },
 
+  async 'decay-marks'(page, outDir) {
+    await openTab(page, 'Layers')
+    await layerSelect(page, 'Oversized headline').click()
+    await page.getByRole('button', { name: 'Instruments' }).click()
+    await page.getByRole('complementary', { name: 'Instruments' }).waitFor()
+    await page.getByRole('button', { name: /Age selected/ }).click()
+    await page.getByRole('button', { name: /Ink loss/ }).click()
+    await page.getByRole('button', { name: /Fold marks/ }).click()
+    await page.getByRole('button', { name: 'Move tool' }).click()
+    await openTab(page, 'Treatments')
+    const empty = page.getByText('No layer treatments yet')
+    if (await empty.isVisible().catch(() => false)) fail('Treatments tab stayed empty after Age / Ink loss / Fold')
+    const body = await page.locator('body').innerText()
+    if (!/Decay·/.test(body)) fail('Age selected did not land a Decay chip')
+    if (!/Ink loss·/.test(body)) fail('Ink loss did not land a stack chip')
+    if (!/Fold·/.test(body)) fail('Fold marks did not land a stack chip')
+    const inspector = page.getByRole('complementary', { name: 'Inspector' })
+    await inspector.getByRole('button', { name: 'Re-roll seed' }).first().click()
+    await inspector.getByRole('button', { name: 'Bypass' }).first().click()
+    await capture(page, outDir, 'treatments')
+  },
+
   async 'export-png'(page, outDir) {
     const downloadPromise = page.waitForEvent('download', { timeout: 20000 })
     await page.getByRole('banner').getByRole('button', { name: 'Export' }).click()

@@ -667,6 +667,17 @@ export function InspectorPanel({
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                       </div>
+                    ) : treatment.type === 'decay' || treatment.type === 'decay-marks' ? (
+                      <div className="treatment-params nested">
+                        <Slider
+                          label="Amount"
+                          value={treatment.params.amount ?? 55}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { amount: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                      </div>
                     ) : treatment.type === 'fx' ? (
                       <div className="treatment-params nested">
                         {paramDefsForFx(treatment.fxKind).map((param) => (

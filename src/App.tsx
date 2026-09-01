@@ -20,7 +20,6 @@ import {
   createAccidentTransforms,
   createCropGuides,
   createDiagonalTextureLines,
-  createLayerDecayMarks,
   createPhotocopyNoise,
   createPrintScanArtifacts,
   createTypeStrips,
@@ -129,6 +128,8 @@ import {
   misprintCompanionPose,
 } from './lib/copyMachine'
 import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, rebakeCopyMachineTreatments } from './lib/copyMachineTreatment'
+import { omitDecayMarkFragmentsFromCanvasJSON } from './lib/decayMarksTreatment'
+import { getInstrument, instrumentUsesTension, resolveInstrumentParams, type InstrumentId } from './lib/instruments'
 import {
   applyGestureToObject,
   COPY_SCATTER_COPY_GESTURE,
@@ -1167,8 +1168,10 @@ function App() {
   function serializeCanvasForSave() {
     const canvas = canvasRef.current
     if (!canvas) return {}
-    return omitCopyMachineCompanionsFromCanvasJSON(
-      canvas.toObject(HISTORY_PROPS as unknown as string[]) as { objects?: unknown[] },
+    return omitDecayMarkFragmentsFromCanvasJSON(
+      omitCopyMachineCompanionsFromCanvasJSON(
+        canvas.toObject(HISTORY_PROPS as unknown as string[]) as { objects?: unknown[] },
+      ),
     )
   }
 
@@ -1854,7 +1857,9 @@ function App() {
     const active = activeObject()
     const objects =
       active?.type === 'activeselection'
-        ? canvas.getActiveObjects().filter((object) => !readObjectProp(object, 'scrapeFragment'))
+        ? canvas.getActiveObjects().filter(
+            (object) => !readObjectProp(object, 'scrapeFragment') && !readObjectProp(object, 'decayMarkSourceId'),
+          )
         : []
     if (!canGroupObjects(objects)) {
       setStatus('Select two or more layers to group')
@@ -2568,6 +2573,7 @@ function App() {
       .filter((object) => {
         if (object.visible === false || object.selectable === false || object.evented === false) return false
         if (readObjectProp(object, 'scrapeFragment')) return false
+        if (readObjectProp(object, 'decayMarkSourceId')) return false
         return true
       })
       .reverse()
@@ -2745,7 +2751,7 @@ function App() {
     const canvas = canvasRef.current
     if (!canvas) return
     for (const object of canvas.getObjects()) {
-      if (readTreatments(object).some((item) => item.type === 'scatter' || item.type === 'copy-machine')) {
+      if (readTreatments(object).some((item) => instrumentUsesTension(item.type))) {
         void refreshTreatmentStack(object)
       }
     }
@@ -2829,51 +2835,36 @@ function App() {
     }
     const targetIds = selectedTargetIds()
     captureTransformBaseline(object)
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = JSON.stringify(readTreatments(object))
     addTreatment(object, type, params, seed, extras)
     object.set({ objectCaching: true } as Partial<FabricObject>)
     await refreshTreatmentStack(object)
     trackChaos(label, seed, targetIds, (next) => void applyTreatmentToSelection(type, params, label, next, extras))
-    commitHistory(`Applied ${label} #${seed}`)
+    commitTreatmentHistoryRef.current(objectId, `Applied ${label} #${seed}`, before, JSON.stringify(readTreatments(object)))
+  }
+
+  async function playLayerInstrument(id: InstrumentId, seed = newSeed()) {
+    const instrument = getInstrument(id)
+    const overrides: Record<string, number> =
+      instrument.treatmentType === 'decay' || instrument.treatmentType === 'decay-marks'
+        ? { amount: decayAmount }
+        : {}
+    await applyTreatmentToSelection(
+      instrument.treatmentType,
+      resolveInstrumentParams(id, overrides),
+      instrument.name,
+      seed,
+    )
   }
 
   async function applyLayerDecayToSelected(seed = newSeed()) {
-    void applyTreatmentToSelection('decay', { amount: decayAmount }, 'layer decay', seed)
+    void playLayerInstrument('age', seed)
   }
 
   function addLayerDecayMarks(kind: 'ink-loss' | 'fold' | 'all', seed = newSeed()) {
-    const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object) return
-    const targetIds = selectedTargetIds()
-    const bounds = object.getBoundingRect()
-    const marks = createLayerDecayMarks(
-      {
-        id: String(readObjectProp(object, 'id') ?? 'layer'),
-        left: bounds.left,
-        top: bounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      },
-      { amount: decayAmount, random: createSeededRandom(seed) },
-    ).filter((mark) => kind === 'all' || mark.kind === kind)
-
-    marks.forEach((mark) => {
-      const decayMark = new Rect({
-        left: mark.left,
-        top: mark.top,
-        width: mark.width,
-        height: mark.height,
-        fill: mark.kind === 'ink-loss' ? '#f8f6ef' : '#111111',
-        opacity: mark.opacity,
-        angle: mark.angle,
-        globalCompositeOperation: mark.kind === 'ink-loss' ? 'source-over' : 'multiply',
-      })
-      tagObject(decayMark, 'shape', mark.kind === 'ink-loss' ? 'Ink loss' : 'Fold mark')
-      canvas.add(decayMark)
-    })
-
-    trackChaos(`Decay marks (${kind})`, seed, targetIds, (next) => addLayerDecayMarks(kind, next))
-    commitHistory(`Added ${kind === 'all' ? 'layer decay' : kind} marks #${seed}`)
+    const id: InstrumentId = kind === 'fold' ? 'fold' : kind === 'all' ? 'wear' : 'ink-loss'
+    void playLayerInstrument(id, seed)
   }
 
   async function addLayerDecayOffset() {
@@ -3872,6 +3863,8 @@ function App() {
       run: () => void scrambleCanvas(),
     },
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => void applyLayerDecayToSelected() },
+    { id: 'ink-loss', label: 'Ink loss', keywords: ['decay', 'ink', 'chip', 'wear'], scope: 'selection', disabled: !selected, run: () => addLayerDecayMarks('ink-loss') },
+    { id: 'fold-marks', label: 'Fold marks', keywords: ['decay', 'fold', 'crease', 'wear'], scope: 'selection', disabled: !selected, run: () => addLayerDecayMarks('fold') },
     { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
     { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
