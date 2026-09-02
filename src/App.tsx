@@ -22,9 +22,7 @@ import {
   createDiagonalTextureLines,
   createPhotocopyNoise,
   createPrintScanArtifacts,
-  createTypeStrips,
   getLayerDecayProfile,
-  getPrintScanProfile,
   type ExpressiveLegibility,
   type PosterPreset,
   type PosterPresetId,
@@ -125,10 +123,11 @@ import {
   COPY_MACHINE_DEFAULTS,
   copyMachineLayerSeeds,
   copyMachineParamsToRecord,
-  misprintCompanionPose,
 } from './lib/copyMachine'
 import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, rebakeCopyMachineTreatments } from './lib/copyMachineTreatment'
 import { omitDecayMarkFragmentsFromCanvasJSON } from './lib/decayMarksTreatment'
+import { misprintParamsFromGeneration, omitMisprintFragmentsFromCanvasJSON } from './lib/misprintTreatment'
+import { omitTypeStripFragmentsFromCanvasJSON } from './lib/typeStripsTreatment'
 import { getInstrument, instrumentUsesTension, resolveInstrumentParams, type InstrumentId } from './lib/instruments'
 import {
   applyGestureToObject,
@@ -1168,9 +1167,13 @@ function App() {
   function serializeCanvasForSave() {
     const canvas = canvasRef.current
     if (!canvas) return {}
-    return omitDecayMarkFragmentsFromCanvasJSON(
-      omitCopyMachineCompanionsFromCanvasJSON(
-        canvas.toObject(HISTORY_PROPS as unknown as string[]) as { objects?: unknown[] },
+    return omitTypeStripFragmentsFromCanvasJSON(
+      omitMisprintFragmentsFromCanvasJSON(
+        omitDecayMarkFragmentsFromCanvasJSON(
+          omitCopyMachineCompanionsFromCanvasJSON(
+            canvas.toObject(HISTORY_PROPS as unknown as string[]) as { objects?: unknown[] },
+          ),
+        ),
       ),
     )
   }
@@ -1858,7 +1861,11 @@ function App() {
     const objects =
       active?.type === 'activeselection'
         ? canvas.getActiveObjects().filter(
-            (object) => !readObjectProp(object, 'scrapeFragment') && !readObjectProp(object, 'decayMarkSourceId'),
+            (object) =>
+              !readObjectProp(object, 'scrapeFragment') &&
+              !readObjectProp(object, 'decayMarkSourceId') &&
+              !readObjectProp(object, 'misprintSourceId') &&
+              !readObjectProp(object, 'typeStripSourceId'),
           )
         : []
     if (!canGroupObjects(objects)) {
@@ -2574,6 +2581,8 @@ function App() {
         if (object.visible === false || object.selectable === false || object.evented === false) return false
         if (readObjectProp(object, 'scrapeFragment')) return false
         if (readObjectProp(object, 'decayMarkSourceId')) return false
+        if (readObjectProp(object, 'misprintSourceId')) return false
+        if (readObjectProp(object, 'typeStripSourceId')) return false
         return true
       })
       .reverse()
@@ -2846,10 +2855,21 @@ function App() {
 
   async function playLayerInstrument(id: InstrumentId, seed = newSeed()) {
     const instrument = getInstrument(id)
+    if (id === 'type-strips') {
+      const object = activeObject()
+      if (!object || object.type !== 'textbox') {
+        setStatus('Select type to print strips')
+        return
+      }
+    }
     const overrides: Record<string, number> =
       instrument.treatmentType === 'decay' || instrument.treatmentType === 'decay-marks'
         ? { amount: decayAmount }
-        : {}
+        : id === 'misprint'
+          ? misprintParamsFromGeneration(xeroxGeneration)
+          : id === 'type-strips'
+            ? { height: Math.max(18, poster.height * 0.018), minWidth: poster.width * 0.52 }
+            : {}
     await applyTreatmentToSelection(
       instrument.treatmentType,
       resolveInstrumentParams(id, overrides),
@@ -2988,26 +3008,8 @@ function App() {
     setStatus(`Ran ${targets.length} layer${targets.length === 1 ? '' : 's'} through the copier`)
   }
 
-  async function addMisprintDuplicate() {
-    const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object) return
-    const profile = getPrintScanProfile(xeroxGeneration)
-    const clone = await object.clone()
-    clone.set(
-      misprintCompanionPose({
-        left: object.left ?? 0,
-        top: object.top ?? 0,
-        angle: object.angle ?? 0,
-        offset: profile.misregistration,
-        opacity: 0.18 + profile.generation * 0.018,
-      }),
-    )
-    tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'image', 'Misprint offset')
-    canvas.add(clone)
-    canvas.sendObjectToBack(clone)
-    canvas.setActiveObject(object)
-    commitHistory('Added misprint offset')
+  async function addMisprintDuplicate(seed = newSeed()) {
+    void playLayerInstrument('misprint', seed)
   }
 
   function accidentTargets() {
@@ -3262,53 +3264,7 @@ function App() {
   }
 
   function addTypeStrip(seed = newSeed()) {
-    const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object || object.type !== 'textbox') return
-    const targetIds = selectedTargetIds()
-    const text = String(readObjectProp(object, 'text') ?? 'TYPE STRIP')
-    const bounds = object.getBoundingRect()
-    const strips = createTypeStrips(
-      {
-        id: String(readObjectProp(object, 'id') ?? 'type'),
-        text,
-        left: bounds.left,
-        top: bounds.top + bounds.height + 18,
-        width: Math.max(bounds.width, poster.width * 0.52),
-      },
-      { rows: 5, height: Math.max(18, poster.height * 0.018), gap: 4, jitter: 12, random: createSeededRandom(seed) },
-    )
-
-    strips.forEach((strip, index) => {
-      const block = new Rect({
-        left: strip.left,
-        top: strip.top,
-        width: strip.width,
-        height: strip.height,
-        fill: strip.inverted ? '#111111' : '#f8f6ef',
-        angle: strip.angle,
-        opacity: 0.96,
-      })
-      tagObject(block, 'shape', `Strip block ${index + 1}`)
-
-      const label = new Textbox(strip.text, {
-        left: strip.left + 6,
-        top: strip.top + 3,
-        width: strip.width - 12,
-        height: strip.height,
-        fontFamily: 'Arial Black',
-        fontSize: Math.max(10, strip.height * 0.58),
-        fontWeight: 900,
-        charSpacing: -20,
-        fill: strip.inverted ? '#f8f6ef' : '#111111',
-        angle: strip.angle,
-      })
-      tagObject(label, 'text', `Repeated type ${index + 1}`)
-      canvas.add(block, label)
-    })
-
-    trackChaos('Type strips', seed, targetIds, (next) => addTypeStrip(next))
-    commitHistory(`Added type strips #${seed}`)
+    void playLayerInstrument('type-strips', seed)
   }
 
   function breakSelectedType(seed = newSeed()) {
@@ -3865,6 +3821,8 @@ function App() {
     { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => void applyLayerDecayToSelected() },
     { id: 'ink-loss', label: 'Ink loss', keywords: ['decay', 'ink', 'chip', 'wear'], scope: 'selection', disabled: !selected, run: () => addLayerDecayMarks('ink-loss') },
     { id: 'fold-marks', label: 'Fold marks', keywords: ['decay', 'fold', 'crease', 'wear'], scope: 'selection', disabled: !selected, run: () => addLayerDecayMarks('fold') },
+    { id: 'misprint', label: 'Misprint offset', keywords: ['misprint', 'offset', 'ghost', 'print', 'echo'], scope: 'selection', disabled: !selected, run: () => void addMisprintDuplicate() },
+    { id: 'type-strips', label: 'Type strip', keywords: ['type', 'strip', 'repeat', 'print'], scope: 'selection', disabled: !selectedIsText, run: () => addTypeStrip() },
     { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
     { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },

@@ -145,6 +145,26 @@ const FEATURES = {
     await capture(page, outDir, 'treatments')
   },
 
+  async 'misprint-type-strips'(page, outDir) {
+    await openTab(page, 'Layers')
+    await layerSelect(page, 'Oversized headline').click()
+    await page.getByRole('button', { name: 'Instruments' }).click()
+    await page.getByRole('complementary', { name: 'Instruments' }).waitFor()
+    await page.getByRole('button', { name: /Misprint offset/ }).click()
+    await page.getByRole('button', { name: /Type strip/ }).click()
+    await page.getByRole('button', { name: 'Move tool' }).click()
+    await openTab(page, 'Treatments')
+    const empty = page.getByText('No layer treatments yet')
+    if (await empty.isVisible().catch(() => false)) fail('Treatments tab stayed empty after Misprint / Type strip')
+    const body = await page.locator('body').innerText()
+    if (!/Misprint·/.test(body)) fail('Misprint offset did not land a stack chip')
+    if (!/Type strip·/.test(body)) fail('Type strip did not land a stack chip')
+    const inspector = page.getByRole('complementary', { name: 'Inspector' })
+    await inspector.getByRole('button', { name: 'Re-roll seed' }).first().click()
+    await inspector.getByRole('button', { name: 'Bypass' }).first().click()
+    await capture(page, outDir, 'treatments')
+  },
+
   async 'export-png'(page, outDir) {
     const downloadPromise = page.waitForEvent('download', { timeout: 20000 })
     await page.getByRole('banner').getByRole('button', { name: 'Export' }).click()

@@ -52,6 +52,8 @@ export function canGroupObjects(objects: FabricObject[]): boolean {
     if (object.type === 'activeselection') return false
     if (readObjectProp(object, 'scrapeFragment')) return false
     if (readObjectProp(object, 'decayMarkSourceId')) return false
+    if (readObjectProp(object, 'misprintSourceId')) return false
+    if (readObjectProp(object, 'typeStripSourceId')) return false
     return true
   })
   return eligible.length >= 2
@@ -70,6 +72,8 @@ export function flattenLayerTree(objects: FabricObject[]): LayerTreeNode[] {
     for (const object of [...list].reverse()) {
       if (readObjectProp(object, 'scrapeFragment')) continue
       if (readObjectProp(object, 'decayMarkSourceId')) continue
+      if (readObjectProp(object, 'misprintSourceId')) continue
+      if (readObjectProp(object, 'typeStripSourceId')) continue
       const id = String(readObjectProp(object, 'id') ?? '')
       if (!id) continue
       rows.push({ id, depth, parentId, object })

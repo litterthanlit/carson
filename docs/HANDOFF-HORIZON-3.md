@@ -14,7 +14,7 @@ Turn Carson from a **local professional instrument** into the **category**: a st
 
 **Horizon 2 done as a numbered program.** You are working **Horizon 3 only** unless fixing a regression or a leftover that blocks 3.2.
 
-**Rough completion:** ~90% Horizon 2 · **~12% Horizon 3** (Instrument registry, decay marks on the stack, Gestures v1, Tension dial, Copy Machine, WKWebView shell — none of 3.1–3.7 are complete)
+**Rough completion:** ~90% Horizon 2 · **~18% Horizon 3** (Instrument registry, decay marks + misprint + type strips on the stack, Gestures v1, Tension dial, Copy Machine, WKWebView shell — none of 3.1–3.7 are complete)
 
 Do not claim an item complete without a **user-facing path**. Backend-only or test-only does not count. Read `REIMAGINED.md` before marking an item done.
 
@@ -42,7 +42,6 @@ These are **not** Horizon 3. Do them when they are in the way of Instruments, Pr
 | Leftover | Why it blocks H3 | Where |
 |----------|------------------|--------|
 | Canvas drag (`object:modified`) still full-snapshots | CRDT / infinite undo / 3.5 hitching | `useCanvasEvents.ts` |
-| Misprint offset and type strips are one-shot adds | 3.2 requires every chaos op to be an Instrument on the stack | `App.tsx` `addMisprintDuplicate`, `addTypeStrip` |
 | Pen is freehand `PencilBrush`, not click-to-place bezier | Not an H3 blocker | `App.tsx` pen mode |
 | Soft-proof CMYK, not true plates | Press Check export fidelity | `cmykPreview.ts` / `print.ts` |
 | Status line still sits above the trail | Cosmetic vs §9.5 | `EditorCanvas` `.stage-status` |
@@ -54,7 +53,7 @@ These are **not** Horizon 3. Do them when they are in the way of Instruments, Pr
 | ID | Item | Status | What exists | Missing |
 |----|------|--------|-------------|---------|
 | **3.1** | Cloud docs + realtime collab | **0%** | Local IndexedDB autosave; op log; variants + comps gallery | Accounts, share links, CRDT/multiplayer, pinned comments, named milestones, client-only comps view |
-| **3.2** | Serendipity Engine (flagship) | **~40%** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear on the layer stack; Tension scales registry intensity keys (including decay + decay-marks); Copy Machine; Gestures v1; Instruments palette | Remaining one-shots (misprint, type strips) on the registry; record Gestures from live play (not only from a stack snapshot); shareable Instrument/Gesture assets; **Press Check** as a live document treatment with print-faithful export |
+| **3.2** | Serendipity Engine (flagship) | **~50%** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear / Misprint / Type strip on the layer stack; Tension scales registry intensity keys (including decay, decay-marks, misprint offset, type-strip jitter); Copy Machine; Gestures v1; Instruments palette | Record Gestures from live play (not only from a stack snapshot); shareable Instrument/Gesture assets; **Press Check** as a live document treatment with print-faithful export |
 | **3.3** | AI studio assistant | **0%** | Cmd+K maps labels → handlers; scramble rearranges existing layers | Subject mask (editable, not cutout); Riff (6 layout variations of *this* composition); NL → visible slider moves; taste mirror from the user's own history. Hard lines below. |
 | **3.4** | Cross-device | **0%** | Desktop browser + thin macOS WKWebView | Tablet stylus treatment painting; phone review/comments; same cloud doc |
 | **3.5** | Performance re-platform | **~5%** | Copy Machine displacement is a **pure** `(imageData, seed, params) => imageData` designed to port to a shader; tiled raster export; 10k px cap | WebGPU tiled renderer at 60fps; workers for filter stacks; kill snapshot hitching on image-heavy docs and canvas drag |
@@ -147,8 +146,8 @@ This *is* the Horizon 3 bet. Copy Machine, Gestures v1, and Tension are embryos 
 **A1. Instrument registry — landed**  
 `src/lib/instruments.ts`: typed Instrument (name, params, scope, tension keys). Age / Ink loss / Fold / Wear play through `playLayerInstrument`. Tension commit refreshes every treatment type with intensity keys.
 
-**A2. Leftover one-shots onto the registry**  
-Decay marks **landed** as `decay-marks` stack artifacts. Still out: misprint offset, type strips.
+**A2. Leftover one-shots onto the registry — landed**  
+Decay marks, misprint offset, and type strips play through the registry onto the layer stack. Chip: re-roll, bypass, remove. Tension scales offset / jitter.
 
 **A3. Gestures as performances**  
 Record a chain of instrument plays (`slice → scatter 30% → xerox 3`), not only `gestureFromTreatments` of the current stack. Replay from Instruments + Cmd+K. Persist on `documentMeta.gestures`.
@@ -229,8 +228,10 @@ Every action commits history and appears on the trail.
 
 | File | Horizon 3 role |
 |------|----------------|
-| `src/lib/instruments.ts` | Typed Instrument registry — palette Age / Ink loss / Fold / Wear play through this |
+| `src/lib/instruments.ts` | Typed Instrument registry — palette Age / Ink loss / Fold / Wear / Misprint / Type strip play through this |
 | `src/lib/decayMarksTreatment.ts` | Ink-loss / fold / wear overlay as stack artifacts |
+| `src/lib/misprintTreatment.ts` | Misregistered echo as a stack companion |
+| `src/lib/typeStripsTreatment.ts` | Repeated type bars as stack companions |
 | `src/lib/treatments.ts` | Layer treatment types — Instrument registry wraps this |
 | `src/lib/copyMachine.ts` | First Instrument; WebGPU port target |
 | `src/lib/copyMachineTreatment.ts` | Companions, non-destructive render |
@@ -262,13 +263,13 @@ Every action commits history and appears on the trail.
 ### Copy Machine
 - Spatial bake is canvas2d `getImageData`. Fine for now; do not add a GL context only for export.
 - Ghost companion is a tagged layer — exclude from layer semantics like scrape fragments.
-- Tension already scales scatter/copy-machine spatial amplitude **and** registry intensity keys (Age, xerox, distress, decay-marks). New instruments must use `scaleTreatmentParams` / `gridTensionScale`, not a second global.
+- Tension already scales scatter/copy-machine spatial amplitude **and** registry intensity keys (Age, xerox, distress, decay-marks, misprint offset, type-strip jitter). New instruments must use `scaleTreatmentParams` / `gridTensionScale`, not a second global.
 
 ### Gestures
 - v1 is "current enabled stack → steps." It does not record order of *plays* across objects.
 - Built-in Copy→Scatter→Copy is a constant in `gestures.ts`, also wired in Instruments + Cmd+K.
 
-### Decay marks
+### Decay marks / misprint / type strips
 - Companions are omitted from save JSON and stripped on reconcile, then re-rendered from seed. Source stays visible (unlike slice/glyph).
 
 ### Scrape / masks
@@ -309,18 +310,17 @@ A designer can reach it in the running app without a console. `REIMAGINED.md` is
 
 ## Suggested next PR (copy-paste scope)
 
-**Landed:** Instrument registry + decay marks as a stack instrument (Age / Ink loss / Fold / Wear). Proof: verify-carson `decay-marks`.
+**Landed:** Instrument registry + decay marks, misprint offset, and type strips as stack instruments. Proof: verify-carson `decay-marks`, `misprint-type-strips`.
 
-**Title:** Misprint offset + type strips onto the Instrument registry
+**Title:** Gestures as performances
 
-**Why this next:** A2 is not done until every leftover one-shot is a stack instrument. Then A3 Gestures as performances, then **A4 Press Check** (the unique 3.2 piece). Do not start cloud / AI / marketplace / tablet.
+**Why this next:** A2 is done. A3 records a chain of instrument plays, not only `gestureFromTreatments` of the current stack. Then **A4 Press Check** (the unique 3.2 piece). Do not start cloud / AI / marketplace / tablet.
 
 **Acceptance criteria:**
-- [ ] Misprint offset and type strips go through the registry onto the layer treatment stack
-- [ ] Chip: re-roll, bypass, remove; source stays editable
-- [ ] Tension scales both instruments
-- [ ] Cmd+Z is incremental (`commitTreatmentHistory`) unless `shouldSnapshot()`
-- [ ] Save/reload reconciles
+- [ ] Playing Instruments records ordered steps (e.g. slice → scatter → xerox), not a snapshot of the current stack
+- [ ] Replay from Instruments + Cmd+K
+- [ ] Persist on `documentMeta.gestures`
+- [ ] Trail chips + Cmd+Z
 - [ ] Unit tests + verify-carson user path
 - [ ] No Press Check, no cloud, no AI in this PR
 
@@ -352,4 +352,4 @@ The deepest win is cultural: "made in Carson" is a recognizable quality — text
 
 ---
 
-*Updated 2026-09-01 · Instrument registry + decay marks landed · Horizon 3 ~12%*
+*Updated 2026-09-02 · Instrument registry + decay marks + misprint + type strips landed · Horizon 3 ~18%*

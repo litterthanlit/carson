@@ -3,6 +3,7 @@
  * Palette buttons resolve here; Tension scales intensity keys at render, not in stored params.
  */
 import { COPY_MACHINE_DEFAULTS, copyMachineParamsToRecord } from './copyMachine'
+import { misprintParamsFromGeneration } from './misprintTreatment'
 import type { TreatmentType } from './treatments'
 import { scaleInstrumentParams } from './instrumentTension'
 
@@ -15,6 +16,8 @@ export type InstrumentId =
   | 'wear'
   | 'xerox'
   | 'copy-machine'
+  | 'misprint'
+  | 'type-strips'
   | 'scatter'
   | 'distress'
   | 'cold-wash'
@@ -77,6 +80,22 @@ export const INSTRUMENTS: Instrument[] = [
     defaultParams: copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS),
     scope: 'layer',
     tensionKeys: ['contrast', 'grain', 'voids', 'wobble', 'wobbleFreq', 'drag', 'bands', 'ghost', 'ghostOffset'],
+  },
+  {
+    id: 'misprint',
+    name: 'Misprint offset',
+    treatmentType: 'misprint',
+    defaultParams: misprintParamsFromGeneration(5),
+    scope: 'layer',
+    tensionKeys: ['offset'],
+  },
+  {
+    id: 'type-strips',
+    name: 'Type strip',
+    treatmentType: 'type-strips',
+    defaultParams: { rows: 5, height: 18, gap: 4, jitter: 12 },
+    scope: 'layer',
+    tensionKeys: ['jitter'],
   },
   {
     id: 'scatter',

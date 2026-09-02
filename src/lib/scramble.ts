@@ -68,6 +68,8 @@ const ARTIFACT_KEYS = [
   'copyMachineSourceId',
   'copyGhostSourceId',
   'decayMarkSourceId',
+  'misprintSourceId',
+  'typeStripSourceId',
 ] as const
 
 /** Content layers only — skip locked, hidden, treatment artifacts, and copier ghosts. */

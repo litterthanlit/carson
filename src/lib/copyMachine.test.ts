@@ -201,7 +201,7 @@ describe('copyMachine CM-2 ghost', () => {
     expect(copyMachineGhostDelta(10)).toEqual({ dx: 10, dy: -4.5 })
   })
 
-  it('shares misprint companion pose with the one-shot action', () => {
+  it('shares misprint companion pose with the stack instrument', () => {
     expect(
       misprintCompanionPose({
         left: 100,

@@ -136,16 +136,16 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 
 See **[`docs/HANDOFF-HORIZON-3.md`](./HANDOFF-HORIZON-3.md)** for scorecard, phases, and first-PR scope.
 
-**Quick start:** Phase A — Serendipity Engine. Registry + decay marks landed. Next: remaining one-shots, then Gestures as performances, then Press Check. Do not start cloud, AI, marketplace, or tablet.
+**Quick start:** Phase A — Serendipity Engine. Registry + decay marks + misprint + type strips landed. Next: Gestures as performances, then Press Check. Do not start cloud, AI, marketplace, or tablet.
 
 ---
 
 ## Still open from REIMAGINED.md (high level)
 
-- **Horizon 2 leftovers:** canvas-drag snapshots; misprint/type strips still one-shot; click-to-place bezier; true CMYK plates
+- **Horizon 2 leftovers:** canvas-drag snapshots; click-to-place bezier; true CMYK plates
 - **Horizon 3:** Serendipity Engine + Press Check, cloud/CRDT, AI assistant (covenant), WebGPU, native shell, marketplace, cross-device
 
-REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, Horizon 2 **program closed**, ~12% Horizon 3.
+REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, Horizon 2 **program closed**, ~18% Horizon 3.
 
 ---
 

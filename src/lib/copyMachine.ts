@@ -471,7 +471,7 @@ export function copyMachineGhostDelta(ghostOffset: number): { dx: number; dy: nu
   }
 }
 
-/** Shared misprint/ghost placement for one-shot actions and treatment companions. */
+/** Shared misprint/ghost placement for the misprint instrument and Copy Machine companions. */
 export function misprintCompanionPose(options: {
   left: number
   top: number

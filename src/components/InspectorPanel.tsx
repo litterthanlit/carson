@@ -678,6 +678,44 @@ export function InspectorPanel({
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                       </div>
+                    ) : treatment.type === 'misprint' ? (
+                      <div className="treatment-params nested">
+                        <Slider
+                          label="Offset"
+                          value={treatment.params.offset ?? 10}
+                          min={0}
+                          max={40}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { offset: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Opacity"
+                          value={Math.round((treatment.params.opacity ?? 0.27) * 100)}
+                          min={4}
+                          max={60}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { opacity: value / 100 })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                      </div>
+                    ) : treatment.type === 'type-strips' ? (
+                      <div className="treatment-params nested">
+                        <Slider
+                          label="Rows"
+                          value={treatment.params.rows ?? 5}
+                          min={2}
+                          max={12}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { rows: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Jitter"
+                          value={treatment.params.jitter ?? 12}
+                          min={0}
+                          max={40}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { jitter: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                      </div>
                     ) : treatment.type === 'fx' ? (
                       <div className="treatment-params nested">
                         {paramDefsForFx(treatment.fxKind).map((param) => (

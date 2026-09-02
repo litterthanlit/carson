@@ -23,6 +23,8 @@ describe('isScrambleSourceLayer', () => {
     expect(isScrambleSourceLayer({ id: 'text-1', visible: false })).toBe(false)
     expect(isScrambleSourceLayer({ id: 'cut-1', sliceSourceId: 'text-1' })).toBe(false)
     expect(isScrambleSourceLayer({ id: 'ghost-1', copyMachineSourceId: 'text-1' })).toBe(false)
+    expect(isScrambleSourceLayer({ id: 'echo-1', misprintSourceId: 'text-1' })).toBe(false)
+    expect(isScrambleSourceLayer({ id: 'strip-1', typeStripSourceId: 'text-1' })).toBe(false)
     expect(isScrambleSourceLayer({ scrapeFragment: true, id: 'scrape-1' })).toBe(false)
     expect(isScrambleSourceLayer({})).toBe(false)
   })

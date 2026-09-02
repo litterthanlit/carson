@@ -23,6 +23,8 @@ import { cropModeFromParams } from '../lib/cropTreatment'
 import { applyAllLayerMasks } from '../lib/layerMask'
 import { stripCopyMachineCompanions } from '../lib/copyMachineTreatment'
 import { stripDecayMarkFragments } from '../lib/decayMarksTreatment'
+import { stripMisprintFragments } from '../lib/misprintTreatment'
+import { stripTypeStripFragments } from '../lib/typeStripsTreatment'
 import { withLayerSyncSuppressed } from '../lib/layerSync'
 import type { LayerKind } from '../types/editor'
 import { newSeed } from '../lib/random'
@@ -114,6 +116,12 @@ export function useTreatments({
             decayMarks: (fragment, mark) => {
               tagObject(fragment, 'fragment', mark.kind === 'ink-loss' ? 'Ink loss' : 'Fold mark')
             },
+            misprint: (fragment) => {
+              tagObject(fragment, 'fragment', 'Misprint offset')
+            },
+            typeStrips: (fragment, _strip, part) => {
+              tagObject(fragment, part === 'label' ? 'text' : 'fragment', part === 'label' ? 'Repeated type' : 'Type strip')
+            },
           },
           tensionScale(),
         )
@@ -130,8 +138,20 @@ export function useTreatments({
     await withLayerSyncSuppressed(async () => {
       stripCopyMachineCompanions(canvas)
       stripDecayMarkFragments(canvas)
+      stripMisprintFragments(canvas)
+      stripTypeStripFragments(canvas)
       await applyAllLayerMasks(canvas.getObjects())
-      const artifactTypes = new Set(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'copy-machine', 'decay-marks'])
+      const artifactTypes = new Set([
+        'slice',
+        'crop',
+        'tear',
+        'bad-crop',
+        'glyph-break',
+        'copy-machine',
+        'decay-marks',
+        'misprint',
+        'type-strips',
+      ])
       const sources = canvas.getObjects().filter((object) =>
         readTreatments(object).some((item) => artifactTypes.has(item.type)),
       )

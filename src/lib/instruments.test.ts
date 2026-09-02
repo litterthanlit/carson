@@ -33,6 +33,18 @@ describe('instrument registry', () => {
       treatmentType: 'decay-marks',
       defaultParams: { amount: 55, kind: 2 },
     })
+    expect(getInstrument('misprint')).toMatchObject({
+      name: 'Misprint offset',
+      treatmentType: 'misprint',
+      scope: 'layer',
+      tensionKeys: ['offset'],
+    })
+    expect(getInstrument('type-strips')).toMatchObject({
+      name: 'Type strip',
+      treatmentType: 'type-strips',
+      scope: 'layer',
+      tensionKeys: ['jitter'],
+    })
   })
 
   it('keeps mark kind when the decay amount slider overrides params', () => {
@@ -46,6 +58,8 @@ describe('instrument registry', () => {
     expect(instrumentUsesTension('xerox')).toBe(true)
     expect(instrumentUsesTension('scatter')).toBe(true)
     expect(instrumentUsesTension('copy-machine')).toBe(true)
+    expect(instrumentUsesTension('misprint')).toBe(true)
+    expect(instrumentUsesTension('type-strips')).toBe(true)
     expect(instrumentUsesTension('distress')).toBe(true)
     expect(instrumentUsesTension('cold-wash')).toBe(false)
   })
@@ -59,6 +73,8 @@ describe('instrument registry', () => {
       wobble: 70,
       dragAngle: 90,
     })
+    expect(scaleTreatmentParams('misprint', { offset: 10, opacity: 0.27 }, 2)).toEqual({ offset: 20, opacity: 0.27 })
+    expect(scaleTreatmentParams('type-strips', { rows: 5, jitter: 12 }, 2)).toEqual({ rows: 5, jitter: 24 })
   })
 
   it('pushes Age amount through Tension into a stronger decay profile', () => {

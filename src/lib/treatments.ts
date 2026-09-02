@@ -72,6 +72,22 @@ import {
   renderDecayMarksTreatment,
   type DecayMarkFragmentTagger,
 } from './decayMarksTreatment'
+import {
+  MISPRINT_SOURCE_ID_KEY,
+  MISPRINT_TREATMENT_ID_KEY,
+  removeMisprintFragments,
+  removeMisprintFragmentsForSource,
+  renderMisprintTreatment,
+  type MisprintFragmentTagger,
+} from './misprintTreatment'
+import {
+  TYPE_STRIP_SOURCE_ID_KEY,
+  TYPE_STRIP_TREATMENT_ID_KEY,
+  removeTypeStripFragments,
+  removeTypeStripFragmentsForSource,
+  renderTypeStripsTreatment,
+  type TypeStripFragmentTagger,
+} from './typeStripsTreatment'
 import { scaleTreatmentParams } from './instruments'
 
 export type TreatmentType =
@@ -88,6 +104,8 @@ export type TreatmentType =
   | 'glyph-break'
   | 'scrape'
   | 'copy-machine'
+  | 'misprint'
+  | 'type-strips'
   | 'fx'
 
 export type Treatment = {
@@ -108,8 +126,17 @@ export type TransformBaseline = {
   opacity: number
 }
 
-const ARTIFACT_TYPES = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'decay-marks'])
-const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break'])
+const ARTIFACT_TYPES = new Set<TreatmentType>([
+  'slice',
+  'crop',
+  'tear',
+  'bad-crop',
+  'glyph-break',
+  'decay-marks',
+  'misprint',
+  'type-strips',
+])
+const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'type-strips'])
 
 const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
   slice: SLICE_SOURCE_ID_KEY,
@@ -118,6 +145,8 @@ const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
   'bad-crop': BAD_CROP_SOURCE_ID_KEY,
   'glyph-break': GLYPH_SOURCE_ID_KEY,
   'decay-marks': DECAY_MARK_SOURCE_ID_KEY,
+  misprint: MISPRINT_SOURCE_ID_KEY,
+  'type-strips': TYPE_STRIP_SOURCE_ID_KEY,
 }
 
 const ARTIFACT_TREATMENT_KEYS: Partial<Record<TreatmentType, string>> = {
@@ -127,6 +156,8 @@ const ARTIFACT_TREATMENT_KEYS: Partial<Record<TreatmentType, string>> = {
   'bad-crop': BAD_CROP_TREATMENT_ID_KEY,
   'glyph-break': GLYPH_TREATMENT_ID_KEY,
   'decay-marks': DECAY_MARK_TREATMENT_ID_KEY,
+  misprint: MISPRINT_TREATMENT_ID_KEY,
+  'type-strips': TYPE_STRIP_TREATMENT_ID_KEY,
 }
 
 export function newTreatmentId(): string {
@@ -268,6 +299,10 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Scrape·${treatment.params.count ?? 7}`
     case 'copy-machine':
       return `Copy·#${treatment.seed}`
+    case 'misprint':
+      return `Misprint·${treatment.params.offset ?? 10}`
+    case 'type-strips':
+      return `Type strip·${treatment.params.rows ?? 5}`
     case 'fx':
       return fxChipLabel(treatment.fxKind, treatment.params)
     default:
@@ -412,6 +447,8 @@ function removeAllArtifactsForSource(canvas: Canvas, sourceId: string) {
   removeBadCropFragmentsForSource(canvas, sourceId)
   removeGlyphFragmentsForSource(canvas, sourceId)
   removeDecayMarkFragmentsForSource(canvas, sourceId)
+  removeMisprintFragmentsForSource(canvas, sourceId)
+  removeTypeStripFragmentsForSource(canvas, sourceId)
 }
 
 export type ArtifactFragmentTaggers = {
@@ -421,6 +458,8 @@ export type ArtifactFragmentTaggers = {
   badCrop: BadCropFragmentTagger
   glyph: GlyphFragmentTagger
   decayMarks: DecayMarkFragmentTagger
+  misprint: MisprintFragmentTagger
+  typeStrips: TypeStripFragmentTagger
 }
 
 export async function renderTreatmentStackOnCanvas(
@@ -461,6 +500,14 @@ export async function renderTreatmentStackOnCanvas(
   for (const treatment of treatments.filter((item) => item.type === 'decay-marks')) {
     if (treatment.enabled) renderDecayMarksTreatment(canvas, object, treatment, taggers.decayMarks, tensionScale)
     else removeDecayMarkFragments(canvas, treatment.id)
+  }
+  for (const treatment of treatments.filter((item) => item.type === 'misprint')) {
+    if (treatment.enabled) await renderMisprintTreatment(canvas, object, treatment, taggers.misprint, tensionScale)
+    else removeMisprintFragments(canvas, treatment.id)
+  }
+  for (const treatment of treatments.filter((item) => item.type === 'type-strips')) {
+    if (treatment.enabled) renderTypeStripsTreatment(canvas, object, treatment, taggers.typeStrips, tensionScale)
+    else removeTypeStripFragments(canvas, treatment.id)
   }
 
   const copyMachineTreatments = treatments.filter((item) => item.type === 'copy-machine')
