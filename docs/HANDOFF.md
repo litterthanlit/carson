@@ -25,7 +25,7 @@ Local poster editor — React 19 + Fabric.js 7. Moat = seeded, non-destructive c
 | **Filter Gallery** | `FilterGalleryModal` + `filterGallery.ts` / `filterPreview.ts` — live preview, wired from LeftRail + Cmd+K |
 | **Fundamentals** | Shortcuts, zoom/pan, IndexedDB autosave, snapping, layers (reorder/hide/lock/rename), scope badges |
 | **Treatments** | Non-destructive stacks: xerox, decay, distress, scatter, slice, crop, tear, bad-crop, glyph-break, **copy-machine** — chip UI + reorder/reroll/bypass |
-| **Gestures v1** | Built-in **Copy → Scatter → Copy** macro (LeftRail + Cmd+K); save treatment stack as gesture + replay from Inspector; persisted on `DocumentMeta.gestures` |
+| **Gestures** | Record instrument plays into a named performance (Instruments + Cmd+K); save stack as gesture still available; persisted on `DocumentMeta.gestures` |
 | **History** | `useEditorHistory` — full-canvas snapshot undo + **incremental layer-treatment ops** between snapshots (`historyLog.ts`) |
 | **Typography / color / vectors** | Google Fonts + upload, weight/width sliders, legibility readout, text-on-path, gradients, 16 blend modes, ellipse/line/star/pen |
 | **Path editing (v1)** | Inspector **Edit points** on paths — drag anchors + bezier handles (`pathEditing.ts`) |

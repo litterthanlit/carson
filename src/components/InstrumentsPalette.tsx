@@ -1,5 +1,6 @@
 import {
   Aperture,
+  Circle,
   Columns3,
   Copy,
   Crop,
@@ -22,6 +23,7 @@ import {
   Waves,
 } from 'lucide-react'
 import type { ExpressiveLegibility } from '../lib/editorModel'
+import type { Gesture } from '../lib/gestures'
 import { Slider } from './Slider'
 import { ScopeAll, ScopeSel } from './ScopeBadge'
 
@@ -30,6 +32,14 @@ export type InstrumentsPaletteProps = {
   selectedIsImage: boolean
   selectedIsText: boolean
   typeLegibility: ExpressiveLegibility
+  recording: boolean
+  performanceLabel: string
+  canSavePerformance: boolean
+  savedGestures: Gesture[]
+  onToggleRecording: () => void
+  onSavePerformance: () => void
+  onClearPerformance: () => void
+  onApplySavedGesture: (gesture: Gesture) => void
   typeIntensity: number
   xeroxGeneration: number
   accidentIntensity: number
@@ -85,6 +95,14 @@ export function InstrumentsPalette({
   selected,
   selectedIsImage,
   selectedIsText,
+  recording,
+  performanceLabel,
+  canSavePerformance,
+  savedGestures,
+  onToggleRecording,
+  onSavePerformance,
+  onClearPerformance,
+  onApplySavedGesture,
   typeLegibility,
   typeIntensity,
   xeroxGeneration,
@@ -138,6 +156,61 @@ export function InstrumentsPalette({
 }: InstrumentsPaletteProps) {
   return (
     <aside className="instruments-palette rail glass-panel" aria-label="Instruments">
+      <div className="panel-section">
+        <h2>Performance</h2>
+        <p className="performance-chain" role="status" aria-label="Recorded plays">
+          {performanceLabel}
+        </p>
+        <div className="preset-row">
+          <button
+            type="button"
+            className={recording ? 'recording' : undefined}
+            aria-pressed={recording}
+            aria-label={recording ? 'Stop recording gesture' : 'Record gesture'}
+            title={recording ? 'Stop capturing instrument plays' : 'Record a chain of instrument plays'}
+            onClick={onToggleRecording}
+          >
+            <Circle size={16} /> {recording ? 'Stop' : 'Record'}
+          </button>
+          <button
+            type="button"
+            aria-label="Save performance"
+            title="Save the recorded chain as a replayable gesture"
+            onClick={onSavePerformance}
+            disabled={!canSavePerformance}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            aria-label="Clear performance"
+            title="Discard recorded plays"
+            onClick={onClearPerformance}
+            disabled={!canSavePerformance}
+          >
+            Clear
+          </button>
+        </div>
+        {savedGestures.length > 0 ? (
+          <>
+            <h3 className="property-kicker">Saved gestures</h3>
+            <div className="preset-row">
+              {savedGestures.map((gesture) => (
+                <button
+                  key={gesture.id}
+                  type="button"
+                  title={`Play ${gesture.name} on the selected layer`}
+                  onClick={() => onApplySavedGesture(gesture)}
+                  disabled={!selected}
+                >
+                  {gesture.name}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
+
       <div className="panel-section">
         <h2>Play</h2>
         <div className="preset-row">

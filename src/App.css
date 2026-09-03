@@ -485,6 +485,21 @@ textarea:focus-visible {
   flex-shrink: 0;
 }
 
+.instruments-palette .performance-chain {
+  margin: 4px 0 0;
+  min-height: 2.4em;
+  font: 500 11px/1.35 var(--font-mono);
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.instruments-palette button.recording,
+.instruments-palette button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .inspector-column {
   display: flex;
   flex-direction: column;

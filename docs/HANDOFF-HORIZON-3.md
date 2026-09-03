@@ -14,7 +14,7 @@ Turn Carson from a **local professional instrument** into the **category**: a st
 
 **Horizon 2 done as a numbered program.** You are working **Horizon 3 only** unless fixing a regression or a leftover that blocks 3.2.
 
-**Rough completion:** ~90% Horizon 2 · **~18% Horizon 3** (Instrument registry, decay marks + misprint + type strips on the stack, Gestures v1, Tension dial, Copy Machine, WKWebView shell — none of 3.1–3.7 are complete)
+**Rough completion:** ~90% Horizon 2 · **~25% Horizon 3** (Instrument registry, decay marks + misprint + type strips on the stack, Gestures as performances, Tension dial, Copy Machine, WKWebView shell — 3.2 still needs Press Check; none of 3.1 / 3.3–3.7 are complete)
 
 Do not claim an item complete without a **user-facing path**. Backend-only or test-only does not count. Read `REIMAGINED.md` before marking an item done.
 
@@ -31,7 +31,7 @@ React 19 + Fabric.js 7 local poster editor. Moat = **seeded, non-destructive cha
 - **Persistence:** IndexedDB `carson-poster` via `src/lib/storage.ts`. No cloud. No Convex.
 - **Native:** bare WKWebView in `macos/Sources/Carson/main.swift` — window + load `web/index.html`. No menus, no `.carson` files, no native save/open.
 
-**260 tests** · always run `npm test && npm run build` before handoff. UI proof: [`.cursor/skills/verify-carson/SKILL.md`](../.cursor/skills/verify-carson/SKILL.md).
+**273 tests** · always run `npm test && npm run build` before handoff. UI proof: [`.cursor/skills/verify-carson/SKILL.md`](../.cursor/skills/verify-carson/SKILL.md).
 
 ---
 
@@ -53,7 +53,7 @@ These are **not** Horizon 3. Do them when they are in the way of Instruments, Pr
 | ID | Item | Status | What exists | Missing |
 |----|------|--------|-------------|---------|
 | **3.1** | Cloud docs + realtime collab | **0%** | Local IndexedDB autosave; op log; variants + comps gallery | Accounts, share links, CRDT/multiplayer, pinned comments, named milestones, client-only comps view |
-| **3.2** | Serendipity Engine (flagship) | **~50%** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear / Misprint / Type strip on the layer stack; Tension scales registry intensity keys (including decay, decay-marks, misprint offset, type-strip jitter); Copy Machine; Gestures v1; Instruments palette | Record Gestures from live play (not only from a stack snapshot); shareable Instrument/Gesture assets; **Press Check** as a live document treatment with print-faithful export |
+| **3.2** | Serendipity Engine (flagship) | **~65%** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear / Misprint / Type strip on the layer stack; Tension scales registry intensity keys (including decay, decay-marks, misprint offset, type-strip jitter); Copy Machine; Gestures as recorded performances (Instruments + Cmd+K); Instruments palette | Shareable Instrument/Gesture assets; **Press Check** as a live document treatment with print-faithful export |
 | **3.3** | AI studio assistant | **0%** | Cmd+K maps labels → handlers; scramble rearranges existing layers | Subject mask (editable, not cutout); Riff (6 layout variations of *this* composition); NL → visible slider moves; taste mirror from the user's own history. Hard lines below. |
 | **3.4** | Cross-device | **0%** | Desktop browser + thin macOS WKWebView | Tablet stylus treatment painting; phone review/comments; same cloud doc |
 | **3.5** | Performance re-platform | **~5%** | Copy Machine displacement is a **pure** `(imageData, seed, params) => imageData` designed to port to a shader; tiled raster export; 10k px cap | WebGPU tiled renderer at 60fps; workers for filter stacks; kill snapshot hitching on image-heavy docs and canvas drag |
@@ -83,10 +83,11 @@ Copy Machine                        // lib/copyMachine.ts (pure warp)
   Tension multiplies spatial params
   Designed to swap the warp for WebGPU later without changing the treatment model
 
-Gestures v1                         // lib/gestures.ts
-  gestureFromTreatments(stack)      // snapshot of enabled steps
+Gestures                             // lib/gestures.ts
+  gestureFromTreatments(stack)      // snapshot of enabled steps (still available)
+  recordPlay() / gestureFromPerformance()
   COPY_SCATTER_COPY_GESTURE         // built-in macro
-  Stored on DocumentMeta.gestures   // not a live recording of plays
+  Stored on DocumentMeta.gestures
 
 Exploration trail                   // lib/explorationTrail.ts + ExplorationTrail.tsx
   Thumbnail filmstrip + jump
@@ -101,7 +102,7 @@ documentMeta                        // lib/document.ts
 
 ### Ref pattern (do not break)
 
-`App.tsx` (~4,380 lines) still owns most chaos handlers. Hooks talk through refs:
+`App.tsx` (~4,400 lines) still owns most chaos handlers. Hooks talk through refs:
 
 - `commitHistoryRef` / `commitTreatmentHistoryRef` / `commitPosterTreatmentHistoryRef`
 - `refreshTreatmentStackRef` / `reconcileArtifactTreatmentsRef` / `refreshPosterTreatmentsRef`
@@ -149,7 +150,7 @@ This *is* the Horizon 3 bet. Copy Machine, Gestures v1, and Tension are embryos 
 **A2. Leftover one-shots onto the registry — landed**  
 Decay marks, misprint offset, and type strips play through the registry onto the layer stack. Chip: re-roll, bypass, remove. Tension scales offset / jitter.
 
-**A3. Gestures as performances**  
+**A3. Gestures as performances — landed**  
 Record a chain of instrument plays (`slice → scatter 30% → xerox 3`), not only `gestureFromTreatments` of the current stack. Replay from Instruments + Cmd+K. Persist on `documentMeta.gestures`.
 
 **A4. Press Check**  
@@ -235,7 +236,7 @@ Every action commits history and appears on the trail.
 | `src/lib/treatments.ts` | Layer treatment types — Instrument registry wraps this |
 | `src/lib/copyMachine.ts` | First Instrument; WebGPU port target |
 | `src/lib/copyMachineTreatment.ts` | Companions, non-destructive render |
-| `src/lib/gestures.ts` | Gesture v1 — extend to live recording |
+| `src/lib/gestures.ts` | Gesture performances — record plays, save, replay |
 | `src/lib/grid.ts` `gridTensionScale` | Tension multiplier — must apply to every Instrument |
 | `src/components/TensionDial.tsx` | Signature control — keep; deepen what it drives |
 | `src/components/InstrumentsPalette.tsx` | Chaos UI — should call registry, not App handlers |
@@ -246,7 +247,7 @@ Every action commits history and appears on the trail.
 | `src/lib/storage.ts` | IndexedDB — stays as offline cache when 3.1 lands |
 | `src/lib/layerMask.ts` | AI subject-mask must write this, not flatten |
 | `src/lib/commands.ts` | Cmd+K — NL in 3.3 maps to these |
-| `src/App.tsx` | Still ~4,380 lines of chaos/export — shrink by extracting Instruments |
+| `src/App.tsx` | Still ~4,400 lines of chaos/export — shrink by extracting Instruments |
 | `macos/Sources/Carson/main.swift` | 3.7 starting point |
 | `docs/PLAN-COPY-MACHINE.md` | Instrument template + why warp is pure |
 | `.cursor/skills/verify-carson/` | Required proof for any user-facing slice |
@@ -266,8 +267,9 @@ Every action commits history and appears on the trail.
 - Tension already scales scatter/copy-machine spatial amplitude **and** registry intensity keys (Age, xerox, distress, decay-marks, misprint offset, type-strip jitter). New instruments must use `scaleTreatmentParams` / `gridTensionScale`, not a second global.
 
 ### Gestures
-- v1 is "current enabled stack → steps." It does not record order of *plays* across objects.
+- Record captures ordered instrument plays while armed. Save stack as gesture is still a snapshot of the current enabled stack.
 - Built-in Copy→Scatter→Copy is a constant in `gestures.ts`, also wired in Instruments + Cmd+K.
+- Saved performances replay from Instruments, Inspector, and Cmd+K.
 
 ### Decay marks / misprint / type strips
 - Companions are omitted from save JSON and stripped on reconcile, then re-rendered from seed. Source stays visible (unlike slice/glyph).
@@ -296,7 +298,7 @@ UI slices: launch with `.cursor/skills/verify-carson/scripts/launch.sh`, doctor,
 |------|-------|
 | Layer treatment | Apply → chip → re-roll → bypass → remove → source still editable → Cmd+Z → save/reload |
 | Copy Machine | Instruments → Copy selected → chip → Tension moves intensity → Cmd+Z |
-| Gesture | Play Copy→Scatter→Copy → trail chips → undo |
+| Gesture | Record → play instruments → Save → replay from Instruments / Cmd+K → trail chips → undo |
 | Trail / comps | Scatter → Fork → jump to earlier chip → Comps → Compare |
 | Scrape | White scrapes → poster chip → re-roll/bypass → Cmd+Z |
 | Print | Print guides on → export PDF → guides not in artwork |
@@ -310,19 +312,19 @@ A designer can reach it in the running app without a console. `REIMAGINED.md` is
 
 ## Suggested next PR (copy-paste scope)
 
-**Landed:** Instrument registry + decay marks, misprint offset, and type strips as stack instruments. Proof: verify-carson `decay-marks`, `misprint-type-strips`.
+**Landed:** Gestures as performances. Playing Instruments while Record is armed captures ordered steps (not a stack snapshot). Replay from Instruments + Cmd+K. Persist on `documentMeta.gestures`. Proof: verify-carson `gesture-performance`.
 
-**Title:** Gestures as performances
+**Title:** Press Check
 
-**Why this next:** A2 is done. A3 records a chain of instrument plays, not only `gestureFromTreatments` of the current stack. Then **A4 Press Check** (the unique 3.2 piece). Do not start cloud / AI / marketplace / tablet.
+**Why this next:** A3 is done. A4 is the unique 3.2 piece: a document-scoped, non-destructive print look the designer can keep and export. Do not start cloud / AI / marketplace / tablet.
 
 **Acceptance criteria:**
-- [ ] Playing Instruments records ordered steps (e.g. slice → scatter → xerox), not a snapshot of the current stack
-- [ ] Replay from Instruments + Cmd+K
-- [ ] Persist on `documentMeta.gestures`
+- [ ] Press Check is a live document/artboard treatment (ink spread, misregistration, paper tooth), not a preview overlay
+- [ ] Toggle as a mode the designer can keep as the look
+- [ ] Export is print-faithful
 - [ ] Trail chips + Cmd+Z
 - [ ] Unit tests + verify-carson user path
-- [ ] No Press Check, no cloud, no AI in this PR
+- [ ] No cloud, no AI, no marketplace in this PR
 
 ---
 
@@ -352,4 +354,4 @@ The deepest win is cultural: "made in Carson" is a recognizable quality — text
 
 ---
 
-*Updated 2026-09-02 · Instrument registry + decay marks + misprint + type strips landed · Horizon 3 ~18%*
+*Updated 2026-09-03 · Gestures as performances landed · Horizon 3 ~25%*

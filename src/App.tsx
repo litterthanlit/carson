@@ -132,8 +132,13 @@ import { getInstrument, instrumentUsesTension, resolveInstrumentParams, type Ins
 import {
   applyGestureToObject,
   COPY_SCATTER_COPY_GESTURE,
+  gestureFromPerformance,
   gestureFromTreatments,
   gestureLabel,
+  clearPlays,
+  idlePerformance,
+  recordPlay,
+  toggleRecording,
   type Gesture,
 } from './lib/gestures'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
@@ -308,6 +313,7 @@ function App() {
   const [dragLayerId, setDragLayerId] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
   const [commandOpen, setCommandOpen] = useState(false)
+  const [performance, setPerformance] = useState(idlePerformance)
   const [filterGalleryOpen, setFilterGalleryOpen] = useState(false)
   const [textureGalleryOpen, setTextureGalleryOpen] = useState(false)
   const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(null)
@@ -2432,6 +2438,40 @@ function App() {
     commitHistory(`Saved gesture “${name.trim()}”`)
   }
 
+  function toggleGestureRecording() {
+    const next = toggleRecording(performance)
+    setPerformance(next)
+    setStatus(
+      next.recording
+        ? 'Recording a gesture — play instruments, then save'
+        : next.plays.length > 0
+          ? `Stopped recording — ${gestureLabel({ id: '', name: '', steps: next.plays })}`
+          : 'Stopped recording',
+    )
+  }
+
+  function saveRecordedPerformance() {
+    const draft = gestureFromPerformance(performance, newGestureId())
+    if (!draft) return
+    const name = window.prompt('Gesture name', draft.name)
+    if (!name?.trim()) return
+    const gesture: Gesture = { ...draft, name: name.trim() }
+    setDocumentMeta((current) => {
+      const base = current ?? createDefaultDocument(poster, {})
+      return {
+        ...base,
+        gestures: [gesture, ...base.gestures],
+      }
+    })
+    setPerformance(idlePerformance())
+    commitHistory(`Saved gesture “${gesture.name}”`)
+  }
+
+  function clearRecordedPerformance() {
+    setPerformance(clearPlays)
+    setStatus('Cleared recorded plays')
+  }
+
   async function applyGestureToSelection(gesture: Gesture, seed = newSeed()) {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -2826,7 +2866,7 @@ function App() {
     params: Record<string, number>,
     label: string,
     seed = newSeed(),
-    extras?: { fxKind?: Treatment['fxKind'] },
+    extras?: { fxKind?: Treatment['fxKind']; historyLabel?: string },
   ) {
     const canvas = canvasRef.current
     let object = activeObject()
@@ -2849,8 +2889,20 @@ function App() {
     addTreatment(object, type, params, seed, extras)
     object.set({ objectCaching: true } as Partial<FabricObject>)
     await refreshTreatmentStack(object)
+    setPerformance((current) =>
+      recordPlay(current, {
+        type,
+        params,
+        ...(extras?.fxKind ? { fxKind: extras.fxKind } : {}),
+      }),
+    )
     trackChaos(label, seed, targetIds, (next) => void applyTreatmentToSelection(type, params, label, next, extras))
-    commitTreatmentHistoryRef.current(objectId, `Applied ${label} #${seed}`, before, JSON.stringify(readTreatments(object)))
+    commitTreatmentHistoryRef.current(
+      objectId,
+      extras?.historyLabel ?? `Applied ${label} #${seed}`,
+      before,
+      JSON.stringify(readTreatments(object)),
+    )
   }
 
   async function playLayerInstrument(id: InstrumentId, seed = newSeed()) {
@@ -3194,39 +3246,24 @@ function App() {
   }
 
   async function scatterSelected(seed = newSeed()) {
-    const canvas = canvasRef.current
     const object = activeObject()
-    if (!canvas || !object || object.type === 'activeselection') return
-    const targetIds = selectedTargetIds()
-    captureTransformBaseline(object)
-    addTreatment(object, 'scatter', { distance: 46, rotation: 18, scale: 0.14 }, seed)
-    object.set({ objectCaching: true } as Partial<FabricObject>)
-    await refreshTreatmentStack(object)
-    trackChaos('Scatter', seed, targetIds, (next) => scatterSelected(next))
-    commitHistory(`Scattered selection #${seed}`)
+    if (!object || object.type === 'activeselection') return
+    await applyTreatmentToSelection('scatter', { distance: 46, rotation: 18, scale: 0.14 }, 'Scatter', seed, {
+      historyLabel: `Scattered selection #${seed}`,
+    })
     noteWalkthrough('scatter')
   }
 
   async function sliceSelected(direction: 'horizontal' | 'vertical', seed = newSeed()) {
-    const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object || object.type === 'activeselection') return
-    const targetIds = selectedTargetIds()
-
-    captureTransformBaseline(object)
-    addTreatment(
-      object,
+    await applyTreatmentToSelection(
       'slice',
       { direction: sliceDirectionToParam(direction), pieces: 5, gap: 9 },
+      direction === 'horizontal' ? 'Slice horizontal' : 'Slice vertical',
       seed,
+      {
+        historyLabel: direction === 'horizontal' ? 'Sliced into strips' : 'Sliced into columns',
+      },
     )
-    object.set({ objectCaching: true } as Partial<FabricObject>)
-    await refreshTreatmentStack(object)
-    setInspectorTab('treatments')
-    trackChaos(direction === 'horizontal' ? 'Slice horizontal' : 'Slice vertical', seed, targetIds, (next) =>
-      sliceSelected(direction, next),
-    )
-    commitHistory(direction === 'horizontal' ? 'Sliced into strips' : 'Sliced into columns')
   }
 
   async function aggressiveCropSelected(mode: 'close' | 'edge' | 'off-center', seed = newSeed()) {
@@ -3809,6 +3846,29 @@ function App() {
       disabled: !selected,
       run: () => void applyCopyScatterCopyGesture(),
     },
+    {
+      id: 'gesture-record',
+      label: performance.recording ? 'Stop recording gesture' : 'Record gesture',
+      keywords: ['gesture', 'record', 'performance', 'macro'],
+      scope: 'any',
+      run: toggleGestureRecording,
+    },
+    {
+      id: 'gesture-save-performance',
+      label: 'Save performance',
+      keywords: ['gesture', 'save', 'performance', 'macro'],
+      scope: 'any',
+      disabled: performance.plays.length === 0,
+      run: saveRecordedPerformance,
+    },
+    ...(documentMeta?.gestures ?? []).map((gesture) => ({
+      id: `gesture-${gesture.id}`,
+      label: `Play ${gesture.name}`,
+      keywords: ['gesture', 'play', 'performance', gesture.name, ...gesture.steps.map((step) => step.type)],
+      scope: 'selection' as const,
+      disabled: !selected,
+      run: () => void applyGestureToSelection(gesture),
+    })),
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
     {
       id: 'scramble',
@@ -3992,6 +4052,20 @@ function App() {
             selected={Boolean(selected)}
             selectedIsImage={selectedIsImage}
             selectedIsText={selectedIsText}
+            recording={performance.recording}
+            performanceLabel={
+              performance.plays.length > 0
+                ? gestureLabel({ id: '', name: '', steps: performance.plays })
+                : performance.recording
+                  ? 'Play an instrument'
+                  : 'Record a chain of plays'
+            }
+            canSavePerformance={performance.plays.length > 0}
+            savedGestures={documentMeta?.gestures ?? []}
+            onToggleRecording={toggleGestureRecording}
+            onSavePerformance={saveRecordedPerformance}
+            onClearPerformance={clearRecordedPerformance}
+            onApplySavedGesture={(gesture) => void applyGestureToSelection(gesture)}
             typeLegibility={typeLegibility}
             typeIntensity={typeIntensity}
             xeroxGeneration={xeroxGeneration}

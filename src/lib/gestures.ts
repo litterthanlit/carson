@@ -1,9 +1,11 @@
 /**
- * Gestures — recordable treatment macro chains (CM-4).
+ * Gestures — recordable instrument performances (Horizon 3 A3).
  * Pure, deterministic; seeds derived like copyMachineLayerSeeds.
  */
 import type { FabricObject } from 'fabric'
 import { COPY_MACHINE_DEFAULTS, copyMachineParamsToRecord } from './copyMachine'
+import { decayMarkKindFromParams } from './decayMarksTreatment'
+import { sliceDirectionFromParams } from './sliceTreatment'
 import { addTreatment, type Treatment, type TreatmentType } from './treatments'
 import type { FxKind } from './pixelFilters'
 
@@ -19,6 +21,13 @@ export type Gesture = {
   steps: GestureStep[]
 }
 
+export type GesturePerformance = {
+  recording: boolean
+  plays: GestureStep[]
+}
+
+export const MAX_PERFORMANCE_STEPS = 24
+
 export const COPY_SCATTER_COPY_GESTURE: Gesture = {
   id: 'copy-scatter-copy',
   name: 'Copy → Scatter → Copy',
@@ -33,14 +42,14 @@ const STEP_LABELS: Partial<Record<TreatmentType, string>> = {
   'copy-machine': 'Copy',
   scatter: 'Scatter',
   xerox: 'Xerox',
-  decay: 'Decay',
+  decay: 'Age',
   distress: 'Distress',
   'cold-wash': 'Cold wash',
   slice: 'Slice',
   crop: 'Crop',
   tear: 'Tear',
   'bad-crop': 'Bad crop',
-  'glyph-break': 'Glyph break',
+  'glyph-break': 'Break letters',
   scrape: 'Scrape',
   'decay-marks': 'Decay marks',
   misprint: 'Misprint',
@@ -48,14 +57,97 @@ const STEP_LABELS: Partial<Record<TreatmentType, string>> = {
   fx: 'Filter',
 }
 
-function stepLabel(type: TreatmentType): string {
-  return STEP_LABELS[type] ?? type
+function cloneStep(step: GestureStep): GestureStep {
+  const next: GestureStep = {
+    type: step.type,
+    params: { ...step.params },
+  }
+  if (step.fxKind) next.fxKind = step.fxKind
+  return next
 }
 
-/** Human-readable chain label, e.g. Copy → Scatter → Copy */
+/** Play-time chain label, e.g. Xerox 3 / Scatter 30% / Strips */
+export function gestureStepLabel(step: GestureStep): string {
+  switch (step.type) {
+    case 'xerox':
+      return `Xerox ${Math.round(step.params.generation ?? 5)}`
+    case 'scatter':
+      return `Scatter ${Math.round(step.params.distance ?? 46)}%`
+    case 'slice':
+      return sliceDirectionFromParams(step.params) === 'vertical' ? 'Columns' : 'Strips'
+    case 'copy-machine':
+      return 'Copy'
+    case 'decay':
+      return `Age ${Math.round(step.params.amount ?? 55)}`
+    case 'decay-marks': {
+      const kind = decayMarkKindFromParams(step.params)
+      const amount = Math.round(step.params.amount ?? 55)
+      if (kind === 'fold') return `Fold ${amount}`
+      if (kind === 'all') return `Wear ${amount}`
+      return `Ink loss ${amount}`
+    }
+    case 'distress':
+      return `Distress ${Math.round(step.params.intensity ?? 70)}`
+    case 'cold-wash':
+      return 'Cold wash'
+    case 'misprint':
+      return `Misprint ${Math.round(step.params.offset ?? 10)}`
+    case 'type-strips':
+      return 'Type strip'
+    default:
+      return STEP_LABELS[step.type] ?? step.type
+  }
+}
+
+/** Human-readable chain label, e.g. Strips → Scatter 46% → Xerox 5 */
 export function gestureLabel(gesture: Gesture): string {
   if (gesture.name.trim()) return gesture.name
-  return gesture.steps.map((step) => stepLabel(step.type)).join(' → ')
+  return gesture.steps.map(gestureStepLabel).join(' → ')
+}
+
+export function idlePerformance(): GesturePerformance {
+  return { recording: false, plays: [] }
+}
+
+export function startRecording(): GesturePerformance {
+  return { recording: true, plays: [] }
+}
+
+export function stopRecording(performance: GesturePerformance): GesturePerformance {
+  return { ...performance, recording: false }
+}
+
+export function toggleRecording(performance: GesturePerformance): GesturePerformance {
+  return performance.recording ? stopRecording(performance) : startRecording()
+}
+
+export function clearPlays(performance: GesturePerformance): GesturePerformance {
+  return { ...performance, plays: [] }
+}
+
+/** Append a play while recording. No-op when idle or at the step cap. */
+export function recordPlay(performance: GesturePerformance, play: GestureStep): GesturePerformance {
+  if (!performance.recording) return performance
+  if (performance.plays.length >= MAX_PERFORMANCE_STEPS) return performance
+  return {
+    ...performance,
+    plays: [...performance.plays, cloneStep(play)],
+  }
+}
+
+export function gestureFromPlays(plays: GestureStep[], id = '', name = ''): Gesture {
+  const steps = plays.map(cloneStep)
+  const draft: Gesture = { id: '', name: '', steps }
+  return {
+    id,
+    name: name.trim() || gestureLabel(draft),
+    steps,
+  }
+}
+
+export function gestureFromPerformance(performance: GesturePerformance, id: string, name?: string): Gesture | null {
+  if (performance.plays.length === 0) return null
+  return gestureFromPlays(performance.plays, id, name ?? '')
 }
 
 /** Record enabled treatments as gesture steps; bypassed steps are omitted. */
@@ -70,12 +162,7 @@ export function gestureFromTreatments(treatments: Treatment[]): Gesture {
       if (item.fxKind) step.fxKind = item.fxKind
       return step
     })
-  const draft: Gesture = { id: '', name: '', steps }
-  return {
-    id: '',
-    name: gestureLabel(draft),
-    steps,
-  }
+  return gestureFromPlays(steps)
 }
 
 /** Per-step seeds from one master seed — same contract as copyMachineLayerSeeds. */
