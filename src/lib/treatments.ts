@@ -103,6 +103,7 @@ export type TreatmentType =
   | 'bad-crop'
   | 'glyph-break'
   | 'scrape'
+  | 'press-check'
   | 'copy-machine'
   | 'misprint'
   | 'type-strips'
@@ -297,6 +298,8 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Glyphs·${treatment.params.intensity ?? 70}`
     case 'scrape':
       return `Scrape·${treatment.params.count ?? 7}`
+    case 'press-check':
+      return 'Press Check'
     case 'copy-machine':
       return `Copy·#${treatment.seed}`
     case 'misprint':

@@ -14,7 +14,7 @@ Turn Carson from a **local professional instrument** into the **category**: a st
 
 **Horizon 2 done as a numbered program.** You are working **Horizon 3 only** unless fixing a regression or a leftover that blocks 3.2.
 
-**Rough completion:** ~90% Horizon 2 · **~25% Horizon 3** (Instrument registry, decay marks + misprint + type strips on the stack, Gestures as performances, Tension dial, Copy Machine, WKWebView shell — 3.2 still needs Press Check; none of 3.1 / 3.3–3.7 are complete)
+**Rough completion:** ~90% Horizon 2 · **~40% Horizon 3** (Instrument registry, decay marks + misprint + type strips on the stack, Gestures as performances, Tension dial, Copy Machine, Press Check, WKWebView shell — none of 3.1 / 3.3–3.7 are complete)
 
 Do not claim an item complete without a **user-facing path**. Backend-only or test-only does not count. Read `REIMAGINED.md` before marking an item done.
 
@@ -53,7 +53,7 @@ These are **not** Horizon 3. Do them when they are in the way of Instruments, Pr
 | ID | Item | Status | What exists | Missing |
 |----|------|--------|-------------|---------|
 | **3.1** | Cloud docs + realtime collab | **0%** | Local IndexedDB autosave; op log; variants + comps gallery | Accounts, share links, CRDT/multiplayer, pinned comments, named milestones, client-only comps view |
-| **3.2** | Serendipity Engine (flagship) | **~65%** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear / Misprint / Type strip on the layer stack; Tension scales registry intensity keys (including decay, decay-marks, misprint offset, type-strip jitter); Copy Machine; Gestures as recorded performances (Instruments + Cmd+K); Instruments palette | Shareable Instrument/Gesture assets; **Press Check** as a live document treatment with print-faithful export |
+| **3.2** | Serendipity Engine (flagship) | **~85%** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear / Misprint / Type strip on the layer stack; Tension scales registry intensity keys (including decay, decay-marks, misprint offset, type-strip jitter, Press Check); Copy Machine; Gestures as recorded performances (Instruments + Cmd+K); Instruments palette; **Press Check** as a live artboard treatment with print-faithful export | Shareable Instrument/Gesture assets |
 | **3.3** | AI studio assistant | **0%** | Cmd+K maps labels → handlers; scramble rearranges existing layers | Subject mask (editable, not cutout); Riff (6 layout variations of *this* composition); NL → visible slider moves; taste mirror from the user's own history. Hard lines below. |
 | **3.4** | Cross-device | **0%** | Desktop browser + thin macOS WKWebView | Tablet stylus treatment painting; phone review/comments; same cloud doc |
 | **3.5** | Performance re-platform | **~5%** | Copy Machine displacement is a **pure** `(imageData, seed, params) => imageData` designed to port to a shader; tiled raster export; 10k px cap | WebGPU tiled renderer at 60fps; workers for filter stacks; kill snapshot hitching on image-heavy docs and canvas drag |
@@ -153,8 +153,8 @@ Decay marks, misprint offset, and type strips play through the registry onto the
 **A3. Gestures as performances — landed**  
 Record a chain of instrument plays (`slice → scatter 30% → xerox 3`), not only `gestureFromTreatments` of the current stack. Replay from Instruments + Cmd+K. Persist on `documentMeta.gestures`.
 
-**A4. Press Check**  
-Document-scoped, non-destructive treatment: ink spread, misregistration, paper tooth. Toggle as a *mode* the designer can keep as the look. Export is print-faithful (the treatment is in the file, not a preview overlay). Reuse poster-treatment + Copy Machine spatial DNA. This is the feature nobody else has.
+**A4. Press Check — landed**  
+Document-scoped, non-destructive treatment: ink spread, misregistration, paper tooth. Toggle as a *mode* the designer can keep as the look. Export rebakes the overlay into the raster. Instruments + Cmd+K + Treatments chip. Proof: verify-carson `press-check`.
 
 **Do not** build a marketplace (3.6) in this phase — make Instruments/Gestures *saveable in the doc* first.
 
@@ -240,7 +240,9 @@ Every action commits history and appears on the trail.
 | `src/lib/grid.ts` `gridTensionScale` | Tension multiplier — must apply to every Instrument |
 | `src/components/TensionDial.tsx` | Signature control — keep; deepen what it drives |
 | `src/components/InstrumentsPalette.tsx` | Chaos UI — should call registry, not App handlers |
-| `src/lib/posterTreatments.ts` | Pattern for Press Check (document/artboard stack) |
+| `src/lib/posterTreatments.ts` | Artboard stack — scrape + Press Check |
+| `src/lib/pressCheck.ts` | Pure ink spread / misregistration / paper tooth |
+| `src/lib/pressCheckTreatment.ts` | Poster overlay companion; omitted from save JSON |
 | `src/lib/historyLog.ts` | Op log — CRDT / cloud prerequisite |
 | `src/lib/explorationTrail.ts` | Spatial undo; AI actions must land here |
 | `src/lib/scramble.ts` | Local ancestor of Riff |
@@ -264,7 +266,13 @@ Every action commits history and appears on the trail.
 ### Copy Machine
 - Spatial bake is canvas2d `getImageData`. Fine for now; do not add a GL context only for export.
 - Ghost companion is a tagged layer — exclude from layer semantics like scrape fragments.
-- Tension already scales scatter/copy-machine spatial amplitude **and** registry intensity keys (Age, xerox, distress, decay-marks, misprint offset, type-strip jitter). New instruments must use `scaleTreatmentParams` / `gridTensionScale`, not a second global.
+- Tension already scales scatter/copy-machine spatial amplitude **and** registry intensity keys (Age, xerox, distress, decay-marks, misprint offset, type-strip jitter, Press Check ink/misreg/tooth). New instruments must use `scaleTreatmentParams` / `gridTensionScale`, not a second global.
+
+### Press Check
+- Poster-scoped overlay, not a CSS preview. Sources stay editable (`evented: false` on the bake).
+- Companions are omitted from save JSON and re-rendered from seed after load.
+- Live bake is capped at 1280px; export rebake caps at 2048px so A3 does not hitch the UI thread.
+- Toggle: off → on, bypassed → enable, on → off. Chip Bypass is separate from the Instruments mode button.
 
 ### Gestures
 - Record captures ordered instrument plays while armed. Save stack as gesture is still a snapshot of the current enabled stack.
@@ -298,6 +306,7 @@ UI slices: launch with `.cursor/skills/verify-carson/scripts/launch.sh`, doctor,
 |------|-------|
 | Layer treatment | Apply → chip → re-roll → bypass → remove → source still editable → Cmd+Z → save/reload |
 | Copy Machine | Instruments → Copy selected → chip → Tension moves intensity → Cmd+Z |
+| Press Check | Instruments → Press Check → chip + sliders → re-roll/bypass → Cmd+Z → export PNG includes the look |
 | Gesture | Record → play instruments → Save → replay from Instruments / Cmd+K → trail chips → undo |
 | Trail / comps | Scatter → Fork → jump to earlier chip → Comps → Compare |
 | Scrape | White scrapes → poster chip → re-roll/bypass → Cmd+Z |
@@ -312,16 +321,15 @@ A designer can reach it in the running app without a console. `REIMAGINED.md` is
 
 ## Suggested next PR (copy-paste scope)
 
-**Landed:** Gestures as performances. Playing Instruments while Record is armed captures ordered steps (not a stack snapshot). Replay from Instruments + Cmd+K. Persist on `documentMeta.gestures`. Proof: verify-carson `gesture-performance`.
+**Landed:** Press Check. Document/artboard treatment with ink spread, misregistration, and paper tooth. Toggle from Instruments + Cmd+K. Trail chips + Cmd+Z. Export rebakes the overlay. Proof: verify-carson `press-check`.
 
-**Title:** Press Check
+**Title:** Shareable Instrument / Gesture assets (still 3.2, not marketplace)
 
-**Why this next:** A3 is done. A4 is the unique 3.2 piece: a document-scoped, non-destructive print look the designer can keep and export. Do not start cloud / AI / marketplace / tablet.
+**Why this next:** A4 is done. Remaining 3.2 is making Instruments/Gestures saveable as named assets in the doc (Phase A last line). Do not start cloud / AI / marketplace / tablet. Phase B performance spike can run in parallel.
 
 **Acceptance criteria:**
-- [ ] Press Check is a live document/artboard treatment (ink spread, misregistration, paper tooth), not a preview overlay
-- [ ] Toggle as a mode the designer can keep as the look
-- [ ] Export is print-faithful
+- [ ] Save an Instrument or Gesture as a named document asset (not a cloud marketplace)
+- [ ] Replay from Instruments + Cmd+K
 - [ ] Trail chips + Cmd+Z
 - [ ] Unit tests + verify-carson user path
 - [ ] No cloud, no AI, no marketplace in this PR
@@ -354,4 +362,4 @@ The deepest win is cultural: "made in Carson" is a recognizable quality — text
 
 ---
 
-*Updated 2026-09-03 · Gestures as performances landed · Horizon 3 ~25%*
+*Updated 2026-09-04 · Press Check landed · Horizon 3 ~40%*

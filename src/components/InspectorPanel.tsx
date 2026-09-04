@@ -33,6 +33,7 @@ import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
 import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
+import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
 import type { Gesture } from '../lib/gestures'
 import type {
@@ -79,6 +80,8 @@ export type InspectorPanelProps = {
   onRerollPosterTreatment: (id: string) => void
   onTogglePosterTreatment: (id: string) => void
   onRemovePosterTreatment: (id: string) => void
+  onPreviewPosterTreatmentParams: (id: string, params: Record<string, number>) => void
+  onUpdatePosterTreatmentParams: (id: string, params: Record<string, number>) => void
   onReorderLayerTreatment: (id: string, direction: 'up' | 'down') => void
   onRerollLayerTreatment: (id: string) => void
   onToggleLayerTreatment: (id: string) => void
@@ -250,6 +253,8 @@ export function InspectorPanel({
   onRerollPosterTreatment,
   onTogglePosterTreatment,
   onRemovePosterTreatment,
+  onPreviewPosterTreatmentParams,
+  onUpdatePosterTreatmentParams,
   onReorderLayerTreatment,
   onRerollLayerTreatment,
   onToggleLayerTreatment,
@@ -525,6 +530,34 @@ export function InspectorPanel({
                         <Trash2 size={12} />
                       </button>
                     </span>
+                    {treatment.type === 'press-check' ? (
+                      <div className="treatment-params nested">
+                        <Slider
+                          label="Ink spread"
+                          min={0}
+                          max={100}
+                          value={treatment.params.inkSpread ?? PRESS_CHECK_DEFAULTS.inkSpread}
+                          onChange={(value) => onPreviewPosterTreatmentParams(treatment.id, { inkSpread: value })}
+                          onCommit={() => onUpdatePosterTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Misregistration"
+                          min={0}
+                          max={100}
+                          value={treatment.params.misregistration ?? PRESS_CHECK_DEFAULTS.misregistration}
+                          onChange={(value) => onPreviewPosterTreatmentParams(treatment.id, { misregistration: value })}
+                          onCommit={() => onUpdatePosterTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Paper tooth"
+                          min={0}
+                          max={100}
+                          value={treatment.params.paperTooth ?? PRESS_CHECK_DEFAULTS.paperTooth}
+                          onChange={(value) => onPreviewPosterTreatmentParams(treatment.id, { paperTooth: value })}
+                          onCommit={() => onUpdatePosterTreatmentParams(treatment.id, {})}
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>

@@ -1,5 +1,5 @@
 /**
- * Canvas-wide poster treatments (scrape masks, etc.) stored per artboard.
+ * Canvas-wide poster treatments (scrape masks, Press Check, etc.) stored per artboard.
  */
 import type { Canvas } from 'fabric'
 import type { PosterPreset } from './editorModel'
@@ -10,10 +10,15 @@ import {
   removeScrapeFragments,
   renderScrapeTreatment,
 } from './scrapeTreatment'
+import {
+  removePressCheckFragments,
+  renderPressCheckTreatment,
+  stripPressCheckFragments,
+} from './pressCheckTreatment'
 import type { Artboard } from './document'
 import type { FabricObject } from 'fabric'
 
-export type PosterTreatmentType = 'scrape'
+export type PosterTreatmentType = 'scrape' | 'press-check'
 
 export function readPosterTreatments(artboard: Artboard | undefined): Treatment[] {
   return artboard?.posterTreatments ?? []
@@ -68,23 +73,41 @@ export function reorderPosterTreatment(artboard: Artboard, treatmentId: string, 
   return writePosterTreatments(artboard, stack)
 }
 
+export function findPressCheck(treatments: Treatment[]): Treatment | undefined {
+  return treatments.find((item) => item.type === 'press-check')
+}
+
+export function isPressCheckOn(treatments: Treatment[]): boolean {
+  return treatments.some((item) => item.type === 'press-check' && item.enabled)
+}
+
 export function posterTreatmentLabel(treatment: Treatment): string {
   if (treatment.type === 'scrape') {
     return `Scrape·${treatment.params.count ?? 7}`
   }
+  if (treatment.type === 'press-check') {
+    return 'Press Check'
+  }
   return treatment.type
 }
 
-export function renderPosterTreatments(
+export async function renderPosterTreatments(
   canvas: Canvas,
   treatments: Treatment[],
   poster: Pick<PosterPreset, 'width' | 'height'>,
   tagObject: (object: FabricObject, name: string) => void,
+  tensionScale = 1,
+  exportScale = 1,
 ) {
   const activeIds = new Set(treatments.map((item) => item.id))
   for (const object of [...canvas.getObjects()]) {
-    const treatmentId = (object as unknown as Record<string, unknown>).scrapeTreatmentId
-    if (treatmentId && !activeIds.has(String(treatmentId))) {
+    const record = object as unknown as Record<string, unknown>
+    const scrapeId = record.scrapeTreatmentId
+    if (scrapeId && !activeIds.has(String(scrapeId))) {
+      canvas.remove(object)
+    }
+    const pressId = record.pressCheckTreatmentId
+    if (pressId && !activeIds.has(String(pressId))) {
       canvas.remove(object)
     }
   }
@@ -93,11 +116,19 @@ export function renderPosterTreatments(
   if (scrapes.length === 0) {
     clearScrapeClipPath(canvas)
   }
+  const pressChecks = treatments.filter((item) => item.type === 'press-check')
+  if (pressChecks.length === 0) {
+    removePressCheckFragments(canvas)
+  }
+
   for (const treatment of treatments) {
     if (treatment.type === 'scrape') {
       renderScrapeTreatment(canvas, treatment, poster, tagObject)
+    } else if (treatment.type === 'press-check') {
+      await renderPressCheckTreatment(canvas, treatment, poster, tagObject, tensionScale, exportScale)
     } else {
       removeScrapeFragments(canvas, treatment.id)
+      removePressCheckFragments(canvas, treatment.id)
     }
   }
 }
@@ -105,4 +136,5 @@ export function renderPosterTreatments(
 export function reconcilePosterTreatments(canvas: Canvas) {
   removeAllScrapeFragments(canvas)
   clearScrapeClipPath(canvas)
+  stripPressCheckFragments(canvas)
 }

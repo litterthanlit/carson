@@ -86,7 +86,7 @@ import {
   type WalkthroughEvent,
   type WalkthroughStep,
 } from './lib/onboardingWalkthrough'
-import { addPosterTreatment, readPosterTreatments, writePosterTreatments } from './lib/posterTreatments'
+import { addPosterTreatment, findPressCheck, isPressCheckOn, readPosterTreatments, removePosterTreatment, updatePosterTreatment, writePosterTreatments } from './lib/posterTreatments'
 import { captureLayerOrder, captureObjectPatch } from './lib/historyObject'
 import {
   applyLayerMask,
@@ -128,6 +128,8 @@ import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, 
 import { omitDecayMarkFragmentsFromCanvasJSON } from './lib/decayMarksTreatment'
 import { misprintParamsFromGeneration, omitMisprintFragmentsFromCanvasJSON } from './lib/misprintTreatment'
 import { omitTypeStripFragmentsFromCanvasJSON } from './lib/typeStripsTreatment'
+import { PRESS_CHECK_DEFAULTS, pressCheckParamsToRecord } from './lib/pressCheck'
+import { omitPressCheckFragmentsFromCanvasJSON, rebakePressCheckTreatments } from './lib/pressCheckTreatment'
 import { getInstrument, instrumentUsesTension, resolveInstrumentParams, type InstrumentId } from './lib/instruments'
 import {
   applyGestureToObject,
@@ -414,6 +416,8 @@ function App() {
     togglePosterTreatment,
     removePosterTreatmentAction,
     reorderPosterTreatmentAction,
+    updatePosterTreatmentParams,
+    previewPosterTreatmentParams,
   } = useTreatments({
     canvasRef,
     documentMeta,
@@ -1173,11 +1177,13 @@ function App() {
   function serializeCanvasForSave() {
     const canvas = canvasRef.current
     if (!canvas) return {}
-    return omitTypeStripFragmentsFromCanvasJSON(
-      omitMisprintFragmentsFromCanvasJSON(
-        omitDecayMarkFragmentsFromCanvasJSON(
-          omitCopyMachineCompanionsFromCanvasJSON(
-            canvas.toObject(HISTORY_PROPS as unknown as string[]) as { objects?: unknown[] },
+    return omitPressCheckFragmentsFromCanvasJSON(
+      omitTypeStripFragmentsFromCanvasJSON(
+        omitMisprintFragmentsFromCanvasJSON(
+          omitDecayMarkFragmentsFromCanvasJSON(
+            omitCopyMachineCompanionsFromCanvasJSON(
+              canvas.toObject(HISTORY_PROPS as unknown as string[]) as { objects?: unknown[] },
+            ),
           ),
         ),
       ),
@@ -1869,6 +1875,7 @@ function App() {
         ? canvas.getActiveObjects().filter(
             (object) =>
               !readObjectProp(object, 'scrapeFragment') &&
+              !readObjectProp(object, 'pressCheckFragment') &&
               !readObjectProp(object, 'decayMarkSourceId') &&
               !readObjectProp(object, 'misprintSourceId') &&
               !readObjectProp(object, 'typeStripSourceId'),
@@ -2620,6 +2627,7 @@ function App() {
       .filter((object) => {
         if (object.visible === false || object.selectable === false || object.evented === false) return false
         if (readObjectProp(object, 'scrapeFragment')) return false
+        if (readObjectProp(object, 'pressCheckFragment')) return false
         if (readObjectProp(object, 'decayMarkSourceId')) return false
         if (readObjectProp(object, 'misprintSourceId')) return false
         if (readObjectProp(object, 'typeStripSourceId')) return false
@@ -2803,6 +2811,9 @@ function App() {
       if (readTreatments(object).some((item) => instrumentUsesTension(item.type))) {
         void refreshTreatmentStack(object)
       }
+    }
+    if (documentMeta && isPressCheckOn(readPosterTreatments(getActiveArtboard(documentMeta)))) {
+      void refreshPosterTreatments()
     }
   }
 
@@ -3451,6 +3462,62 @@ function App() {
     commitPosterTreatmentHistoryRef.current(board.id, `Added scrape mask treatment #${seed}`, before, after)
   }
 
+  async function applyPressCheck(seed = newSeed()) {
+    if (!documentMeta) return
+    const board = getActiveArtboard(documentMeta)
+    if (!board) return
+    const before = JSON.stringify(readPosterTreatments(board))
+    const { artboard: nextBoard } = addPosterTreatment(
+      board,
+      'press-check',
+      pressCheckParamsToRecord(PRESS_CHECK_DEFAULTS),
+      seed,
+    )
+    const after = JSON.stringify(readPosterTreatments(nextBoard))
+    setDocumentMeta({
+      ...documentMeta,
+      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+    })
+    await refreshPosterTreatments(readPosterTreatments(nextBoard))
+    setInspectorTab('treatments')
+    trackChaos('Press Check', seed, [], (next) => applyPressCheck(next))
+    commitPosterTreatmentHistoryRef.current(board.id, `Turned on Press Check #${seed}`, before, after)
+  }
+
+  async function togglePressCheck() {
+    if (!documentMeta) return
+    const board = getActiveArtboard(documentMeta)
+    if (!board) return
+    const existing = findPressCheck(readPosterTreatments(board))
+    if (!existing) {
+      await applyPressCheck()
+      return
+    }
+    if (!existing.enabled) {
+      const before = JSON.stringify(readPosterTreatments(board))
+      const nextBoard = updatePosterTreatment(board, existing.id, { enabled: true })
+      const after = JSON.stringify(readPosterTreatments(nextBoard))
+      setDocumentMeta({
+        ...documentMeta,
+        artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+      })
+      await refreshPosterTreatments(readPosterTreatments(nextBoard))
+      setInspectorTab('treatments')
+      commitPosterTreatmentHistoryRef.current(board.id, 'Enabled poster treatment', before, after)
+      return
+    }
+    const before = JSON.stringify(readPosterTreatments(board))
+    const nextBoard = removePosterTreatment(board, existing.id)
+    const after = JSON.stringify(readPosterTreatments(nextBoard))
+    setDocumentMeta({
+      ...documentMeta,
+      artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+    })
+    await refreshPosterTreatments(readPosterTreatments(nextBoard))
+    setInspectorTab('treatments')
+    commitPosterTreatmentHistoryRef.current(board.id, 'Turned off Press Check', before, after)
+  }
+
   function addRedEchoType() {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -3720,7 +3787,24 @@ function App() {
         return
       }
 
-      if (needsExportBake) await rebakeCopyMachineTreatments(canvas, exportScale, tensionScale)
+      if (needsExportBake) {
+        await rebakeCopyMachineTreatments(canvas, exportScale, tensionScale)
+        await rebakePressCheckTreatments(
+          canvas,
+          posterTreatments,
+          poster,
+          (object, name) => {
+            object.set({
+              kind: 'fragment',
+              name,
+              selectable: false,
+              evented: false,
+            } as Partial<FabricObject>)
+          },
+          tensionScale,
+          exportScale,
+        )
+      }
       const raster = rasterizeCanvasTiled(canvas, exportScale)
       const width = raster.width
       const height = raster.height
@@ -3744,7 +3828,10 @@ function App() {
     } catch {
       setStatus('Export failed — try a smaller export size')
     } finally {
-      if (needsExportBake) await rebakeCopyMachineTreatments(canvas, 1, tensionScale)
+      if (needsExportBake) {
+        await rebakeCopyMachineTreatments(canvas, 1, tensionScale)
+        await refreshPosterTreatments()
+      }
       canvas.backgroundColor = previousBackground
       canvas.renderOnAddRemove = previousRenderOnAddRemove
       if (previousActive && canvas.getObjects().includes(previousActive)) {
@@ -3834,9 +3921,16 @@ function App() {
     {
       id: 'copy-machine-poster',
       label: 'Run through the copier',
-      keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier', 'poster', 'all layers', 'press check'],
+      keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier', 'poster', 'all layers'],
       scope: 'canvas',
       run: () => void applyCopyMachineToPoster(),
+    },
+    {
+      id: 'press-check',
+      label: isPressCheckOn(posterTreatments) ? 'Turn off Press Check' : 'Press Check',
+      keywords: ['press check', 'print', 'ink spread', 'misregistration', 'paper tooth', 'press'],
+      scope: 'canvas',
+      run: () => void togglePressCheck(),
     },
     {
       id: 'gesture-copy-scatter-copy',
@@ -4111,6 +4205,8 @@ function App() {
             onApplyColdWashImage={applyColdWashImage}
             onAddDiagonalTexture={addDiagonalTexture}
             onAddWhiteScrapes={() => addWhiteScrapes()}
+            pressCheckActive={isPressCheckOn(posterTreatments)}
+            onTogglePressCheck={() => void togglePressCheck()}
             onAddRedEchoType={addRedEchoType}
             onAggressiveCrop={(mode) => void aggressiveCropSelected(mode)}
             onCropToPosterEdge={() => void cropToPosterEdge()}
@@ -4254,6 +4350,8 @@ function App() {
           onRerollPosterTreatment={(id) => void rerollPosterTreatment(id)}
           onTogglePosterTreatment={(id) => void togglePosterTreatment(id)}
           onRemovePosterTreatment={(id) => void removePosterTreatmentAction(id)}
+          onPreviewPosterTreatmentParams={(id, params) => previewPosterTreatmentParams(id, params)}
+          onUpdatePosterTreatmentParams={(id, params) => void updatePosterTreatmentParams(id, params)}
           onReorderLayerTreatment={(id, direction) => void reorderLayerTreatment(id, direction)}
           onRerollLayerTreatment={(id) => void rerollTreatment(id)}
           onToggleLayerTreatment={(id) => void toggleTreatment(id)}

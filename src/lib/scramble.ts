@@ -60,6 +60,8 @@ export const SCRAMBLE_POSTURE_LABELS: Record<ScramblePosture, string> = {
 
 const ARTIFACT_KEYS = [
   'scrapeFragment',
+  'pressCheckFragment',
+  'pressCheckTreatmentId',
   'sliceSourceId',
   'cropSourceId',
   'tearSourceId',

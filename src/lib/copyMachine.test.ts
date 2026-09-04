@@ -319,6 +319,13 @@ describe('copyMachine CM-3 poster seeds', () => {
     expect(
       isCopyMachinePosterTarget({
         visible: true,
+        id: 'press',
+        pressCheckFragment: true,
+      } as never),
+    ).toBe(false)
+    expect(
+      isCopyMachinePosterTarget({
+        visible: true,
         id: 'ghost',
         copyGhostSourceId: 'layer-1',
       } as never),

@@ -287,6 +287,37 @@ const FEATURES = {
     }
     await capture(page, outDir, 'replay')
   },
+
+  async 'press-check'(page, outDir) {
+    const trail = page.getByRole('region', { name: 'Exploration trail' })
+    await page.getByRole('button', { name: 'Instruments' }).click()
+    const instruments = page.getByRole('complementary', { name: 'Instruments' })
+    await instruments.waitFor()
+    await instruments.getByRole('button', { name: 'Press Check', exact: true }).click()
+    await instruments.getByRole('button', { name: 'Turn off Press Check' }).waitFor()
+    await page.getByRole('button', { name: 'Move tool' }).click()
+    await openTab(page, 'Treatments')
+    const inspector = page.getByRole('complementary', { name: 'Inspector' })
+    await inspector.getByText('Press Check', { exact: true }).waitFor()
+    const body = await page.locator('body').innerText()
+    if (!body.includes('Ink spread')) fail('Ink spread slider missing')
+    if (!body.includes('Misregistration')) fail('Misregistration slider missing')
+    if (!body.includes('Paper tooth')) fail('Paper tooth slider missing')
+    await trail.getByRole('button', { name: /Turned on Press Check/ }).waitFor()
+    await capture(page, outDir, 'treatments')
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await inspector.getByText('Press Check', { exact: true }).waitFor({ state: 'hidden' })
+    await page.getByRole('button', { name: 'Commands' }).click()
+    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    await palette.waitFor()
+    await palette.getByPlaceholder(/Search actions/).fill('Press Check')
+    await palette.getByRole('button', { name: /^Press Check$/ }).click()
+    await inspector.getByText('Press Check', { exact: true }).waitFor()
+    await inspector.getByRole('button', { name: 'Re-roll seed' }).first().click()
+    await inspector.getByRole('button', { name: 'Bypass' }).first().click()
+    await inspector.locator('li.bypassed').filter({ hasText: 'Press Check' }).waitFor()
+    await capture(page, outDir, 'commands')
+  },
 }
 
 const args = parseArgs(process.argv.slice(2))

@@ -3,6 +3,7 @@
  * Palette buttons resolve here; Tension scales intensity keys at render, not in stored params.
  */
 import { COPY_MACHINE_DEFAULTS, copyMachineParamsToRecord } from './copyMachine'
+import { PRESS_CHECK_DEFAULTS, pressCheckParamsToRecord } from './pressCheck'
 import { misprintParamsFromGeneration } from './misprintTreatment'
 import type { TreatmentType } from './treatments'
 import { scaleInstrumentParams } from './instrumentTension'
@@ -21,6 +22,7 @@ export type InstrumentId =
   | 'scatter'
   | 'distress'
   | 'cold-wash'
+  | 'press-check'
 
 export type Instrument = {
   id: InstrumentId
@@ -120,6 +122,14 @@ export const INSTRUMENTS: Instrument[] = [
     defaultParams: {},
     scope: 'layer',
     tensionKeys: [],
+  },
+  {
+    id: 'press-check',
+    name: 'Press Check',
+    treatmentType: 'press-check',
+    defaultParams: pressCheckParamsToRecord(PRESS_CHECK_DEFAULTS),
+    scope: 'poster',
+    tensionKeys: ['inkSpread', 'misregistration', 'paperTooth'],
   },
 ]
 

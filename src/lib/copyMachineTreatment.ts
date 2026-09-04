@@ -77,6 +77,7 @@ export function isCopyMachinePosterTarget(object: FabricObject): boolean {
   if (object.visible === false) return false
   const record = object as unknown as Record<string, unknown>
   if (record.scrapeFragment) return false
+  if (record.pressCheckFragment) return false
   if (isCopyMachineCompanionLayer(object)) return false
   if (record.decayMarkSourceId) return false
   if (record.misprintSourceId) return false

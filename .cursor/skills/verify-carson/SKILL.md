@@ -59,6 +59,7 @@ Stable handles:
 - Instruments tool, then `Age selected` / `Ink loss` / `Fold marks`
 - Instruments tool, then `Misprint offset` / `Type strip`
 - Instruments tool, then `Record gesture` / `Save performance`
+- Instruments tool, then `Press Check`
 - Status region `.stage-status` (`role=status`)
 - Region `Exploration trail`, buttons `Fork` and `Comps gallery`
 - Dialog `Comps`, dialog `Compare variations`
@@ -93,4 +94,4 @@ Kills only the pid recorded in `run.json`. Removes the Playwright profile under 
 | `scripts/drive.mjs --feature <id>` | Plays one mapped feature |
 | `scripts/cleanup.sh` | Stops this run's Vite pid |
 
-Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `export-png`, `variations-trail`.
+Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `export-png`, `variations-trail`.

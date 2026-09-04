@@ -25,6 +25,8 @@ export const HISTORY_PROPS = [
   'glyphTreatmentId',
   'scrapeTreatmentId',
   'scrapeFragment',
+  'pressCheckTreatmentId',
+  'pressCheckFragment',
   'copyMachineSourceId',
   'copyGhostSourceId',
   'decayMarkSourceId',

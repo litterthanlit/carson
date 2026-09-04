@@ -84,6 +84,8 @@ export type InstrumentsPaletteProps = {
   onApplyColdWashImage: () => void
   onAddDiagonalTexture: () => void
   onAddWhiteScrapes: () => void
+  pressCheckActive: boolean
+  onTogglePressCheck: () => void
   onAddRedEchoType: () => void
   onAggressiveCrop: (mode: 'close' | 'edge' | 'off-center') => void
   onCropToPosterEdge: () => void
@@ -148,6 +150,8 @@ export function InstrumentsPalette({
   onApplyColdWashImage,
   onAddDiagonalTexture,
   onAddWhiteScrapes,
+  pressCheckActive,
+  onTogglePressCheck,
   onAddRedEchoType,
   onAggressiveCrop,
   onCropToPosterEdge,
@@ -374,6 +378,21 @@ export function InstrumentsPalette({
           </button>
           <button type="button" title="Tear into shifted scraps" onClick={onTearCollage} disabled={!selected}>
             <Scissors size={16} /> Tear collage <ScopeSel />
+          </button>
+        </div>
+      </div>
+
+      <div className="panel-section">
+        <h2>Press</h2>
+        <div className="preset-row">
+          <button
+            type="button"
+            aria-pressed={pressCheckActive}
+            aria-label={pressCheckActive ? 'Turn off Press Check' : 'Press Check'}
+            title="Keep ink spread, misregistration, and paper tooth as the print look"
+            onClick={onTogglePressCheck}
+          >
+            <Printer size={16} /> Press Check <ScopeAll />
           </button>
         </div>
       </div>

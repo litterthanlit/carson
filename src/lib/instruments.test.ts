@@ -45,6 +45,12 @@ describe('instrument registry', () => {
       scope: 'layer',
       tensionKeys: ['jitter'],
     })
+    expect(getInstrument('press-check')).toMatchObject({
+      name: 'Press Check',
+      treatmentType: 'press-check',
+      scope: 'poster',
+      tensionKeys: ['inkSpread', 'misregistration', 'paperTooth'],
+    })
   })
 
   it('keeps mark kind when the decay amount slider overrides params', () => {
@@ -61,6 +67,7 @@ describe('instrument registry', () => {
     expect(instrumentUsesTension('misprint')).toBe(true)
     expect(instrumentUsesTension('type-strips')).toBe(true)
     expect(instrumentUsesTension('distress')).toBe(true)
+    expect(instrumentUsesTension('press-check')).toBe(true)
     expect(instrumentUsesTension('cold-wash')).toBe(false)
   })
 
@@ -75,6 +82,11 @@ describe('instrument registry', () => {
     })
     expect(scaleTreatmentParams('misprint', { offset: 10, opacity: 0.27 }, 2)).toEqual({ offset: 20, opacity: 0.27 })
     expect(scaleTreatmentParams('type-strips', { rows: 5, jitter: 12 }, 2)).toEqual({ rows: 5, jitter: 24 })
+    expect(scaleTreatmentParams('press-check', { inkSpread: 40, misregistration: 20, paperTooth: 50 }, 2)).toEqual({
+      inkSpread: 80,
+      misregistration: 40,
+      paperTooth: 100,
+    })
   })
 
   it('pushes Age amount through Tension into a stronger decay profile', () => {

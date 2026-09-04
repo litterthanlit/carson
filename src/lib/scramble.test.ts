@@ -26,6 +26,7 @@ describe('isScrambleSourceLayer', () => {
     expect(isScrambleSourceLayer({ id: 'echo-1', misprintSourceId: 'text-1' })).toBe(false)
     expect(isScrambleSourceLayer({ id: 'strip-1', typeStripSourceId: 'text-1' })).toBe(false)
     expect(isScrambleSourceLayer({ scrapeFragment: true, id: 'scrape-1' })).toBe(false)
+    expect(isScrambleSourceLayer({ pressCheckFragment: true, id: 'press-1' })).toBe(false)
     expect(isScrambleSourceLayer({})).toBe(false)
   })
 })

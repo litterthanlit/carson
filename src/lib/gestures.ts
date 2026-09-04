@@ -51,6 +51,7 @@ const STEP_LABELS: Partial<Record<TreatmentType, string>> = {
   'bad-crop': 'Bad crop',
   'glyph-break': 'Break letters',
   scrape: 'Scrape',
+  'press-check': 'Press Check',
   'decay-marks': 'Decay marks',
   misprint: 'Misprint',
   'type-strips': 'Type strip',
@@ -94,6 +95,8 @@ export function gestureStepLabel(step: GestureStep): string {
       return `Misprint ${Math.round(step.params.offset ?? 10)}`
     case 'type-strips':
       return 'Type strip'
+    case 'press-check':
+      return 'Press Check'
     default:
       return STEP_LABELS[step.type] ?? step.type
   }

@@ -168,13 +168,13 @@ export function useTreatments({
       const board = documentMeta ? getActiveArtboard(documentMeta) : undefined
       if (!canvas || !board) return
       const treatments = treatmentsOverride ?? readPosterTreatments(board)
-      await withLayerSyncSuppressed(() => {
-        renderPosterTreatments(canvas, treatments, poster, tagPosterFragment)
+      await withLayerSyncSuppressed(async () => {
+        await renderPosterTreatments(canvas, treatments, poster, tagPosterFragment, tensionScale())
       })
       canvas.requestRenderAll()
       syncLayers()
     },
-    [canvasRef, documentMeta, poster, syncLayers, tagPosterFragment],
+    [canvasRef, documentMeta, poster, syncLayers, tagPosterFragment, tensionScale],
   )
 
   const rerollTreatment = useCallback(
@@ -352,6 +352,59 @@ export function useTreatments({
     [commitPosterTreatmentHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
   )
 
+  const updatePosterTreatmentParams = useCallback(
+    async (treatmentId: string, params: Record<string, number>) => {
+      if (!documentMeta) return
+      const board = getActiveArtboard(documentMeta)
+      if (!board) return
+      const treatment = readPosterTreatments(board).find((item) => item.id === treatmentId)
+      if (!treatment) return
+      if (previewTimerRef.current) {
+        window.clearTimeout(previewTimerRef.current)
+        previewTimerRef.current = null
+      }
+      const before = treatmentParamBeforeRef.current ?? JSON.stringify(readPosterTreatments(board))
+      const nextBoard = updatePosterTreatment(board, treatmentId, {
+        params: { ...treatment.params, ...params },
+      })
+      const after = JSON.stringify(readPosterTreatments(nextBoard))
+      setDocumentMeta({
+        ...documentMeta,
+        artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+      })
+      await refreshPosterTreatments(readPosterTreatments(nextBoard))
+      commitPosterTreatmentHistory(board.id, 'Updated poster treatment', before, after)
+      treatmentParamBeforeRef.current = null
+    },
+    [commitPosterTreatmentHistory, documentMeta, refreshPosterTreatments, setDocumentMeta],
+  )
+
+  const previewPosterTreatmentParams = useCallback(
+    (treatmentId: string, params: Record<string, number>) => {
+      if (!documentMeta) return
+      const board = getActiveArtboard(documentMeta)
+      if (!board) return
+      const treatment = readPosterTreatments(board).find((item) => item.id === treatmentId)
+      if (!treatment) return
+      if (!treatmentParamBeforeRef.current) {
+        treatmentParamBeforeRef.current = JSON.stringify(readPosterTreatments(board))
+      }
+      const nextBoard = updatePosterTreatment(board, treatmentId, {
+        params: { ...treatment.params, ...params },
+      })
+      setDocumentMeta({
+        ...documentMeta,
+        artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
+      })
+      if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current)
+      previewTimerRef.current = window.setTimeout(() => {
+        previewTimerRef.current = null
+        void refreshPosterTreatments(readPosterTreatments(nextBoard))
+      }, TREATMENT_PREVIEW_DEBOUNCE_MS)
+    },
+    [documentMeta, refreshPosterTreatments, setDocumentMeta],
+  )
+
   return {
     refreshTreatmentStack,
     reconcileArtifactTreatments,
@@ -366,5 +419,7 @@ export function useTreatments({
     togglePosterTreatment,
     removePosterTreatmentAction,
     reorderPosterTreatmentAction,
+    updatePosterTreatmentParams,
+    previewPosterTreatmentParams,
   }
 }
