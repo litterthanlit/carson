@@ -14,7 +14,7 @@ Turn Carson from a **local professional instrument** into the **category**: a st
 
 **Horizon 2 done as a numbered program.** You are working **Horizon 3 only** unless fixing a regression or a leftover that blocks 3.2.
 
-**Rough completion:** ~90% Horizon 2 · **~40% Horizon 3** (Instrument registry, decay marks + misprint + type strips on the stack, Gestures as performances, Tension dial, Copy Machine, Press Check, WKWebView shell — none of 3.1 / 3.3–3.7 are complete)
+**Rough completion:** ~90% Horizon 2 · **~55% Horizon 3** (Serendipity Engine local path complete — Instruments, Gestures, Tension, Press Check, document assets — none of 3.1 / 3.3–3.7 are complete)
 
 Do not claim an item complete without a **user-facing path**. Backend-only or test-only does not count. Read `REIMAGINED.md` before marking an item done.
 
@@ -31,7 +31,7 @@ React 19 + Fabric.js 7 local poster editor. Moat = **seeded, non-destructive cha
 - **Persistence:** IndexedDB `carson-poster` via `src/lib/storage.ts`. No cloud. No Convex.
 - **Native:** bare WKWebView in `macos/Sources/Carson/main.swift` — window + load `web/index.html`. No menus, no `.carson` files, no native save/open.
 
-**273 tests** · always run `npm test && npm run build` before handoff. UI proof: [`.cursor/skills/verify-carson/SKILL.md`](../.cursor/skills/verify-carson/SKILL.md).
+**285 tests** · always run `npm test && npm run build` before handoff. UI proof: [`.cursor/skills/verify-carson/SKILL.md`](../.cursor/skills/verify-carson/SKILL.md).
 
 ---
 
@@ -53,7 +53,7 @@ These are **not** Horizon 3. Do them when they are in the way of Instruments, Pr
 | ID | Item | Status | What exists | Missing |
 |----|------|--------|-------------|---------|
 | **3.1** | Cloud docs + realtime collab | **0%** | Local IndexedDB autosave; op log; variants + comps gallery | Accounts, share links, CRDT/multiplayer, pinned comments, named milestones, client-only comps view |
-| **3.2** | Serendipity Engine (flagship) | **~85%** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear / Misprint / Type strip on the layer stack; Tension scales registry intensity keys (including decay, decay-marks, misprint offset, type-strip jitter, Press Check); Copy Machine; Gestures as recorded performances (Instruments + Cmd+K); Instruments palette; **Press Check** as a live artboard treatment with print-faithful export | Shareable Instrument/Gesture assets |
+| **3.2** | Serendipity Engine (flagship) | **complete (local)** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear / Misprint / Type strip on the layer stack; Tension; Copy Machine; Gestures as performances; Press Check; **named Instrument/Gesture assets on the document** | Marketplace / Postures (3.6) |
 | **3.3** | AI studio assistant | **0%** | Cmd+K maps labels → handlers; scramble rearranges existing layers | Subject mask (editable, not cutout); Riff (6 layout variations of *this* composition); NL → visible slider moves; taste mirror from the user's own history. Hard lines below. |
 | **3.4** | Cross-device | **0%** | Desktop browser + thin macOS WKWebView | Tablet stylus treatment painting; phone review/comments; same cloud doc |
 | **3.5** | Performance re-platform | **~5%** | Copy Machine displacement is a **pure** `(imageData, seed, params) => imageData` designed to port to a shader; tiled raster export; 10k px cap | WebGPU tiled renderer at 60fps; workers for filter stacks; kill snapshot hitching on image-heavy docs and canvas drag |
@@ -96,7 +96,7 @@ Exploration trail                   // lib/explorationTrail.ts + ExplorationTrai
 
 documentMeta                        // lib/document.ts
   artboards[].posterTreatments
-  variants[], components[], gestures[]
+  variants[], components[], instruments[], gestures[]
   palette, dpi, bleedMm
 ```
 
@@ -156,7 +156,10 @@ Record a chain of instrument plays (`slice → scatter 30% → xerox 3`), not on
 **A4. Press Check — landed**  
 Document-scoped, non-destructive treatment: ink spread, misregistration, paper tooth. Toggle as a *mode* the designer can keep as the look. Export rebakes the overlay into the raster. Instruments + Cmd+K + Treatments chip. Proof: verify-carson `press-check`.
 
-**Do not** build a marketplace (3.6) in this phase — make Instruments/Gestures *saveable in the doc* first.
+**A5. Shareable Instrument / Gesture assets — landed**  
+Save a tuned layer treatment as a named Instrument on the document. Gestures already save. Both list on Assets + Instruments + Cmd+K. Replay + trail + Cmd+Z. Not a marketplace. Proof: verify-carson `instrument-assets`.
+
+Phase A (local Serendipity Engine) is complete. **Do not** build a marketplace (3.6) next — that waits for Postures.
 
 ---
 
@@ -240,6 +243,7 @@ Every action commits history and appears on the trail.
 | `src/lib/grid.ts` `gridTensionScale` | Tension multiplier — must apply to every Instrument |
 | `src/components/TensionDial.tsx` | Signature control — keep; deepen what it drives |
 | `src/components/InstrumentsPalette.tsx` | Chaos UI — should call registry, not App handlers |
+| `src/lib/instrumentAssets.ts` | Named Instrument assets on the document |
 | `src/lib/posterTreatments.ts` | Artboard stack — scrape + Press Check |
 | `src/lib/pressCheck.ts` | Pure ink spread / misregistration / paper tooth |
 | `src/lib/pressCheckTreatment.ts` | Poster overlay companion; omitted from save JSON |
@@ -279,6 +283,11 @@ Every action commits history and appears on the trail.
 - Built-in Copy→Scatter→Copy is a constant in `gestures.ts`, also wired in Instruments + Cmd+K.
 - Saved performances replay from Instruments, Inspector, and Cmd+K.
 
+### Instrument assets
+- Stored on `documentMeta.instruments`, not IndexedDB `carson-assets`.
+- Poster treatments (Press Check, scrape) cannot be saved as Instruments.
+- Play uses the frozen params with a new seed; Tension still scales at render.
+
 ### Decay marks / misprint / type strips
 - Companions are omitted from save JSON and stripped on reconcile, then re-rendered from seed. Source stays visible (unlike slice/glyph).
 
@@ -307,6 +316,7 @@ UI slices: launch with `.cursor/skills/verify-carson/scripts/launch.sh`, doctor,
 | Layer treatment | Apply → chip → re-roll → bypass → remove → source still editable → Cmd+Z → save/reload |
 | Copy Machine | Instruments → Copy selected → chip → Tension moves intensity → Cmd+Z |
 | Press Check | Instruments → Press Check → chip + sliders → re-roll/bypass → Cmd+Z → export PNG includes the look |
+| Instrument asset | Treatments → Save as instrument → Assets / Instruments / Cmd+K play → trail → Cmd+Z |
 | Gesture | Record → play instruments → Save → replay from Instruments / Cmd+K → trail chips → undo |
 | Trail / comps | Scatter → Fork → jump to earlier chip → Comps → Compare |
 | Scrape | White scrapes → poster chip → re-roll/bypass → Cmd+Z |
@@ -321,17 +331,17 @@ A designer can reach it in the running app without a console. `REIMAGINED.md` is
 
 ## Suggested next PR (copy-paste scope)
 
-**Landed:** Press Check. Document/artboard treatment with ink spread, misregistration, and paper tooth. Toggle from Instruments + Cmd+K. Trail chips + Cmd+Z. Export rebakes the overlay. Proof: verify-carson `press-check`.
+**Landed:** Shareable Instrument / Gesture assets. Save a tuned layer treatment as a named document Instrument. Replay from Assets, Instruments, and Cmd+K. Trail + Cmd+Z. Proof: verify-carson `instrument-assets`.
 
-**Title:** Shareable Instrument / Gesture assets (still 3.2, not marketplace)
+**Title:** Copy Machine on a worker (Phase B / 3.5)
 
-**Why this next:** A4 is done. Remaining 3.2 is making Instruments/Gestures saveable as named assets in the doc (Phase A last line). Do not start cloud / AI / marketplace / tablet. Phase B performance spike can run in parallel.
+**Why this next:** Phase A (3.2 local) is done. Do not start cloud / AI / marketplace / tablet. Performance is the next dependency for image-heavy docs and for 3.1 (drag still full-snapshots).
 
 **Acceptance criteria:**
-- [ ] Save an Instrument or Gesture as a named document asset (not a cloud marketplace)
-- [ ] Replay from Instruments + Cmd+K
-- [ ] Trail chips + Cmd+Z
-- [ ] Unit tests + verify-carson user path
+- [ ] Copy Machine warp runs off the UI thread (pure function already)
+- [ ] Image-heavy xerox + copy-machine stays interactive
+- [ ] Canvas2d fallback remains; do not rip Fabric out
+- [ ] Unit tests + verify-carson user path still applies Copy selected
 - [ ] No cloud, no AI, no marketplace in this PR
 
 ---
@@ -362,4 +372,4 @@ The deepest win is cultural: "made in Carson" is a recognizable quality — text
 
 ---
 
-*Updated 2026-09-04 · Press Check landed · Horizon 3 ~40%*
+*Updated 2026-09-05 · Instrument/Gesture assets landed · Horizon 3 ~55%*

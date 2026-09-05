@@ -136,7 +136,7 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 
 See **[`docs/HANDOFF-HORIZON-3.md`](./HANDOFF-HORIZON-3.md)** for scorecard, phases, and first-PR scope.
 
-**Quick start:** Phase A — Serendipity Engine. Registry, Gestures as performances, and Press Check landed. Remaining 3.2: shareable Instrument/Gesture assets in the doc. Do not start cloud, AI, marketplace, or tablet.
+**Quick start:** Phase A (local Serendipity Engine) is complete. Next is Phase B — Copy Machine on a worker / snapshot hitching. Do not start cloud, AI, marketplace, or tablet.
 
 ---
 
@@ -145,7 +145,7 @@ See **[`docs/HANDOFF-HORIZON-3.md`](./HANDOFF-HORIZON-3.md)** for scorecard, pha
 - **Horizon 2 leftovers:** canvas-drag snapshots; click-to-place bezier; true CMYK plates
 - **Horizon 3:** Serendipity Engine + Press Check, cloud/CRDT, AI assistant (covenant), WebGPU, native shell, marketplace, cross-device
 
-REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, Horizon 2 **program closed**, ~40% Horizon 3.
+REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, Horizon 2 **program closed**, ~55% Horizon 3.
 
 ---
 

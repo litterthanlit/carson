@@ -51,5 +51,6 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Misprint and type strips](./misprint-type-strips.md) covers Misprint offset and Type strip as stack instruments.
 - [Gesture performances](./gesture-performance.md) covers recording instrument plays, saving the chain, and replaying from Instruments and Commands.
 - [Press Check](./press-check.md) covers the live print look as a keepable poster treatment.
+- [Instrument and Gesture assets](./instrument-assets.md) covers saving a tuned Instrument in the document and replaying it.
 - [Export PNG](./export-png.md) covers the header Export control and a downloaded PNG.
 - [Variations trail](./variations-trail.md) covers the history filmstrip, fork, comps gallery, and compare.

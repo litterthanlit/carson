@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import type { ExpressiveLegibility } from '../lib/editorModel'
 import type { Gesture } from '../lib/gestures'
+import type { SavedInstrument } from '../lib/instrumentAssets'
 import { Slider } from './Slider'
 import { ScopeAll, ScopeSel } from './ScopeBadge'
 
@@ -35,10 +36,12 @@ export type InstrumentsPaletteProps = {
   recording: boolean
   performanceLabel: string
   canSavePerformance: boolean
+  savedInstruments: SavedInstrument[]
   savedGestures: Gesture[]
   onToggleRecording: () => void
   onSavePerformance: () => void
   onClearPerformance: () => void
+  onApplySavedInstrument: (asset: SavedInstrument) => void
   onApplySavedGesture: (gesture: Gesture) => void
   typeIntensity: number
   xeroxGeneration: number
@@ -100,10 +103,12 @@ export function InstrumentsPalette({
   recording,
   performanceLabel,
   canSavePerformance,
+  savedInstruments,
   savedGestures,
   onToggleRecording,
   onSavePerformance,
   onClearPerformance,
+  onApplySavedInstrument,
   onApplySavedGesture,
   typeLegibility,
   typeIntensity,
@@ -195,6 +200,25 @@ export function InstrumentsPalette({
             Clear
           </button>
         </div>
+        {savedInstruments.length > 0 ? (
+          <>
+            <h3 className="property-kicker">Saved instruments</h3>
+            <div className="preset-row">
+              {savedInstruments.map((asset) => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  aria-label={`Play instrument ${asset.name}`}
+                  title={`Play ${asset.name} on the selected layer`}
+                  onClick={() => onApplySavedInstrument(asset)}
+                  disabled={!selected}
+                >
+                  {asset.name}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
         {savedGestures.length > 0 ? (
           <>
             <h3 className="property-kicker">Saved gestures</h3>

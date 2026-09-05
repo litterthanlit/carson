@@ -2,6 +2,7 @@ import type { RefObject } from 'react'
 import {
   AlignLeft,
   Blend,
+  BookmarkPlus,
   BringToFront,
   ChevronDown,
   ChevronUp,
@@ -36,6 +37,8 @@ import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
 import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
 import type { Gesture } from '../lib/gestures'
+import type { SavedInstrument } from '../lib/instrumentAssets'
+import { canSaveTreatmentAsInstrument } from '../lib/instrumentAssets'
 import type {
   ExportBackground,
   ExportFormat,
@@ -90,7 +93,10 @@ export type InspectorPanelProps = {
   onUpdateLayerTreatmentParams: (id: string, params: Record<string, number>) => void
   onSaveTreatmentStackAsComponent: () => void
   onSaveTreatmentStackAsGesture: () => void
+  onSaveTreatmentAsInstrument: (treatment: Treatment) => void
+  savedInstruments: SavedInstrument[]
   savedGestures: Gesture[]
+  onApplySavedInstrument: (asset: SavedInstrument) => void
   onApplyGesture: (gesture: Gesture) => void
   layers: SelectedState[]
   selectedLayerIds: string[]
@@ -263,7 +269,10 @@ export function InspectorPanel({
   onUpdateLayerTreatmentParams,
   onSaveTreatmentStackAsComponent,
   onSaveTreatmentStackAsGesture,
+  onSaveTreatmentAsInstrument,
+  savedInstruments,
   savedGestures,
+  onApplySavedInstrument,
   onApplyGesture,
   layers,
   selectedLayerIds,
@@ -605,6 +614,16 @@ export function InspectorPanel({
                       <button type="button" title={treatment.enabled ? 'Bypass' : 'Enable'} onClick={() => onToggleLayerTreatment(treatment.id)}>
                         {treatment.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
                       </button>
+                      {canSaveTreatmentAsInstrument(treatment) ? (
+                        <button
+                          type="button"
+                          title="Save as instrument"
+                          aria-label="Save as instrument"
+                          onClick={() => onSaveTreatmentAsInstrument(treatment)}
+                        >
+                          <BookmarkPlus size={12} />
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         title="Remove"
@@ -790,6 +809,25 @@ export function InspectorPanel({
           >
             Save stack as gesture
           </button>
+          {savedInstruments.length > 0 ? (
+            <>
+              <h3 className="property-kicker">Saved instruments</h3>
+              <div className="preset-row">
+                {savedInstruments.map((asset) => (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    aria-label={`Play instrument ${asset.name}`}
+                    title={`Play ${asset.name} on the selected layer`}
+                    onClick={() => onApplySavedInstrument(asset)}
+                    disabled={!selected}
+                  >
+                    {asset.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
           {savedGestures.length > 0 ? (
             <>
               <h3 className="property-kicker">Saved gestures</h3>
@@ -1475,9 +1513,49 @@ export function InspectorPanel({
       {inspectorTab === 'assets' ? (
         <div className="panel-section">
           <h2>Asset library</h2>
-          <p className="hint">Drag thumbnails to the canvas — or click to insert. Stacks apply to the selection.</p>
-          {storedAssets.length === 0 && (!documentMeta || documentMeta.components.filter((item) => item.kind !== 'stack').length === 0) ? (
-            <p className="empty">Import images or save a selection as a component.</p>
+          <p className="hint">Images and components insert onto the canvas. Instruments and Gestures play on the selection.</p>
+          {savedInstruments.length > 0 ? (
+            <>
+              <h3 className="property-kicker">Instruments</h3>
+              <div className="preset-row">
+                {savedInstruments.map((asset) => (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    aria-label={`Play instrument ${asset.name}`}
+                    title={`Play ${asset.name} on the selected layer`}
+                    onClick={() => onApplySavedInstrument(asset)}
+                    disabled={!selected}
+                  >
+                    {asset.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+          {savedGestures.length > 0 ? (
+            <>
+              <h3 className="property-kicker">Gestures</h3>
+              <div className="preset-row">
+                {savedGestures.map((gesture) => (
+                  <button
+                    key={gesture.id}
+                    type="button"
+                    title={`Play ${gesture.name} on the selected layer`}
+                    onClick={() => onApplyGesture(gesture)}
+                    disabled={!selected}
+                  >
+                    {gesture.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+          {storedAssets.length === 0 &&
+          (!documentMeta || documentMeta.components.filter((item) => item.kind !== 'stack').length === 0) ? (
+            savedInstruments.length === 0 && savedGestures.length === 0 ? (
+              <p className="empty">Save an Instrument from Treatments, or import an image.</p>
+            ) : null
           ) : (
             <div className="asset-grid">
               {storedAssets.map((asset) => (

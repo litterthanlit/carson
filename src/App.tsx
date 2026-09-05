@@ -65,8 +65,10 @@ import {
   normalizeDocumentMeta,
   withPrintSettings,
   newComponentId,
+  newSavedInstrumentId,
   findComponent,
   upsertComponent,
+  upsertDocumentInstrument,
   type DocumentMeta,
 } from './lib/document'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
@@ -143,6 +145,7 @@ import {
   toggleRecording,
   type Gesture,
 } from './lib/gestures'
+import { savedInstrumentFromTreatment, type SavedInstrument } from './lib/instrumentAssets'
 import { sliceDirectionToParam as badCropDirectionToParam } from './lib/badCropTreatment'
 import { createThumbnail, listAssets, newAssetId, saveAsset, type StoredAsset } from './lib/assets'
 import {
@@ -2445,6 +2448,20 @@ function App() {
     commitHistory(`Saved gesture “${name.trim()}”`)
   }
 
+  function saveTreatmentAsInstrument(treatment: Treatment) {
+    const draft = savedInstrumentFromTreatment(treatment, newSavedInstrumentId())
+    if (!draft) return
+    const name = window.prompt('Instrument name', draft.name)
+    if (!name?.trim()) return
+    const asset: SavedInstrument = { ...draft, name: name.trim() }
+    setDocumentMeta((current) => {
+      const base = current ?? createDefaultDocument(poster, {})
+      return upsertDocumentInstrument(base, asset)
+    })
+    setInspectorTab('assets')
+    commitHistory(`Saved instrument “${asset.name}”`)
+  }
+
   function toggleGestureRecording() {
     const next = toggleRecording(performance)
     setPerformance(next)
@@ -2494,6 +2511,26 @@ function App() {
     setInspectorTab('treatments')
     trackChaos(label, seed, targetIds, (next) => applyGestureToSelection(gesture, next))
     commitHistory(`Played ${label} #${seed}`)
+  }
+
+  async function playSavedInstrument(asset: SavedInstrument, seed = newSeed()) {
+    if (asset.treatmentType === 'type-strips') {
+      const object = activeObject()
+      if (!object || object.type !== 'textbox') {
+        setStatus('Select type to print strips')
+        return
+      }
+    }
+    await applyTreatmentToSelection(
+      asset.treatmentType,
+      asset.params,
+      asset.name,
+      seed,
+      {
+        ...(asset.fxKind ? { fxKind: asset.fxKind } : {}),
+        historyLabel: `Played ${asset.name} #${seed}`,
+      },
+    )
   }
 
   async function applyCopyScatterCopyGesture(seed = newSeed()) {
@@ -3955,6 +3992,14 @@ function App() {
       disabled: performance.plays.length === 0,
       run: saveRecordedPerformance,
     },
+    ...(documentMeta?.instruments ?? []).map((asset) => ({
+      id: `instrument-${asset.id}`,
+      label: `Play instrument ${asset.name}`,
+      keywords: ['instrument', 'play', 'asset', asset.name, asset.treatmentType],
+      scope: 'selection' as const,
+      disabled: !selected,
+      run: () => void playSavedInstrument(asset),
+    })),
     ...(documentMeta?.gestures ?? []).map((gesture) => ({
       id: `gesture-${gesture.id}`,
       label: `Play ${gesture.name}`,
@@ -4155,10 +4200,12 @@ function App() {
                   : 'Record a chain of plays'
             }
             canSavePerformance={performance.plays.length > 0}
+            savedInstruments={documentMeta?.instruments ?? []}
             savedGestures={documentMeta?.gestures ?? []}
             onToggleRecording={toggleGestureRecording}
             onSavePerformance={saveRecordedPerformance}
             onClearPerformance={clearRecordedPerformance}
+            onApplySavedInstrument={(asset) => void playSavedInstrument(asset)}
             onApplySavedGesture={(gesture) => void applyGestureToSelection(gesture)}
             typeLegibility={typeLegibility}
             typeIntensity={typeIntensity}
@@ -4360,7 +4407,10 @@ function App() {
           onUpdateLayerTreatmentParams={(id, params) => void updateLayerTreatmentParams(id, params)}
           onSaveTreatmentStackAsComponent={() => void saveTreatmentStackAsComponent()}
           onSaveTreatmentStackAsGesture={saveTreatmentStackAsGesture}
+          onSaveTreatmentAsInstrument={saveTreatmentAsInstrument}
+          savedInstruments={documentMeta?.instruments ?? []}
           savedGestures={documentMeta?.gestures ?? []}
+          onApplySavedInstrument={(asset) => void playSavedInstrument(asset)}
           onApplyGesture={(gesture) => void applyGestureToSelection(gesture)}
           layers={layers}
           selectedLayerIds={selectedLayerIds}

@@ -9,6 +9,7 @@ import {
   normalizeDocumentMeta,
   renameVariant,
   upsertComponent,
+  upsertDocumentInstrument,
   withPrintSettings,
   type DocumentMeta,
 } from './document'
@@ -68,12 +69,26 @@ describe('document variants', () => {
     expect(normalized.characterStyles).toEqual([])
     expect(normalized.paragraphStyles).toEqual([])
     expect(normalized.gestures).toEqual([])
+    expect(normalized.instruments).toEqual([])
   })
 
-  it('normalizeDocumentMeta defaults gestures for legacy docs', () => {
+  it('normalizeDocumentMeta defaults gestures and instruments for legacy docs', () => {
     const doc = sampleDoc()
-    const legacy = { ...doc, gestures: undefined } as unknown as DocumentMeta
+    const legacy = { ...doc, gestures: undefined, instruments: undefined } as unknown as DocumentMeta
     expect(normalizeDocumentMeta(legacy).gestures).toEqual([])
+    expect(normalizeDocumentMeta(legacy).instruments).toEqual([])
+  })
+
+  it('upsertDocumentInstrument stores a named instrument on the document', () => {
+    const next = upsertDocumentInstrument(sampleDoc(), {
+      id: 'instrument-1',
+      name: 'Heavy copy',
+      treatmentType: 'xerox',
+      params: { generation: 8 },
+      instrumentId: 'xerox',
+    })
+    expect(next.instruments).toHaveLength(1)
+    expect(next.instruments[0]?.name).toBe('Heavy copy')
   })
 })
 

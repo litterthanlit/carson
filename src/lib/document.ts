@@ -4,6 +4,10 @@
 import type { PosterPreset, PosterPresetId } from './editorModel'
 import { applyPosterPreset } from './editorModel'
 import type { Gesture } from './gestures'
+import {
+  upsertSavedInstrument as prependSavedInstrument,
+  type SavedInstrument,
+} from './instrumentAssets'
 import type { Treatment } from './treatments'
 import type { CharacterStyleDef, ParagraphStyleDef } from './textStyles'
 
@@ -41,6 +45,7 @@ export type DocumentMeta = {
   activeArtboardId: string
   variants: DocumentVariant[]
   components: SavedComponent[]
+  instruments: SavedInstrument[]
   gestures: Gesture[]
   characterStyles: CharacterStyleDef[]
   paragraphStyles: ParagraphStyleDef[]
@@ -62,6 +67,10 @@ export function newGestureId(): string {
   return `gesture-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
 }
 
+export function newSavedInstrumentId(): string {
+  return `instrument-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+}
+
 export function createDefaultDocument(preset: PosterPreset, canvas: Record<string, unknown>): DocumentMeta {
   const id = newArtboardId()
   return {
@@ -72,6 +81,7 @@ export function createDefaultDocument(preset: PosterPreset, canvas: Record<strin
     activeArtboardId: id,
     variants: [],
     components: [],
+    instruments: [],
     gestures: [],
     characterStyles: [],
     paragraphStyles: [],
@@ -81,6 +91,7 @@ export function createDefaultDocument(preset: PosterPreset, canvas: Record<strin
 export function normalizeDocumentMeta(doc: DocumentMeta): DocumentMeta {
   return {
     ...doc,
+    instruments: doc.instruments ?? [],
     gestures: doc.gestures ?? [],
     characterStyles: doc.characterStyles ?? [],
     paragraphStyles: doc.paragraphStyles ?? [],
@@ -99,6 +110,13 @@ export function upsertComponent(doc: DocumentMeta, component: SavedComponent): D
   return {
     ...doc,
     components: [component, ...doc.components.filter((item) => item.id !== component.id)].slice(0, 24),
+  }
+}
+
+export function upsertDocumentInstrument(doc: DocumentMeta, asset: SavedInstrument): DocumentMeta {
+  return {
+    ...doc,
+    instruments: prependSavedInstrument(doc.instruments ?? [], asset),
   }
 }
 
