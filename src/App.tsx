@@ -31,11 +31,13 @@ import { createSeededRandom, newSeed } from './lib/random'
 import {
   clearAutosave,
   deleteProject,
+  duplicateProject,
   findProjectByName,
   listProjects,
   loadAutosave,
   migrateLegacyProjects,
   newProjectId,
+  renameProject,
   saveAutosave,
   saveProject as persistProject,
   type StoredProject,
@@ -166,6 +168,7 @@ import { ToolRail } from './components/ToolRail'
 import { TopBar } from './components/TopBar'
 import { TreatmentChips } from './components/TreatmentChips'
 import { OnboardingCoach } from './components/OnboardingCoach'
+import { PosterDashboard } from './components/PosterDashboard'
 import type { TexturePlacement } from './components/TextureGalleryModal'
 import type { FilterPreset } from './lib/filterGallery'
 import { paramsForTreatment } from './lib/filterGallery'
@@ -297,6 +300,9 @@ function App() {
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([])
   const [layers, setLayers] = useState<SelectedState[]>([])
   const [savedProjects, setSavedProjects] = useState<StoredProject[]>([])
+  const [autosaveProject, setAutosaveProject] = useState<StoredProject | undefined>(undefined)
+  const [appView, setAppView] = useState<'dashboard' | 'editor'>('dashboard')
+  const [highlightedProjectId, setHighlightedProjectId] = useState<string | null>(null)
   const [projectName, setProjectName] = useState('Untitled poster')
   const [projectId, setProjectId] = useState<string>(() => newProjectId())
   const [exportFormat, setExportFormat] = useState<ExportFormat>('png')
@@ -347,7 +353,7 @@ function App() {
   const [pdfRegistrationMarks, setPdfRegistrationMarks] = useState(true)
   const [printDpi, setPrintDpi] = useState(300)
   const [bleedMm, setBleedMm] = useState(3)
-  const [onboardingOpen, setOnboardingOpen] = useState(() => !localStorage.getItem(ONBOARDING_KEY))
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
   const [walkthroughStep, setWalkthroughStep] = useState<WalkthroughStep | null>(null)
   walkthroughStepRef.current = walkthroughStep
   const [variantCompare, setVariantCompare] = useState<{
@@ -359,6 +365,9 @@ function App() {
   const [trailCursor, setTrailCursor] = useState(-1)
   const [trailCollapsed, setTrailCollapsed] = useState(false)
   const [compsGalleryOpen, setCompsGalleryOpen] = useState(false)
+  const editorSessionRef = useRef(false)
+  const appViewRef = useRef(appView)
+  appViewRef.current = appView
   const fontInputRef = useRef<HTMLInputElement | null>(null)
   const commitHistoryRef = useRef<(message: string) => void>(() => {})
   const commitTreatmentHistoryRef = useRef<
@@ -576,8 +585,8 @@ function App() {
   displayScaleRef.current = displayScale
 
   // Keep latest values reachable from stable event listeners.
-  const liveRef = useRef({ poster, projectName, projectId, displayScale, fitScale, zoom })
-  liveRef.current = { poster, projectName, projectId, displayScale, fitScale, zoom }
+  const liveRef = useRef({ poster, projectName, projectId, displayScale, fitScale, zoom, documentMeta, printDpi, bleedMm })
+  liveRef.current = { poster, projectName, projectId, displayScale, fitScale, zoom, documentMeta, printDpi, bleedMm }
 
   useEffect(() => {
     markLibraryLoaded()
@@ -603,7 +612,6 @@ function App() {
     commitHistory('Started a new poster')
     void initializeStorage()
     void refreshAssets()
-    if (!localStorage.getItem(ONBOARDING_KEY)) setOnboardingOpen(true)
 
     return () => {
       canvas.dispose()
@@ -696,11 +704,7 @@ function App() {
       const projects = await listProjects()
       setSavedProjects(projects)
       if (migrated > 0) setStatus(`Migrated ${migrated} saved poster${migrated === 1 ? '' : 's'} to durable storage`)
-      const autosaved = await loadAutosave()
-      if (autosaved && window.confirm(`Restore autosaved session “${autosaved.name}”?`)) {
-        await loadProject(autosaved, { keepId: false })
-        setStatus('Restored autosaved session')
-      }
+      setAutosaveProject(await loadAutosave())
     } catch {
       setStatus('Storage unavailable — saves are disabled in this browser context')
     }
@@ -717,6 +721,9 @@ function App() {
       redo()
     },
     save: () => void saveProjectAction(),
+    saveAs: () => void saveAsProjectAction(),
+    goToDashboard: () => void goToDashboard(),
+    newPoster: () => void startNewPoster(),
     export: () => void exportPoster(),
     duplicate: () => void duplicateSelected(),
     delete: deleteSelected,
@@ -806,6 +813,17 @@ function App() {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      const actions = keyActionsRef.current
+      const meta = event.metaKey || event.ctrlKey
+
+      if (appViewRef.current === 'dashboard') {
+        if (meta && event.key.toLowerCase() === 'k') {
+          event.preventDefault()
+          actions.commandPalette()
+        }
+        return
+      }
+
       if (event.key === ' ' && !isTypingContext(event.target)) {
         if (!spaceDownRef.current) {
           spaceDownRef.current = true
@@ -819,9 +837,6 @@ function App() {
         event.preventDefault()
         return
       }
-
-      const actions = keyActionsRef.current
-      const meta = event.metaKey || event.ctrlKey
 
       if (meta) {
         const key = event.key.toLowerCase()
@@ -1193,19 +1208,47 @@ function App() {
     )
   }
 
+  async function capturePosterThumbnail(): Promise<string | undefined> {
+    const canvas = canvasRef.current
+    if (!canvas) return undefined
+    try {
+      const preview = canvas.toDataURL({ format: 'jpeg', quality: 0.75, multiplier: 0.12 })
+      return await createThumbnail(preview, 120)
+    } catch {
+      return undefined
+    }
+  }
+
+  async function persistAutosaveSnapshot() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const live = liveRef.current
+    await saveAutosave({
+      name: live.projectName.trim() || 'Untitled poster',
+      savedAt: new Date().toISOString(),
+      preset: live.poster,
+      canvas: serializeCanvasForSave(),
+      document: live.documentMeta ? withPrintSettings(live.documentMeta, live.printDpi, live.bleedMm) : undefined,
+      thumbnail: await capturePosterThumbnail(),
+    })
+  }
+
+  async function flushAutosave() {
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
+    try {
+      await persistAutosaveSnapshot()
+    } catch {
+      setStatus('Autosave failed — storage may be full')
+    }
+  }
+
   function scheduleAutosave() {
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = window.setTimeout(() => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const { poster: currentPoster, projectName: currentName } = liveRef.current
-      void saveAutosave({
-        name: currentName.trim() || 'Untitled poster',
-        savedAt: new Date().toISOString(),
-        preset: currentPoster,
-        canvas: serializeCanvasForSave(),
-        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
-      }).catch(() => setStatus('Autosave failed — storage may be full'))
+      void persistAutosaveSnapshot().catch(() => setStatus('Autosave failed — storage may be full'))
     }, 2500)
   }
 
@@ -3686,7 +3729,6 @@ function App() {
     if (!canvas) return
     const name = projectName.trim() || 'Untitled poster'
     try {
-      // Fix: no more silent overwrite — name collisions now require confirmation.
       const existing = await findProjectByName(name)
       let id = projectId
       if (existing && existing.id !== projectId) {
@@ -3705,12 +3747,142 @@ function App() {
         preset: poster,
         canvas: serializeCanvasForSave(),
         document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
+        thumbnail: await capturePosterThumbnail(),
       })
       setSavedProjects(await listProjects())
       await clearAutosave()
+      setAutosaveProject(undefined)
       setStatus(`Saved “${name}”`)
     } catch {
       setStatus('Save failed — storage may be full or unavailable')
+    }
+  }
+
+  async function saveAsProjectAction() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const name = projectName.trim() || 'Untitled poster'
+    try {
+      const existing = await findProjectByName(name)
+      if (existing) {
+        const anyway = window.confirm(
+          `A poster named “${name}” already exists. Save this as another poster with the same name?`,
+        )
+        if (!anyway) {
+          setStatus('Save as cancelled — rename the poster and try again')
+          return
+        }
+      }
+      const id = newProjectId()
+      await persistProject({
+        id,
+        name,
+        savedAt: new Date().toISOString(),
+        preset: poster,
+        canvas: serializeCanvasForSave(),
+        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
+        thumbnail: await capturePosterThumbnail(),
+      })
+      setProjectId(id)
+      setSavedProjects(await listProjects())
+      await clearAutosave()
+      setAutosaveProject(undefined)
+      setStatus(`Saved “${name}” as a new poster`)
+    } catch {
+      setStatus('Save failed — storage may be full or unavailable')
+    }
+  }
+
+  function enterEditor(options: { showOnboarding?: boolean } = {}) {
+    editorSessionRef.current = true
+    setAppView('editor')
+    if (options.showOnboarding && !localStorage.getItem(ONBOARDING_KEY)) {
+      setOnboardingOpen(true)
+    }
+  }
+
+  async function goToDashboard() {
+    await flushAutosave()
+    try {
+      setSavedProjects(await listProjects())
+      setAutosaveProject(await loadAutosave())
+    } catch {
+      setStatus('Storage unavailable — saves are disabled in this browser context')
+    }
+    setAppView('dashboard')
+  }
+
+  async function startNewPoster() {
+    const canvas = canvasRef.current
+    if (!editorSessionRef.current) {
+      if (canvas) await flushAutosave()
+      enterEditor({ showOnboarding: true })
+      setStatus('Started a new poster')
+      return
+    }
+    if (!canvas) return
+    const nextPoster = applyPosterPreset('a3')
+    posterInitRef.current = true
+    layerIdRef.current = 0
+    setPoster(nextPoster)
+    setPresetId('a3')
+    setProjectName('Untitled poster')
+    setProjectId(newProjectId())
+    setPrintDpi(nextPoster.dpi ?? 300)
+    setBleedMm(3)
+    canvas.clear()
+    canvas.setDimensions({ width: nextPoster.width, height: nextPoster.height })
+    canvas.backgroundColor = '#f6f1e6'
+    seedPoster(canvas, nextPoster)
+    setDocumentMeta(createDefaultDocument(nextPoster, canvas.toObject(HISTORY_PROPS as unknown as string[])))
+    resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
+    lastChaosRef.current = null
+    setLastChaos(null)
+    setWalkthroughStep(null)
+    walkthroughStepRef.current = null
+    enterEditor({ showOnboarding: true })
+    setStatus('Started a new poster')
+  }
+
+  async function openLibraryProject(project: StoredProject, options: { keepId: boolean } = { keepId: true }) {
+    await flushAutosave()
+    await loadProject(project, options)
+    enterEditor()
+  }
+
+  async function resumeAutosave(project: StoredProject) {
+    await loadProject(project, { keepId: false })
+    enterEditor()
+    setStatus('Restored autosaved session')
+  }
+
+  async function renameLibraryProject(project: StoredProject) {
+    const next = window.prompt('Rename poster', project.name)
+    if (next == null) return
+    const trimmed = next.trim() || 'Untitled poster'
+    const existing = await findProjectByName(trimmed)
+    if (existing && existing.id !== project.id) {
+      const anyway = window.confirm(`A poster named “${trimmed}” already exists. Rename this one anyway?`)
+      if (!anyway) return
+    }
+    try {
+      await renameProject(project.id, trimmed)
+      setSavedProjects(await listProjects())
+      if (project.id === projectId) setProjectName(trimmed)
+      setStatus(`Renamed to “${trimmed}”`)
+    } catch {
+      setStatus('Could not rename the poster')
+    }
+  }
+
+  async function duplicateLibraryProject(project: StoredProject) {
+    try {
+      const copy = await duplicateProject(project.id)
+      setSavedProjects(await listProjects())
+      setHighlightedProjectId(copy.id)
+      setStatus(`Duplicated as “${copy.name}”`)
+    } catch {
+      setStatus('Could not duplicate the poster')
     }
   }
 
@@ -3748,6 +3920,7 @@ function App() {
     try {
       await deleteProject(id)
       setSavedProjects(await listProjects())
+      if (highlightedProjectId === id) setHighlightedProjectId(null)
       setStatus(`Deleted “${name}”`)
     } catch {
       setStatus('Could not delete the saved poster')
@@ -3944,6 +4117,8 @@ function App() {
   }, [])
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
+    { id: 'go-to-posters', label: 'Go to posters', keywords: ['dashboard', 'library', 'open', 'files', 'all posters'], scope: 'any', run: () => void goToDashboard() },
+    { id: 'new-poster', label: 'New poster', keywords: ['new', 'create', 'dashboard'], scope: 'any', run: () => void startNewPoster() },
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
@@ -4026,6 +4201,14 @@ function App() {
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
     { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
+    { id: 'save-as', label: 'Save as', keywords: ['save as', 'copy', 'duplicate'], scope: 'canvas', run: () => void saveAsProjectAction() },
+    ...savedProjects.map((project) => ({
+      id: `open-${project.id}`,
+      label: `Open “${project.name}”`,
+      keywords: ['open', 'load', 'poster', 'library', project.name],
+      scope: 'any' as const,
+      run: () => void openLibraryProject(project),
+    })),
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
@@ -4089,7 +4272,7 @@ function App() {
   ]
 
   return (
-    <main className="editor-shell" data-tour={walkthroughStep ?? undefined}>
+    <div className="editor-shell" data-tour={walkthroughStep ?? undefined}>
       <Suspense fallback={null}>
         {commandOpen ? <CommandPalette open commands={commands} onClose={() => setCommandOpen(false)} /> : null}
         {onboardingOpen ? (
@@ -4150,12 +4333,27 @@ function App() {
           />
         ) : null}
       </Suspense>
+      {appView === 'dashboard' ? (
+        <PosterDashboard
+          projects={savedProjects}
+          autosave={autosaveProject}
+          highlightedId={highlightedProjectId}
+          onNewPoster={() => void startNewPoster()}
+          onOpenProject={(project) => void openLibraryProject(project)}
+          onResumeAutosave={(project) => void resumeAutosave(project)}
+          onRenameProject={(project) => void renameLibraryProject(project)}
+          onDuplicateProject={(project) => void duplicateLibraryProject(project)}
+          onDeleteProject={(project) => void deleteSavedProject(project.id, project.name)}
+        />
+      ) : null}
+      <div className="editor-session" aria-hidden={appView === 'dashboard' || undefined} inert={appView === 'dashboard' || undefined}>
       <TopBar
         projectName={projectName}
         onProjectNameChange={setProjectName}
         tension={gridOverlay.tension}
         onTensionChange={handleTensionChange}
         onTensionCommit={commitTension}
+        onGoToDashboard={() => void goToDashboard()}
         onUndo={() => {
           void handleUserUndo()
         }}
@@ -4386,9 +4584,6 @@ function App() {
           posterWidth={poster.width}
           posterHeight={poster.height}
           onExport={() => void exportPoster()}
-          savedProjects={savedProjects}
-          onLoadProject={(project) => void loadProject(project)}
-          onDeleteProject={(id, name) => void deleteSavedProject(id, name)}
           posterTreatments={posterTreatments}
           selected={selected}
           selectedObject={selectedObject}
@@ -4545,8 +4740,8 @@ function App() {
         />
         </div>
       </section>
-
-    </main>
+      </div>
+    </div>
   )
 }
 

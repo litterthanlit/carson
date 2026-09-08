@@ -27,7 +27,19 @@ function fail(message) {
   process.exit(1)
 }
 
+async function enterFromDashboard(page) {
+  const posters = page.getByRole('main', { name: 'Posters' })
+  try {
+    await posters.waitFor({ state: 'visible', timeout: 8000 })
+  } catch {
+    return
+  }
+  await page.getByRole('button', { name: 'New poster' }).click()
+  await posters.waitFor({ state: 'hidden' })
+}
+
 async function dismissOnboarding(page) {
+  await enterFromDashboard(page)
   const dialog = page.getByRole('dialog', { name: 'Wreck this poster' })
   const skip = page.getByRole('button', { name: 'Skip intro' })
   try {
@@ -73,6 +85,42 @@ const FEATURES = {
     if (!text.includes('RAY GUN')) fail('Headline text was missing RAY GUN')
     await writeFile(join(outDir, 'inspect-headline.proof.json'), JSON.stringify({ name, text }, null, 2))
     await capture(page, outDir, 'inspect-headline')
+  },
+
+  async 'poster-library'(page, outDir) {
+    const nameField = page.getByRole('textbox', { name: 'Project name' })
+    await nameField.fill('Alpha')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: /Saved “Alpha”/ }).waitFor()
+    await page.getByRole('button', { name: 'All posters' }).click()
+    const posters = page.getByRole('main', { name: 'Posters' })
+    await posters.waitFor({ state: 'visible' })
+    await posters.getByRole('button', { name: 'Load “Alpha”' }).waitFor()
+    await capture(page, outDir, 'after-first-save')
+    await posters.getByRole('button', { name: 'New poster' }).click()
+    await posters.waitFor({ state: 'hidden' })
+    await nameField.fill('Beta')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: /Saved “Beta”/ }).waitFor()
+    await page.getByRole('button', { name: 'All posters' }).click()
+    await posters.waitFor({ state: 'visible' })
+    await posters.getByRole('button', { name: 'Load “Beta”' }).waitFor()
+    await posters.getByRole('button', { name: 'Load “Alpha”' }).click()
+    await posters.waitFor({ state: 'hidden' })
+    await page.getByRole('status').filter({ hasText: /Loaded Alpha/ }).waitFor()
+    if ((await nameField.inputValue()) !== 'Alpha') fail('Loaded poster did not restore the name Alpha')
+    await capture(page, outDir, 'after-load-alpha')
+    await page.getByRole('button', { name: 'All posters' }).click()
+    await posters.waitFor({ state: 'visible' })
+    await posters.getByRole('button', { name: 'Duplicate Alpha' }).click()
+    await posters.getByRole('button', { name: 'Load “Alpha copy”' }).waitFor()
+    await posters.getByRole('button', { name: 'Rename Alpha copy' }).click()
+    await posters.getByRole('button', { name: 'Load “Mark”' }).waitFor()
+    await posters.getByRole('button', { name: 'Delete saved poster Mark' }).click()
+    await posters.getByRole('button', { name: 'Load “Mark”' }).waitFor({ state: 'hidden' })
+    await posters.getByRole('button', { name: 'Load “Alpha”' }).waitFor()
+    await posters.getByRole('button', { name: 'Load “Beta”' }).waitFor()
+    await capture(page, outDir, 'library')
   },
 
   async 'layer-groups'(page, outDir) {
@@ -383,6 +431,7 @@ try {
   })
   await page.goto(run.url, { waitUntil: 'domcontentloaded' })
   if (feature !== 'wreck-this-poster') await dismissOnboarding(page)
+  else await enterFromDashboard(page)
   await FEATURES[feature](page, outDir)
   await writeFile(join(outDir, 'meta.json'), JSON.stringify({ feature, url: run.url, runId: run.runId }, null, 2))
   console.log(`ok feature=${feature} out=${outDir}`)

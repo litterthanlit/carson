@@ -13,6 +13,7 @@ First-run play teaches scatter, xerox, re-roll, and undo on the seeded headline 
 ## How to get to it (user POV)
 
 - Open the launched origin in a fresh browser profile so `Wreck this poster` appears.
+- Choose `New poster` on the Posters dashboard.
 - Choose `Let's wreck it`. Do not choose `Skip intro`.
 - Follow the coach: Scatter, Copy selected, Re-roll, Undo.
 

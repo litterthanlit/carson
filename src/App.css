@@ -238,6 +238,21 @@
   fill: var(--text);
 }
 
+.brand-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 4px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.brand-home:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
 .brand h1,
 .brand p,
 .rail h2,
@@ -2082,6 +2097,111 @@ input[type='color'] {
 }
 
 .comps-gallery-card small {
+  color: var(--text-muted);
+}
+
+.poster-dashboard {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: auto;
+  padding: 28px 32px 48px;
+  background: var(--canvas-bg);
+}
+
+.poster-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.poster-dashboard-kicker {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.poster-dashboard h1 {
+  margin: 0;
+  font: 600 22px/1.2 var(--font);
+}
+
+.poster-dashboard .brand-copy h1 {
+  font: 600 22px/1.2 var(--font);
+}
+
+.poster-dashboard > .hint {
+  margin: 10px 0 0;
+  max-width: 52ch;
+}
+
+.poster-resume {
+  margin-top: 22px;
+}
+
+.poster-resume h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.poster-dashboard-empty {
+  margin: 28px 0 8px;
+  color: var(--text-muted);
+}
+
+.poster-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.poster-card {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.poster-card.is-highlighted {
+  border-color: var(--accent);
+}
+
+.poster-card-open {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+  font-weight: 400;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.poster-card-open img,
+.poster-card-open .variant-thumb-placeholder {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.poster-card-open strong {
+  font-size: 13px;
+}
+
+.poster-card-open small {
   color: var(--text-muted);
 }
 

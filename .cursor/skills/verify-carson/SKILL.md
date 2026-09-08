@@ -44,10 +44,11 @@ Pass only when the recorded Vite pid is alive, that pid owns the recorded port, 
 node .cursor/skills/verify-carson/scripts/drive.mjs --run-dir "$CARSON_VERIFY_RUN_DIR" --feature editor-baseline
 ```
 
-`drive.mjs` opens Playwright Chromium with a user-data-dir inside the run directory, so IndexedDB and onboarding state stay off the operator's browser. It dismisses `Skip intro` when the `Wreck this poster` dialog is present. Feature recipes live in that file and in `features/*.md`. Prefer ARIA roles and accessible names. Do not click by coordinates.
+`drive.mjs` opens Playwright Chromium with a user-data-dir inside the run directory, so IndexedDB and onboarding state stay off the operator's browser. It chooses `New poster` on the Posters dashboard, then dismisses `Skip intro` when the `Wreck this poster` dialog is present. Feature recipes live in that file and in `features/*.md`. Prefer ARIA roles and accessible names. Do not click by coordinates.
 
 Stable handles:
 
+- Main `Posters`, buttons `New poster` and `All posters`
 - Dialog `Wreck this poster`, buttons `Let's wreck it` and `Skip intro`
 - Region `Wreck this poster` (coach, after Let's wreck it)
 - Region `Poster canvas`, heading `Carson`
@@ -96,4 +97,4 @@ Kills only the pid recorded in `run.json`. Removes the Playwright profile under 
 | `scripts/drive.mjs --feature <id>` | Plays one mapped feature |
 | `scripts/cleanup.sh` | Stops this run's Vite pid |
 
-Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `variations-trail`.
+Feature ids: `editor-baseline`, `poster-library`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `variations-trail`.
