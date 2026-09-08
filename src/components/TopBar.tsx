@@ -8,6 +8,7 @@ type TopBarProps = {
   tension: number
   onTensionChange: (value: number) => void
   onTensionCommit: () => void
+  onGoToDashboard: () => void
   onUndo: () => void
   onRedo: () => void
   onSave: () => void
@@ -23,6 +24,7 @@ export const TopBar = memo(function TopBar({
   tension,
   onTensionChange,
   onTensionCommit,
+  onGoToDashboard,
   onUndo,
   onRedo,
   onSave,
@@ -34,11 +36,19 @@ export const TopBar = memo(function TopBar({
   return (
     <header className="topbar glass-bar">
       <div className="brand">
-        <svg className="brand-mark" viewBox="0 0 1452 1311" aria-hidden="true">
-          <rect x="339" y="0" width="851" height="395" rx="20" />
-          <rect x="0" y="460" width="395" height="851" rx="20" />
-          <rect x="601" y="916" width="851" height="395" rx="20" />
-        </svg>
+        <button
+          type="button"
+          className="brand-home"
+          aria-label="All posters"
+          title="All posters"
+          onClick={onGoToDashboard}
+        >
+          <svg className="brand-mark" viewBox="0 0 1452 1311" aria-hidden="true">
+            <rect x="339" y="0" width="851" height="395" rx="20" />
+            <rect x="0" y="460" width="395" height="851" rx="20" />
+            <rect x="601" y="916" width="851" height="395" rx="20" />
+          </svg>
+        </button>
         <div className="brand-copy">
           <h1 className="visually-hidden">Carson</h1>
           <label className="project-name-field">

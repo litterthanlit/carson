@@ -25,7 +25,6 @@ import type { FabricObject } from 'fabric'
 import type { PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
 import type { StoredAsset } from '../lib/assets'
-import type { StoredProject } from '../lib/storage'
 import type { GridOverlay, LayoutGuide } from '../lib/grid'
 import { FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
 import { legibilityBand } from '../lib/color'
@@ -72,9 +71,6 @@ export type InspectorPanelProps = {
   posterWidth: number
   posterHeight: number
   onExport: () => void
-  savedProjects: StoredProject[]
-  onLoadProject: (project: StoredProject) => void
-  onDeleteProject: (id: string, name: string) => void
   posterTreatments: Treatment[]
   selected: SelectedState | null
   selectedObject: FabricObject | null
@@ -248,9 +244,6 @@ export function InspectorPanel({
   posterWidth,
   posterHeight,
   onExport,
-  savedProjects,
-  onLoadProject,
-  onDeleteProject,
   posterTreatments,
   selected,
   selectedObject,
@@ -455,29 +448,6 @@ export function InspectorPanel({
             ? `Export SVG ${posterWidth} x ${posterHeight}`
             : `Export ${posterWidth * exportScale} x ${posterHeight * exportScale}`}
         </button>
-      </div>
-      <div className="saved-list">
-        {savedProjects.length === 0 ? (
-          <p className="empty">No saved posters yet.</p>
-        ) : (
-          savedProjects.map((project) => (
-            <div key={project.id} className="saved-row">
-              <button type="button" title={`Load “${project.name}”`} onClick={() => onLoadProject(project)}>
-                <span>{project.name}</span>
-                <small>{new Date(project.savedAt).toLocaleString()}</small>
-              </button>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label={`Delete saved poster ${project.name}`}
-                title="Delete this saved poster"
-                onClick={() => onDeleteProject(project.id, project.name)}
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))
-        )}
       </div>
     </div>
   )

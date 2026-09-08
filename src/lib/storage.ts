@@ -5,6 +5,7 @@
  */
 import type { DocumentMeta } from './document'
 import type { PosterPreset } from './editorModel'
+import { AUTOSAVE_PROJECT_ID, excludeAutosaveProjects, nextDuplicateName } from './posterLibrary'
 
 export type StoredProject = {
   id: string
@@ -13,12 +14,13 @@ export type StoredProject = {
   preset: PosterPreset
   canvas: Record<string, unknown>
   document?: DocumentMeta
+  thumbnail?: string
 }
 
 const DB_NAME = 'carson-poster'
 const DB_VERSION = 1
 const STORE = 'projects'
-const AUTOSAVE_ID = '__autosave__'
+const AUTOSAVE_ID = AUTOSAVE_PROJECT_ID
 const LEGACY_KEY = 'carson.poster.projects.v1'
 
 let dbPromise: Promise<IDBDatabase> | null = null
@@ -53,13 +55,51 @@ export async function listProjects(): Promise<StoredProject[]> {
   const tx = db.transaction(STORE, 'readonly')
   const request = tx.objectStore(STORE).getAll()
   await txDone(tx)
-  const projects = (request.result as StoredProject[]).filter((p) => p.id !== AUTOSAVE_ID)
+  const projects = excludeAutosaveProjects(request.result as StoredProject[])
   return projects.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+}
+
+export async function getProject(id: string): Promise<StoredProject | undefined> {
+  const db = await openDb()
+  const tx = db.transaction(STORE, 'readonly')
+  const request = tx.objectStore(STORE).get(id)
+  await txDone(tx)
+  return request.result as StoredProject | undefined
 }
 
 export async function findProjectByName(name: string): Promise<StoredProject | undefined> {
   const projects = await listProjects()
   return projects.find((p) => p.name === name)
+}
+
+export async function renameProject(id: string, name: string): Promise<StoredProject> {
+  const project = await getProject(id)
+  if (!project || project.id === AUTOSAVE_ID) {
+    throw new Error('Poster not found')
+  }
+  const trimmed = name.trim() || 'Untitled poster'
+  const updated = { ...project, name: trimmed }
+  await saveProject(updated)
+  return updated
+}
+
+export async function duplicateProject(id: string): Promise<StoredProject> {
+  const source = await getProject(id)
+  if (!source || source.id === AUTOSAVE_ID) {
+    throw new Error('Poster not found')
+  }
+  const projects = await listProjects()
+  const copy: StoredProject = {
+    ...source,
+    id: newProjectId(),
+    name: nextDuplicateName(
+      projects.map((project) => project.name),
+      source.name,
+    ),
+    savedAt: new Date().toISOString(),
+  }
+  await saveProject(copy)
+  return copy
 }
 
 export async function saveProject(project: StoredProject): Promise<void> {
