@@ -123,6 +123,21 @@ const FEATURES = {
     await capture(page, outDir, 'treatments')
   },
 
+  async 'copy-machine'(page, outDir) {
+    await openTab(page, 'Layers')
+    await layerSelect(page, 'Oversized headline').click()
+    await page.getByRole('button', { name: 'Instruments' }).click()
+    await page.getByRole('complementary', { name: 'Instruments' }).waitFor()
+    await page.getByRole('button', { name: /Copy machine/ }).click()
+    await page.getByRole('button', { name: 'Move tool' }).click()
+    await openTab(page, 'Treatments')
+    const empty = page.getByText('No layer treatments yet')
+    if (await empty.isVisible().catch(() => false)) fail('Treatments tab stayed empty after Copy machine')
+    const body = await page.locator('body').innerText()
+    if (!/Copy·/.test(body)) fail('Copy machine did not land a Copy chip')
+    await capture(page, outDir, 'treatments')
+  },
+
   async 'decay-marks'(page, outDir) {
     await openTab(page, 'Layers')
     await layerSelect(page, 'Oversized headline').click()
@@ -166,7 +181,7 @@ const FEATURES = {
   },
 
   async 'export-png'(page, outDir) {
-    const downloadPromise = page.waitForEvent('download', { timeout: 20000 })
+    const downloadPromise = page.waitForEvent('download', { timeout: 60000 })
     await page.getByRole('banner').getByRole('button', { name: 'Export' }).click()
     const download = await downloadPromise
     const suggested = download.suggestedFilename()

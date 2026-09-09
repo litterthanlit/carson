@@ -14,7 +14,7 @@ export function newTrailFrameId(): string {
 }
 
 export function isTrailWorthy(op: HistoryOp): boolean {
-  return op.type !== 'objectPatch' && op.type !== 'layerOrder'
+  return op.type !== 'objectPatch' && op.type !== 'objectPatches' && op.type !== 'layerOrder'
 }
 
 export function liveOpIds(ops: HistoryOp[]): string[] {

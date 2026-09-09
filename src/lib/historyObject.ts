@@ -27,6 +27,9 @@ export function captureObjectPatch(object: FabricObject): string {
   const patch: ObjectPatch = {
     left: object.left ?? 0,
     top: object.top ?? 0,
+    angle: object.angle ?? 0,
+    scaleX: object.scaleX ?? 1,
+    scaleY: object.scaleY ?? 1,
     opacity: object.opacity ?? 1,
     blendMode: String(object.globalCompositeOperation ?? 'source-over'),
     name: String(readObjectProp(object, 'name') ?? 'Layer'),

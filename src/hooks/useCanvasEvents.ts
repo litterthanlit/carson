@@ -3,6 +3,9 @@ import type { Canvas, FabricObject, Path as FabricPath } from 'fabric'
 import type { MutableRefObject } from 'react'
 import { SNAP_SCREEN_THRESHOLD } from '../lib/editorConstants'
 import { buildLayoutGrid, layoutSnapLines, type GridOverlay, type LayoutGuide } from '../lib/grid'
+import { captureObjectPatch } from '../lib/historyObject'
+import { collectCanvasTransformPatches, type CanvasTransformCapture } from '../lib/canvasTransformHistory'
+import { readObjectProp } from '../lib/canvasUtils'
 import { buildPrintGuides } from '../lib/printGuides'
 import { SELECTION_ACCENT } from '../lib/selectionChrome'
 import { computeSnap } from '../lib/snapping'
@@ -27,6 +30,7 @@ type UseCanvasEventsOptions = {
   syncSelected: () => void
   syncLayers: () => void
   commitHistory: (message: string) => void
+  commitObjectPatches: (label: string, patches: Array<{ objectId: string; before: string; after: string }>) => void
   tagObject: (object: FabricObject, kind: LayerKind, name: string) => void
   onTextSelectionChange?: (range: TextSelectionRange | null) => void
   onLiveTransform?: () => void
@@ -55,6 +59,7 @@ export function useCanvasEvents({
   syncSelected,
   syncLayers,
   commitHistory,
+  commitObjectPatches,
   tagObject,
   onTextSelectionChange,
   onLiveTransform,
@@ -72,7 +77,53 @@ export function useCanvasEvents({
       canvas.on('selection:created', sync)
       canvas.on('selection:updated', sync)
       canvas.on('selection:cleared', sync)
-      canvas.on('object:modified', () => commitHistory('Changed layer'))
+
+      let transformSession: { befores: CanvasTransformCapture[]; committed: boolean } | null = null
+
+      const captureTargets = (target?: FabricObject | null): CanvasTransformCapture[] => {
+        const objects = canvas.getActiveObjects()
+        const list = objects.length > 0 ? objects : target ? [target] : []
+        return list
+          .map((object) => ({
+            objectId: String(readObjectProp(object, 'id') ?? ''),
+            patch: captureObjectPatch(object),
+          }))
+          .filter((item) => item.objectId)
+      }
+
+      const beginTransformSession = (target?: FabricObject | null) => {
+        if (transformSession) return
+        const befores = captureTargets(target)
+        if (befores.length === 0) return
+        transformSession = { befores, committed: false }
+      }
+
+      const commitTransformSession = () => {
+        if (!transformSession || transformSession.committed) {
+          transformSession = null
+          return false
+        }
+        const afters = transformSession.befores.map((item) => {
+          const object =
+            canvas.getObjects().find((candidate) => String(readObjectProp(candidate, 'id') ?? '') === item.objectId) ??
+            null
+          return {
+            objectId: item.objectId,
+            patch: object ? captureObjectPatch(object) : item.patch,
+          }
+        })
+        const patches = collectCanvasTransformPatches(transformSession.befores, afters)
+        transformSession.committed = true
+        transformSession = null
+        if (patches.length === 0) return true
+        commitObjectPatches('Changed layer', patches)
+        return true
+      }
+
+      canvas.on('object:modified', () => {
+        if (commitTransformSession()) return
+        commitHistory('Changed layer')
+      })
       const syncLayersIfAllowed = () => {
         if (!isLayerSyncSuppressed()) syncLayers()
       }
@@ -99,6 +150,7 @@ export function useCanvasEvents({
       canvas.on('text:editing:exited', () => onTextSelectionChange?.(null))
 
       canvas.on('mouse:down', (event) => {
+        transformSession = null
         const native = event.e as MouseEvent
         const point = canvas.getScenePoint(native)
         if (editorToolRef?.current === 'mask') {
@@ -151,6 +203,7 @@ export function useCanvasEvents({
         const target = event.target
         guidesRef.current = { v: [], h: [] }
         if (!target) return
+        beginTransformSession(target)
         const pointerEvent = event.e as MouseEvent | TouchEvent | undefined
         const original = event.transform?.original
         if (shiftHeld(event) && original) {
@@ -198,6 +251,7 @@ export function useCanvasEvents({
 
       canvas.on('object:scaling', (event) => {
         const target = event.target
+        beginTransformSession(target)
         const original = event.transform?.original
         if (!target || !shiftHeld(event) || !original) {
           onLiveTransform?.()
@@ -215,6 +269,7 @@ export function useCanvasEvents({
 
       canvas.on('object:rotating', (event) => {
         const target = event.target
+        beginTransformSession(target)
         if (target && shiftHeld(event)) {
           target.set({ angle: snapRotation(target.angle ?? 0) })
           target.setCoords()
@@ -319,6 +374,7 @@ export function useCanvasEvents({
     [
       bleedMmRef,
       commitHistory,
+      commitObjectPatches,
       displayScaleRef,
       gridOverlayRef,
       layoutGuidesRef,

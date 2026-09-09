@@ -17,6 +17,7 @@ import {
   misprintCompanionPose,
   renderCopyMachineGhostPass,
   renderCopyMachinePass,
+  applyCopyMachineChain,
   scaleCopyMachineParams,
 } from './copyMachine'
 
@@ -230,6 +231,17 @@ describe('copyMachine CM-2 ghost', () => {
     expect(Array.from(first.data)).toEqual(Array.from(second.data))
     expect(Array.from(first.data)).toEqual(Array.from(tonal.data))
     expect(imageDataDigest(first.data)).not.toBe(imageDataDigest(full.data))
+  })
+
+  it('chains enabled copy-machine steps with the same pixels as a single pass', () => {
+    const source = createCheckerboard(FIXTURE_SIZE)
+    const params = COPY_MACHINE_DEFAULTS
+    const direct = renderCopyMachinePass(source, params, createSeededRandom(FIXTURE_SEED))
+    const chained = applyCopyMachineChain(
+      source,
+      [{ seed: FIXTURE_SEED, enabled: true, params: { ...params } }],
+    )
+    expect(Array.from(chained.data)).toEqual(Array.from(direct.data))
   })
 
   it('resolves defaults for ghost params', () => {

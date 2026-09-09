@@ -60,10 +60,10 @@ export function tileRects(width: number, height: number, tile: number): ExportTi
   return tiles
 }
 
-export function rasterizeCanvasTiled(
+export async function rasterizeCanvasTiled(
   canvas: TiledExportCanvas,
   multiplier = 1,
-): HTMLCanvasElement {
+): Promise<HTMLCanvasElement> {
   const width = canvas.getWidth()
   const height = canvas.getHeight()
   const dest = exportPixelSize(width, height, multiplier)

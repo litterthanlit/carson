@@ -177,6 +177,35 @@ describe('historyLog', () => {
     })
   })
 
+  it('restores batched object patch ops incrementally', () => {
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{}' })
+    state = pushHistoryOp(state, {
+      type: 'objectPatches',
+      label: 'Changed layer',
+      patches: [
+        { objectId: 'a', before: '{"left":1}', after: '{"left":8}' },
+        { objectId: 'b', before: '{"left":2}', after: '{"left":9}' },
+      ],
+    })
+    expect(restoreActionForUndo(state)).toEqual({
+      kind: 'objectPatches',
+      patches: [
+        { objectId: 'a', patchJson: '{"left":1}' },
+        { objectId: 'b', patchJson: '{"left":2}' },
+      ],
+      label: 'Undo: Changed layer',
+    })
+    expect(restoreActionForRedo({ ...state, cursor: 0 })).toEqual({
+      kind: 'objectPatches',
+      patches: [
+        { objectId: 'a', patchJson: '{"left":8}' },
+        { objectId: 'b', patchJson: '{"left":9}' },
+      ],
+      label: 'Redo: Changed layer',
+    })
+  })
+
   it('restores layer order ops incrementally', () => {
     let state = createHistoryState()
     state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: '{}' })

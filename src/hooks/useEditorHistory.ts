@@ -123,16 +123,22 @@ export function useEditorHistory({
         setStatus(action.label)
         return
       }
-      if (action.kind === 'objectPatch') {
+      if (action.kind === 'objectPatch' || action.kind === 'objectPatches') {
         const canvas = canvasRef.current
-        const object =
-          canvas?.getObjects().find((item) => String(readObjectProp(item, 'id') ?? '') === action.objectId) ??
-          null
-        if (object) {
+        const patches =
+          action.kind === 'objectPatch'
+            ? [{ objectId: action.objectId, patchJson: action.patchJson }]
+            : action.patches
+        if (canvas) {
           restoringRef.current = true
-          applyObjectPatch(object, action.patchJson)
+          for (const patch of patches) {
+            const object =
+              canvas.getObjects().find((item) => String(readObjectProp(item, 'id') ?? '') === patch.objectId) ??
+              null
+            if (object) applyObjectPatch(object, patch.patchJson)
+          }
           restoringRef.current = false
-          canvas?.requestRenderAll()
+          canvas.requestRenderAll()
           syncSelected()
           syncLayers()
         }
@@ -238,6 +244,22 @@ export function useEditorHistory({
     [pushIncrementalOp],
   )
 
+  const commitObjectPatchesHistory = useCallback(
+    (label: string, patches: Array<{ objectId: string; before: string; after: string }>) => {
+      if (patches.length === 0) return
+      if (patches.length === 1) {
+        const patch = patches[0]
+        pushIncrementalOp(
+          { type: 'objectPatch', label, objectId: patch.objectId, before: patch.before, after: patch.after },
+          label,
+        )
+        return
+      }
+      pushIncrementalOp({ type: 'objectPatches', label, patches }, label)
+    },
+    [pushIncrementalOp],
+  )
+
   const commitLayerOrderHistory = useCallback(
     (label: string, before: string, after: string) => {
       pushIncrementalOp({ type: 'layerOrder', label, before, after }, label)
@@ -315,6 +337,7 @@ export function useEditorHistory({
     commitTreatmentHistory,
     commitPosterTreatmentHistory,
     commitObjectPatchHistory,
+    commitObjectPatchesHistory,
     commitLayerOrderHistory,
     restoreSnapshot,
     undoAsync,

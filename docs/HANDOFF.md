@@ -136,16 +136,16 @@ Function declarations (`syncSelected`, `scheduleAutosave`, etc.) are hoisted —
 
 See **[`docs/HANDOFF-HORIZON-3.md`](./HANDOFF-HORIZON-3.md)** for scorecard, phases, and first-PR scope.
 
-**Quick start:** Phase A (local Serendipity Engine) is complete. Next is Phase B — Copy Machine on a worker / snapshot hitching. Do not start cloud, AI, marketplace, or tablet.
+**Quick start:** Phase A (3.2) and Phase B (3.5 spike) are complete. Next is Phase C — native macOS shell (menu bar, `.carson`, save/open). Do not start cloud, AI, marketplace, or tablet.
 
 ---
 
 ## Still open from REIMAGINED.md (high level)
 
-- **Horizon 2 leftovers:** canvas-drag snapshots; click-to-place bezier; true CMYK plates
-- **Horizon 3:** Serendipity Engine + Press Check, cloud/CRDT, AI assistant (covenant), WebGPU, native shell, marketplace, cross-device
+- **Horizon 2 leftovers:** click-to-place bezier; true CMYK plates; status line above the trail
+- **Horizon 3:** cloud/CRDT, AI assistant (covenant), remaining WebGPU live renderer, native shell, marketplace, cross-device
 
-REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, Horizon 2 **program closed**, ~55% Horizon 3.
+REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, Horizon 2 **program closed**, ~60% Horizon 3.
 
 ---
 

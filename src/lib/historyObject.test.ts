@@ -25,9 +25,32 @@ describe('historyObject', () => {
     applyObjectPatch(object, before)
     expect(object.left).toBe(10)
     expect(object.top).toBe(20)
+    expect(object.angle).toBe(0)
+    expect(object.scaleX).toBe(1)
     expect(object.opacity).toBe(0.8)
     expect(object.globalCompositeOperation).toBe('multiply')
     expect((object as unknown as { name: string }).name).toBe('Block')
+  })
+
+  it('round-trips rotate and scale from a canvas transform patch', () => {
+    const object = new Rect({
+      left: 10,
+      top: 20,
+      width: 40,
+      height: 40,
+      angle: 12,
+      scaleX: 1.5,
+      scaleY: 0.8,
+    })
+    object.set({ name: 'Block' } as Partial<Rect>)
+    const before = captureObjectPatch(object)
+    object.set({ left: 80, top: 90, angle: 45, scaleX: 2, scaleY: 2 } as Partial<Rect>)
+    applyObjectPatch(object, before)
+    expect(object.left).toBe(10)
+    expect(object.top).toBe(20)
+    expect(object.angle).toBe(12)
+    expect(object.scaleX).toBe(1.5)
+    expect(object.scaleY).toBe(0.8)
   })
 
   it('round-trips layer masks', () => {

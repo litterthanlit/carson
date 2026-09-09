@@ -3,6 +3,7 @@
  * Pure, deterministic image warping: wobble (displacement field) + drag (scan smear).
  * Tonal passes and treatment wiring land in CM-1.
  */
+import { createSeededRandom } from './random'
 
 export type CopyMachineParams = {
   // tonal (CM-1)
@@ -446,6 +447,28 @@ export function renderCopyMachinePass(
 ): ImageData {
   const spatial = applySpatialPasses(imageData, params, random, exportScale)
   return applyTonalPasses(spatial, params, random)
+}
+
+export type CopyMachineChainStep = {
+  seed: number
+  enabled: boolean
+  params: Record<string, number>
+}
+
+export function applyCopyMachineChain(
+  sourceImageData: ImageData,
+  treatments: CopyMachineChainStep[],
+  exportScale = 1,
+  tensionScale = 1,
+): ImageData {
+  let imageData = sourceImageData
+  for (const treatment of treatments) {
+    if (!treatment.enabled) continue
+    const params = scaleCopyMachineParams(copyMachineParamsFromRecord(treatment.params), tensionScale)
+    const random = createSeededRandom(treatment.seed)
+    imageData = renderCopyMachinePass(imageData, params, random, exportScale)
+  }
+  return imageData
 }
 
 /** Ghost companion — tonal only (the other drum pass), no spatial warp. */

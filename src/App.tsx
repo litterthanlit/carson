@@ -450,7 +450,7 @@ function App() {
     }
   }, [])
 
-  const { commitHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId } = useEditorHistory({
+  const { commitHistory, commitObjectPatchesHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId } = useEditorHistory({
     canvasRef,
     setStatus,
     syncSelected: () => syncSelected(),
@@ -533,6 +533,7 @@ function App() {
     syncSelected,
     syncLayers,
     commitHistory,
+    commitObjectPatches: commitObjectPatchesHistory,
     tagObject,
     onTextSelectionChange: setTextSelection,
     editorToolRef,
@@ -3842,7 +3843,7 @@ function App() {
           exportScale,
         )
       }
-      const raster = rasterizeCanvasTiled(canvas, exportScale)
+      const raster = await rasterizeCanvasTiled(canvas, exportScale)
       const width = raster.width
       const height = raster.height
 

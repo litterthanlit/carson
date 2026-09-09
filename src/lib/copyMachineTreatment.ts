@@ -4,15 +4,16 @@
  */
 import { FabricImage, type Canvas, type FabricObject } from 'fabric'
 import {
+  applyCopyMachineChain,
   copyMachineGhostDelta,
   copyMachineGhostOpacity,
   copyMachineParamsFromRecord,
   copyMachinePixelScale,
   renderCopyMachineGhostPass,
-  renderCopyMachinePass,
   scaleCopyMachineParams,
   type CopyMachineParams,
 } from './copyMachine'
+import { applyCopyMachineChainAsync } from './copyMachineWorkerClient'
 import { createSeededRandom } from './random'
 import { readTransformBaseline, readTreatments, type Treatment } from './treatments'
 
@@ -220,21 +221,7 @@ function imageDataToDataUrl(imageData: ImageData): string {
   return canvas.toDataURL('image/png')
 }
 
-export function applyCopyMachineChain(
-  sourceImageData: ImageData,
-  treatments: Treatment[],
-  exportScale = 1,
-  tensionScale = 1,
-): ImageData {
-  let imageData = sourceImageData
-  for (const treatment of treatments) {
-    if (!treatment.enabled) continue
-    const params = scaleCopyMachineParams(copyMachineParamsFromRecord(treatment.params), tensionScale)
-    const random = createSeededRandom(treatment.seed)
-    imageData = renderCopyMachinePass(imageData, params, random, exportScale)
-  }
-  return imageData
-}
+export { applyCopyMachineChain }
 
 export function renderCopyMachineChain(
   treatments: Treatment[],
@@ -329,7 +316,7 @@ export async function renderCopyMachineTreatment(
   if (!cached || !dataUrl) {
     revealSourceForRaster(source)
     sourcePixels = sourceToImageData(source, exportScale)
-    const imageData = applyCopyMachineChain(sourcePixels, chain, exportScale, tensionScale)
+    const imageData = await applyCopyMachineChainAsync(sourcePixels, chain, exportScale, tensionScale)
     dataUrl = imageDataToDataUrl(imageData)
     writeCopyMachineBakeCache(cacheKey, { imageData, dataUrl, sourceImageData: sourcePixels })
   }

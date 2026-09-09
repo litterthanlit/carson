@@ -14,7 +14,7 @@ Turn Carson from a **local professional instrument** into the **category**: a st
 
 **Horizon 2 done as a numbered program.** You are working **Horizon 3 only** unless fixing a regression or a leftover that blocks 3.2.
 
-**Rough completion:** ~90% Horizon 2 · **~55% Horizon 3** (Serendipity Engine local path complete — Instruments, Gestures, Tension, Press Check, document assets — none of 3.1 / 3.3–3.7 are complete)
+**Rough completion:** ~90% Horizon 2 · **~60% Horizon 3** (3.2 local complete · 3.5 Phase B spike landed — Copy Machine worker, drag patches, WebGPU blit with canvas2d fallback — none of 3.1 / 3.3 / 3.4 / 3.6 / 3.7 are complete)
 
 Do not claim an item complete without a **user-facing path**. Backend-only or test-only does not count. Read `REIMAGINED.md` before marking an item done.
 
@@ -41,7 +41,6 @@ These are **not** Horizon 3. Do them when they are in the way of Instruments, Pr
 
 | Leftover | Why it blocks H3 | Where |
 |----------|------------------|--------|
-| Canvas drag (`object:modified`) still full-snapshots | CRDT / infinite undo / 3.5 hitching | `useCanvasEvents.ts` |
 | Pen is freehand `PencilBrush`, not click-to-place bezier | Not an H3 blocker | `App.tsx` pen mode |
 | Soft-proof CMYK, not true plates | Press Check export fidelity | `cmykPreview.ts` / `print.ts` |
 | Status line still sits above the trail | Cosmetic vs §9.5 | `EditorCanvas` `.stage-status` |
@@ -56,7 +55,7 @@ These are **not** Horizon 3. Do them when they are in the way of Instruments, Pr
 | **3.2** | Serendipity Engine (flagship) | **complete (local)** | `src/lib/instruments.ts` registry; Age / Ink loss / Fold / Wear / Misprint / Type strip on the layer stack; Tension; Copy Machine; Gestures as performances; Press Check; **named Instrument/Gesture assets on the document** | Marketplace / Postures (3.6) |
 | **3.3** | AI studio assistant | **0%** | Cmd+K maps labels → handlers; scramble rearranges existing layers | Subject mask (editable, not cutout); Riff (6 layout variations of *this* composition); NL → visible slider moves; taste mirror from the user's own history. Hard lines below. |
 | **3.4** | Cross-device | **0%** | Desktop browser + thin macOS WKWebView | Tablet stylus treatment painting; phone review/comments; same cloud doc |
-| **3.5** | Performance re-platform | **~5%** | Copy Machine displacement is a **pure** `(imageData, seed, params) => imageData` designed to port to a shader; tiled raster export; 10k px cap | WebGPU tiled renderer at 60fps; workers for filter stacks; kill snapshot hitching on image-heavy docs and canvas drag |
+| **3.5** | Performance re-platform | **~40%** | Copy Machine warp on a worker (canvas2d fallback); canvas drag is `objectPatch` / `objectPatches`; tiled canvas2d export; WebGPU blit helper is opt-in (`compositeExportTiles(..., 'webgpu')`) | Live 60fps WebGPU canvas renderer; production WebGPU export blit; workers for the rest of the filter stacks; Fabric still paints the editor |
 | **3.6** | Community / marketplace | **0%** | Gestures and components live on `documentMeta` only | Share Instruments, Gestures, stacks, **Postures** (parameterized starting energies, never identical twice — P5) |
 | **3.7** | Native shell maturity | **~10%** | WKWebView loads bundled `web/` | Menu bar, `.carson` file association, native save/open, Quick Look, offline-first cloud sync |
 
@@ -163,15 +162,13 @@ Phase A (local Serendipity Engine) is complete. **Do not** build a marketplace (
 
 ---
 
-### Phase B — Performance spike (3.5)
+### Phase B — Performance spike (3.5) — landed
 
-Start in parallel with A once A1 exists; do not wait for Press Check.
+- Copy Machine warp runs in `copyMachine.worker.ts` via `applyCopyMachineChainAsync`; canvas2d / main-thread fallback when `Worker` is missing.
+- Canvas drag / scale / rotate commits `objectPatch` (or batched `objectPatches` for multi-select) instead of a full snapshot. Text edits still snapshot.
+- Tiled export still composites with canvas2d tile-by-tile (the proven path). `gpuTiledBlit.ts` holds an opt-in WebGPU blit; Fabric still paints the live editor.
 
-- Move Copy Machine warp behind a worker (pure function already).
-- Replace `object:modified` snapshots with `objectPatch` (H2 leftover that is now a 3.5 blocker).
-- Spike WebGPU tiled blit for 10k×10k; keep canvas2d fallback. Do not rip Fabric out in the spike.
-
-Success: image-heavy xerox + copy-machine stays interactive; export does not hitch the UI thread.
+Success for this spike: image-heavy xerox + copy-machine stays interactive; export does not hitch the UI thread. Remaining 3.5: live WebGPU canvas renderer, workers for other filter stacks.
 
 ---
 
@@ -237,7 +234,12 @@ Every action commits history and appears on the trail.
 | `src/lib/misprintTreatment.ts` | Misregistered echo as a stack companion |
 | `src/lib/typeStripsTreatment.ts` | Repeated type bars as stack companions |
 | `src/lib/treatments.ts` | Layer treatment types — Instrument registry wraps this |
-| `src/lib/copyMachine.ts` | First Instrument; WebGPU port target |
+| `src/lib/copyMachine.ts` | First Instrument; `applyCopyMachineChain` is the worker/CPU contract |
+| `src/lib/copyMachineJob.ts` | Transferable warp job — worker and tests run this |
+| `src/lib/copyMachine.worker.ts` | Off-thread warp |
+| `src/lib/copyMachineWorkerClient.ts` | Worker client + main-thread fallback |
+| `src/lib/gpuTiledBlit.ts` | WebGPU tiled blit helper (opt-in); export composites with canvas2d |
+| `src/lib/exportRaster.ts` | Tiled export; canvas2d tile composite |
 | `src/lib/copyMachineTreatment.ts` | Companions, non-destructive render |
 | `src/lib/gestures.ts` | Gesture performances — record plays, save, replay |
 | `src/lib/grid.ts` `gridTensionScale` | Tension multiplier — must apply to every Instrument |
@@ -264,11 +266,11 @@ Every action commits history and appears on the trail.
 
 ### History
 - `restoringRef` blocks commits during `loadFromJSON`.
-- Incremental ops: layer treatments, poster treatments, object patches, layer order. **Canvas drag is still a snapshot.**
-- Snapshot undo is O(canvas JSON) — hitch on image-heavy docs. 3.5 exists because of this.
+- Incremental ops: layer treatments, poster treatments, object patches (including canvas drag / scale / rotate), batched `objectPatches` for multi-select, layer order. Text edits still snapshot.
+- Snapshot undo is O(canvas JSON) — remaining hitch is periodic `SNAPSHOT_EVERY` and non-transform edits.
 
 ### Copy Machine
-- Spatial bake is canvas2d `getImageData`. Fine for now; do not add a GL context only for export.
+- Spatial bake is canvas2d `getImageData` on the main thread (Fabric raster), then warp/tonal in a worker. Main-thread fallback when `Worker` is missing.
 - Ghost companion is a tagged layer — exclude from layer semantics like scrape fragments.
 - Tension already scales scatter/copy-machine spatial amplitude **and** registry intensity keys (Age, xerox, distress, decay-marks, misprint offset, type-strip jitter, Press Check ink/misreg/tooth). New instruments must use `scaleTreatmentParams` / `gridTensionScale`, not a second global.
 
@@ -314,7 +316,8 @@ UI slices: launch with `.cursor/skills/verify-carson/scripts/launch.sh`, doctor,
 | Flow | Steps |
 |------|-------|
 | Layer treatment | Apply → chip → re-roll → bypass → remove → source still editable → Cmd+Z → save/reload |
-| Copy Machine | Instruments → Copy selected → chip → Tension moves intensity → Cmd+Z |
+| Copy Machine | Instruments → Copy machine → chip → Tension moves intensity → Cmd+Z |
+| Copy selected | Instruments → Copy selected → Treatments chip |
 | Press Check | Instruments → Press Check → chip + sliders → re-roll/bypass → Cmd+Z → export PNG includes the look |
 | Instrument asset | Treatments → Save as instrument → Assets / Instruments / Cmd+K play → trail → Cmd+Z |
 | Gesture | Record → play instruments → Save → replay from Instruments / Cmd+K → trail chips → undo |
@@ -331,17 +334,17 @@ A designer can reach it in the running app without a console. `REIMAGINED.md` is
 
 ## Suggested next PR (copy-paste scope)
 
-**Landed:** Shareable Instrument / Gesture assets. Save a tuned layer treatment as a named document Instrument. Replay from Assets, Instruments, and Cmd+K. Trail + Cmd+Z. Proof: verify-carson `instrument-assets`.
+**Landed:** Horizon 3.5 Phase B. Copy Machine warp on a worker; canvas drag is objectPatch; tiled export yields and tries WebGPU blit with canvas2d fallback. Proof: verify-carson `copy-machine` + `xerox-treatment`.
 
-**Title:** Copy Machine on a worker (Phase B / 3.5)
+**Title:** Native macOS shell (Phase C / 3.7)
 
-**Why this next:** Phase A (3.2 local) is done. Do not start cloud / AI / marketplace / tablet. Performance is the next dependency for image-heavy docs and for 3.1 (drag still full-snapshots).
+**Why this next:** Phase A and B are done. Do not start cloud / AI / marketplace / tablet. Native shell is independent of cloud.
 
 **Acceptance criteria:**
-- [ ] Copy Machine warp runs off the UI thread (pure function already)
-- [ ] Image-heavy xerox + copy-machine stays interactive
-- [ ] Canvas2d fallback remains; do not rip Fabric out
-- [ ] Unit tests + verify-carson user path still applies Copy selected
+- [ ] Real macOS menu bar mapped to Save, Export, Undo, Fork
+- [ ] `.carson` document (canvas JSON + `documentMeta` + seeds)
+- [ ] Native open/save panels
+- [ ] WKWebView stays; do not rewrite the editor in Swift
 - [ ] No cloud, no AI, no marketplace in this PR
 
 ---
@@ -372,4 +375,4 @@ The deepest win is cultural: "made in Carson" is a recognizable quality — text
 
 ---
 
-*Updated 2026-09-05 · Instrument/Gesture assets landed · Horizon 3 ~55%*
+*Updated 2026-09-09 · Horizon 3.5 Phase B landed · Horizon 3 ~60%*

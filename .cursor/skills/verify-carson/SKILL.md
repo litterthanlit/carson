@@ -56,6 +56,7 @@ Stable handles:
 - Seed layer names `Oversized headline`, `Red interruption`
 - Buttons `Group`, `Ungroup`, `Save selection as component`, `Detach`, `Scramble layout`, banner `Export`
 - Instruments tool, then `Copy selected`
+- Instruments tool, then `Copy machine`
 - Instruments tool, then `Age selected` / `Ink loss` / `Fold marks`
 - Instruments tool, then `Misprint offset` / `Type strip`
 - Instruments tool, then `Record gesture` / `Save performance`
@@ -96,4 +97,4 @@ Kills only the pid recorded in `run.json`. Removes the Playwright profile under 
 | `scripts/drive.mjs --feature <id>` | Plays one mapped feature |
 | `scripts/cleanup.sh` | Stops this run's Vite pid |
 
-Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `variations-trail`.
+Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `variations-trail`.

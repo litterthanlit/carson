@@ -19,6 +19,13 @@ describe('exploration trail', () => {
     expect(isTrailWorthy({ type: 'snapshot', label: 'Start', data: '{}' })).toBe(true)
     expect(isTrailWorthy({ type: 'treatment', label: 'Xerox', objectId: 'a', before: '[]', after: '[]' })).toBe(true)
     expect(isTrailWorthy({ type: 'objectPatch', label: 'Nudged', objectId: 'a', before: '{}', after: '{}' })).toBe(false)
+    expect(
+      isTrailWorthy({
+        type: 'objectPatches',
+        label: 'Changed layer',
+        patches: [{ objectId: 'a', before: '{}', after: '{}' }],
+      }),
+    ).toBe(false)
     expect(isTrailWorthy({ type: 'layerOrder', label: 'Reordered', before: '[]', after: '[]' })).toBe(false)
   })
 
