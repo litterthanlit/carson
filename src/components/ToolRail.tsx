@@ -8,18 +8,20 @@ import {
   Minus,
   MousePointer2,
   PenLine,
+  Pencil,
   Square,
   Star,
   Type,
   Wand2,
 } from 'lucide-react'
-import type { EditorTool } from '../types/editor'
+import type { EditorTool, PenKind } from '../types/editor'
 
 type Flyout = 'shape' | 'mask' | null
 
 type ToolRailProps = {
   tool: EditorTool
   penMode: boolean
+  penKind: PenKind
   fileInputRef: RefObject<HTMLInputElement | null>
   onToolChange: (tool: EditorTool) => void
   onAddShape: () => void
@@ -27,6 +29,7 @@ type ToolRailProps = {
   onAddLine: () => void
   onAddStar: () => void
   onTogglePenMode: () => void
+  onTogglePencilMode: () => void
   onImageInputChange: (file: File) => void
   onClipToShape: () => void
   onBrushMask: () => void
@@ -36,6 +39,7 @@ type ToolRailProps = {
 export const ToolRail = memo(function ToolRail({
   tool,
   penMode,
+  penKind,
   fileInputRef,
   onToolChange,
   onAddShape,
@@ -43,6 +47,7 @@ export const ToolRail = memo(function ToolRail({
   onAddLine,
   onAddStar,
   onTogglePenMode,
+  onTogglePencilMode,
   onImageInputChange,
   onClipToShape,
   onBrushMask,
@@ -120,14 +125,30 @@ export const ToolRail = memo(function ToolRail({
             <button
               type="button"
               role="menuitem"
-              className={penMode ? 'active' : undefined}
-              title="Draw freehand strokes (P)"
+              className={penMode && penKind === 'bezier' ? 'active' : undefined}
+              title="Click-to-place bezier pen (P)"
+              aria-label="Pen"
+              aria-pressed={penMode && penKind === 'bezier'}
               onClick={() => {
                 onTogglePenMode()
                 setFlyout(null)
               }}
             >
               <PenLine size={14} /> Pen
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={penMode && penKind === 'freehand' ? 'active' : undefined}
+              title="Draw a freehand pencil stroke"
+              aria-label="Pencil"
+              aria-pressed={penMode && penKind === 'freehand'}
+              onClick={() => {
+                onTogglePencilMode()
+                setFlyout(null)
+              }}
+            >
+              <Pencil size={14} /> Pencil
             </button>
           </div>
         ) : null}

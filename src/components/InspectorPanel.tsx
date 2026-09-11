@@ -211,6 +211,7 @@ export type InspectorPanelProps = {
   onTogglePrintGuides: () => void
   showCmykPreview: boolean
   onToggleCmykPreview: () => void
+  onExportCmykPlates: () => void
   pdfRegistrationMarks: boolean
   onPdfRegistrationMarksChange: (enabled: boolean) => void
   onAddArtboard: () => void
@@ -387,6 +388,7 @@ export function InspectorPanel({
   onTogglePrintGuides,
   showCmykPreview,
   onToggleCmykPreview,
+  onExportCmykPlates,
   pdfRegistrationMarks,
   onPdfRegistrationMarksChange,
   onAddArtboard,
@@ -1491,7 +1493,10 @@ export function InspectorPanel({
                 Mask: drag conceal · <kbd>Alt</kbd>-drag reveal · <kbd>[</kbd> <kbd>]</kbd> brush size
               </li>
               <li>
-                <kbd>B</kbd> Block · <kbd>P</kbd> Pen · <kbd>G</kbd> Grid · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble
+                <kbd>B</kbd> Block · <kbd>P</kbd> Bezier pen · <kbd>G</kbd> Grid · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble
+              </li>
+              <li>
+                Pen: click anchors · drag handles · <kbd>Enter</kbd> finish · click start to close · <kbd>Esc</kbd> cancel
               </li>
               <li>
                 <kbd>Cmd+G</kbd> Group · <kbd>Cmd+Shift+G</kbd> Ungroup
@@ -1818,6 +1823,7 @@ export function InspectorPanel({
             {' · '}
             {bleedMm} mm bleed
           </p>
+          <p className="hint">Soft-proof is a screen preview. Export CMYK plates writes C, M, Y, and K as grayscale pages for press. PDF pages cap at 2048px on the long edge so the file stays openable.</p>
           <label>
             Document DPI
             <input type="number" value={printDpi} min={72} max={600} onChange={(event) => onPrintDpiChange(Number(event.target.value))} />
@@ -1831,6 +1837,9 @@ export function InspectorPanel({
           </button>
           <button type="button" onClick={onToggleCmykPreview}>
             {showCmykPreview ? 'Disable CMYK soft-proof' : 'Enable CMYK soft-proof'}
+          </button>
+          <button type="button" onClick={onExportCmykPlates}>
+            Export CMYK plates
           </button>
           <PrintGamutReadout hex={typeof selected?.fill === 'string' ? selected.fill : undefined} />
           <label>

@@ -9,6 +9,7 @@ type ExplorationTrailProps = {
   cursor: number
   collapsed: boolean
   variantCount: number
+  status: string
   onToggleCollapsed: () => void
   onJump: (opId: string) => void
   onFork: () => void
@@ -21,6 +22,7 @@ export function ExplorationTrail({
   cursor,
   collapsed,
   variantCount,
+  status,
   onToggleCollapsed,
   onJump,
   onFork,
@@ -48,6 +50,9 @@ export function ExplorationTrail({
         <ChevronDown size={14} />
         Trail
       </button>
+      <span role="status" aria-live="polite" className="stage-status trail-status">
+        {status}
+      </span>
       {collapsed ? (
         <span className="trail-collapsed-meta">{frames.length} looks</span>
       ) : (

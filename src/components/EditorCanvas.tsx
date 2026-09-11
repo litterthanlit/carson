@@ -205,9 +205,6 @@ export const EditorCanvas = memo(function EditorCanvas({
             Re-roll {lastChaos.label} #{lastChaos.seed}
           </button>
         ) : null}
-        <span role="status" aria-live="polite" className="stage-status">
-          {status}
-        </span>
       </div>
       {stackBar}
       <div
@@ -256,6 +253,7 @@ export const EditorCanvas = memo(function EditorCanvas({
         cursor={trailCursor}
         collapsed={trailCollapsed}
         variantCount={documentMeta?.variants.length ?? 0}
+        status={status}
         onToggleCollapsed={onToggleTrailCollapsed}
         onJump={onJumpTrail}
         onFork={onForkVariant}

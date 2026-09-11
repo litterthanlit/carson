@@ -24,7 +24,7 @@ Preconditions:
 - Seed layers include `Oversized headline`.
 
 - **Trail after edit.** Open Layers, select `Oversized headline`, open Instruments, choose `Scatter`. Switch to `Move tool` so the palette is not covering the trail. Region `Exploration trail` shows a control whose name includes `Scattered selection`.
-- **Fork.** Choose `Fork`. Status mentions `Forked Variant`.
+- **Fork.** Choose `Fork`. Status in the exploration trail mentions `Forked Variant`.
 - **Jump back.** Choose the trail chip whose name includes `Started a new poster`. Status mentions that look.
 - **Gallery.** Choose `Comps gallery`. Dialog `Comps` appears with `Variant 1`. Choose `Compare` on that card. Dialog `Compare variations` appears.
 - **Proof.** `artifacts/variations-trail/after-compare.aria.txt` and `after-compare.png` show heading `Carson` and dialog `Compare variations`.

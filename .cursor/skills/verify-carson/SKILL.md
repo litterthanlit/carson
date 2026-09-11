@@ -63,9 +63,11 @@ Stable handles:
 - Instruments tool, then `Press Check`
 - Treatments chip, then `Save as instrument`
 - Instruments / Assets / Commands, then `Play instrument` plus the saved name
-- Status region `.stage-status` (`role=status`)
+- Status region `.stage-status` / `.trail-status` (`role=status`) in the exploration trail
 - Region `Exploration trail`, buttons `Fork` and `Comps gallery`
 - Dialog `Comps`, dialog `Compare variations`
+- Shape tool, then `Pen` (click-to-place bezier) or `Pencil` (freehand)
+- Print tab, then `Export CMYK plates`
 
 `window.prompt` during Save selection is accepted as `Mark` by the driver.
 
@@ -97,4 +99,4 @@ Kills only the pid recorded in `run.json`. Removes the Playwright profile under 
 | `scripts/drive.mjs --feature <id>` | Plays one mapped feature |
 | `scripts/cleanup.sh` | Stops this run's Vite pid |
 
-Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `variations-trail`.
+Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `bezier-pen`, `cmyk-plates`, `variations-trail`.

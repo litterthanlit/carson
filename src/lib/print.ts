@@ -134,6 +134,59 @@ export async function downloadPdfFromImageData(
   pdf.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`)
 }
 
+export type CmykPlatePage = {
+  label: string
+  dataUrl: string
+}
+
+/** Four grayscale separation pages — one per process plate. */
+export async function downloadCmykPlatesPdf(
+  plates: CmykPlatePage[],
+  fileName: string,
+  widthPx: number,
+  heightPx: number,
+  dpi: number,
+  options?: { printerMarks?: boolean; bleedMm?: number },
+) {
+  if (plates.length === 0) throw new Error('Plate export failed — no plates')
+  const { jsPDF } = await import('jspdf')
+  const printerMarks = options?.printerMarks ?? false
+  const layout = printPageLayout(widthPx, heightPx, dpi, {
+    printerMarks,
+    bleedMm: options?.bleedMm,
+  })
+  const orientation = layout.pageWidthMm >= layout.pageHeightMm ? 'landscape' : 'portrait'
+  const pdf = new jsPDF({
+    orientation,
+    unit: 'mm',
+    format: [layout.pageWidthMm, layout.pageHeightMm],
+  })
+
+  plates.forEach((plate, index) => {
+    if (index > 0) pdf.addPage([layout.pageWidthMm, layout.pageHeightMm], orientation)
+    pdf.addImage(plate.dataUrl, 'PNG', layout.artworkLeftMm, layout.artworkTopMm, layout.trimWidthMm, layout.trimHeightMm)
+    pdf.setFontSize(8)
+    pdf.setTextColor(0)
+    const labelY = layout.slugMm > 0 ? Math.max(3.5, layout.slugMm / 2) : 4
+    pdf.text(`${plate.label.toUpperCase()} PLATE`, layout.artworkLeftMm, labelY)
+    if (printerMarks) {
+      const marks = printerMarkGeometry(layout)
+      pdf.setDrawColor(0)
+      pdf.setLineWidth(0.15)
+      for (const line of marks.crop) {
+        pdf.line(line.x1, line.y1, line.x2, line.y2)
+      }
+      for (const target of marks.registration) {
+        pdf.circle(target.x, target.y, target.radius, 'S')
+        pdf.line(target.x - target.radius - 1.2, target.y, target.x + target.radius + 1.2, target.y)
+        pdf.line(target.x, target.y - target.radius - 1.2, target.x, target.y + target.radius + 1.2)
+      }
+    }
+  })
+
+  pdf.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`)
+}
+
 /** Uncompressed RGB TIFF (Horizon 2.6 v1). */
 export function rgbaToTiffBlob(width: number, height: number, rgba: Uint8ClampedArray): Blob {
   const headerSize = 8

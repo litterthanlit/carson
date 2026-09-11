@@ -373,6 +373,44 @@ const FEATURES = {
     await inspector.getByText(/Xerox/).waitFor()
     await capture(page, outDir, 'commands')
   },
+
+  async 'bezier-pen'(page, outDir) {
+    await page.getByRole('button', { name: 'Shape tool' }).click()
+    await page.getByRole('menuitem', { name: 'Pen', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: /click to place/i }).waitFor()
+    await capture(page, outDir, 'pen-on')
+    const workspace = page.getByRole('application', { name: /Poster canvas workspace/ })
+    await workspace.click({ position: { x: 240, y: 200 } })
+    await workspace.click({ position: { x: 420, y: 160 } })
+    await workspace.click({ position: { x: 380, y: 340 } })
+    await page.keyboard.press('Enter')
+    await page.getByRole('status').filter({ hasText: /bezier path/i }).waitFor()
+    await openTab(page, 'Layers')
+    await layerSelect(page, 'Pen stroke').waitFor()
+    await capture(page, outDir, 'after-path')
+  },
+
+  async 'cmyk-plates'(page, outDir) {
+    await openTab(page, 'Print')
+    const exportPlates = page.getByRole('button', { name: 'Export CMYK plates' })
+    await exportPlates.waitFor()
+    const downloadPromise = page.waitForEvent('download', { timeout: 60000 })
+    await exportPlates.click()
+    const download = await downloadPromise
+    const suggested = download.suggestedFilename()
+    if (!suggested.endsWith('-plates.pdf')) fail(`Plate export was "${suggested}"`)
+    await download.saveAs(join(outDir, suggested))
+    await writeFile(join(outDir, 'download.txt'), `${suggested}\n`)
+    await page.getByRole('status').filter({ hasText: /CMYK plates/i }).waitFor()
+    await capture(page, outDir, 'after-plates')
+    await page.getByRole('button', { name: 'Commands' }).click()
+    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    await palette.waitFor()
+    await palette.getByPlaceholder(/Search actions/).fill('plates')
+    await palette.getByRole('button', { name: 'Export CMYK plates' }).waitFor()
+    await capture(page, outDir, 'commands')
+    await page.keyboard.press('Escape')
+  },
 }
 
 const args = parseArgs(process.argv.slice(2))
@@ -394,7 +432,8 @@ const page = browser.pages()[0] ?? (await browser.newPage())
 
 try {
   page.on('dialog', (dialog) => {
-    void dialog.accept('Mark')
+    if (dialog.type() === 'prompt') void dialog.accept('Mark')
+    else void dialog.dismiss()
   })
   await page.goto(run.url, { waitUntil: 'domcontentloaded' })
   if (feature !== 'wreck-this-poster') await dismissOnboarding(page)
