@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { plateInkToPaperRgba, rgbaToCmykPlates } from './cmykPlates'
+import { plateInkToPaperRgba, plateRasterScale, rgbaToCmykPlates } from './cmykPlates'
 
 function pixel(r: number, g: number, b: number, a = 255) {
   return new Uint8ClampedArray([r, g, b, a])
@@ -42,5 +42,10 @@ describe('cmykPlates', () => {
     const rgba = plateInkToPaperRgba(new Uint8ClampedArray([0, 255]))
     expect(Array.from(rgba.slice(0, 4))).toEqual([255, 255, 255, 255])
     expect(Array.from(rgba.slice(4))).toEqual([0, 0, 0, 255])
+  })
+
+  it('caps plate raster so A3 PDF pages stay under 2048px', () => {
+    expect(plateRasterScale(3508, 4961, 2)).toBeCloseTo(2048 / 4961)
+    expect(plateRasterScale(800, 600, 1)).toBe(1)
   })
 })

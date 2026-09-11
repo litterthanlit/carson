@@ -75,7 +75,7 @@ import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, 
 import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
 import { alignObjects, clampGridOverlay, distributeObjects, gridTensionScale, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
-import { PLATE_CHANNELS, PLATE_LABELS, plateChannel, plateToDataUrl, rgbaToCmykPlates } from './lib/cmykPlates'
+import { PLATE_CHANNELS, PLATE_LABELS, plateChannel, plateRasterScale, plateToDataUrl, rgbaToCmykPlates } from './lib/cmykPlates'
 import {
   ACCENTS,
   BLEND_MODES,
@@ -3929,7 +3929,8 @@ function App() {
     const previousActive = canvas.getActiveObject()
     const previousRenderOnAddRemove = canvas.renderOnAddRemove
     const tensionScale = gridTensionScale(gridOverlay.tension)
-    const needsExportBake = exportScale !== 1
+    const plateScale = plateRasterScale(poster.width, poster.height, exportScale)
+    const needsExportBake = plateScale !== 1
     const posterTreatmentsForBake = readPosterTreatments(documentMeta ? getActiveArtboard(documentMeta) : undefined)
 
     try {
@@ -3937,7 +3938,7 @@ function App() {
       canvas.discardActiveObject()
       canvas.backgroundColor = '#ffffff'
       if (needsExportBake) {
-        await rebakeCopyMachineTreatments(canvas, exportScale, tensionScale)
+        await rebakeCopyMachineTreatments(canvas, plateScale, tensionScale)
         await rebakePressCheckTreatments(
           canvas,
           posterTreatmentsForBake,
@@ -3951,10 +3952,10 @@ function App() {
             } as Partial<FabricObject>)
           },
           tensionScale,
-          exportScale,
+          plateScale,
         )
       }
-      const raster = await rasterizeCanvasTiled(canvas, exportScale)
+      const raster = await rasterizeCanvasTiled(canvas, plateScale)
       const plates = rgbaToCmykPlates(canvasElementToRgba(raster), raster.width, raster.height)
       const { downloadCmykPlatesPdf } = await import('./lib/print')
       await downloadCmykPlatesPdf(

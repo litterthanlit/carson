@@ -1823,7 +1823,7 @@ export function InspectorPanel({
             {' · '}
             {bleedMm} mm bleed
           </p>
-          <p className="hint">Soft-proof is a screen preview. Export CMYK plates writes C, M, Y, and K as grayscale pages for press.</p>
+          <p className="hint">Soft-proof is a screen preview. Export CMYK plates writes C, M, Y, and K as grayscale pages for press. PDF pages cap at 2048px on the long edge so the file stays openable.</p>
           <label>
             Document DPI
             <input type="number" value={printDpi} min={72} max={600} onChange={(event) => onPrintDpiChange(Number(event.target.value))} />

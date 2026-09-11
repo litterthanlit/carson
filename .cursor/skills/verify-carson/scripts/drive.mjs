@@ -376,7 +376,7 @@ const FEATURES = {
 
   async 'bezier-pen'(page, outDir) {
     await page.getByRole('button', { name: 'Shape tool' }).click()
-    await page.getByRole('menuitem', { name: 'Pen' }).click()
+    await page.getByRole('menuitem', { name: 'Pen', exact: true }).click()
     await page.getByRole('status').filter({ hasText: /click to place/i }).waitFor()
     await capture(page, outDir, 'pen-on')
     const workspace = page.getByRole('application', { name: /Poster canvas workspace/ })
@@ -432,7 +432,8 @@ const page = browser.pages()[0] ?? (await browser.newPage())
 
 try {
   page.on('dialog', (dialog) => {
-    void dialog.accept('Mark')
+    if (dialog.type() === 'prompt') void dialog.accept('Mark')
+    else void dialog.dismiss()
   })
   await page.goto(run.url, { waitUntil: 'domcontentloaded' })
   if (feature !== 'wreck-this-poster') await dismissOnboarding(page)

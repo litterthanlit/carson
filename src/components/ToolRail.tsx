@@ -127,6 +127,7 @@ export const ToolRail = memo(function ToolRail({
               role="menuitem"
               className={penMode && penKind === 'bezier' ? 'active' : undefined}
               title="Click-to-place bezier pen (P)"
+              aria-label="Pen"
               aria-pressed={penMode && penKind === 'bezier'}
               onClick={() => {
                 onTogglePenMode()
@@ -140,6 +141,7 @@ export const ToolRail = memo(function ToolRail({
               role="menuitem"
               className={penMode && penKind === 'freehand' ? 'active' : undefined}
               title="Draw a freehand pencil stroke"
+              aria-label="Pencil"
               aria-pressed={penMode && penKind === 'freehand'}
               onClick={() => {
                 onTogglePencilMode()

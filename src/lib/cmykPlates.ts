@@ -6,6 +6,7 @@ import { rgbToCmyk } from './cmykPreview'
 
 export const PLATE_CHANNELS = ['cyan', 'magenta', 'yellow', 'black'] as const
 export type PlateChannel = (typeof PLATE_CHANNELS)[number]
+export const PLATE_PDF_MAX_EDGE = 2048
 
 export type CmykPlateSet = {
   width: number
@@ -21,6 +22,13 @@ export const PLATE_LABELS: Record<PlateChannel, string> = {
   magenta: 'Magenta',
   yellow: 'Yellow',
   black: 'Black',
+}
+
+export function plateRasterScale(width: number, height: number, requestedScale: number) {
+  const longest = Math.max(width, height)
+  if (longest <= 0) return 1
+  const cap = PLATE_PDF_MAX_EDGE / longest
+  return Math.max(0.05, Math.min(requestedScale, cap))
 }
 
 export function rgbaToCmykPlates(rgba: Uint8ClampedArray, width: number, height: number): CmykPlateSet {
