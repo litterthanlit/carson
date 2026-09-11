@@ -8,7 +8,7 @@ This directory is the maintained source for verifying Carson user-facing behavio
 - Origin is `http://127.0.0.1:4173/` unless `CARSON_VERIFY_PORT` was set.
 - Run `.cursor/skills/verify-carson/scripts/doctor.sh` and require the recorded pid to own that port.
 - Use a fresh Playwright profile (the driver puts it in the run directory). Do not reuse the operator's browser.
-- Dismiss `Wreck this poster` with `Skip intro` when it appears. That lands on Home. Editor recipes then choose `Start a poster` unless the feature file says otherwise.
+- Dismiss `Wreck this poster` with `Skip intro` when it appears. That lands on Home. Editor recipes then choose `Start from wreck` unless the feature file says otherwise.
 - Seed layers include `Oversized headline` and `Red interruption`.
 - Never drive an instance that this run did not start.
 
@@ -44,6 +44,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 
 - [Editor baseline](./editor-baseline.md) covers first load, onboarding skip, seed layers, and Inspect on the headline.
 - [Home recents](./home-recents.md) covers launch onto the posters grid, empty start, thumbnails, open, and Home back.
+- [New and Open](./new-open.md) covers New poster size, Open as an action, and unsaved-work warnings.
 - [Wreck this poster](./wreck-this-poster.md) covers the interactive first-run walkthrough: scatter, xerox, re-roll, undo.
 - [Layer groups](./layer-groups.md) covers grouping two seed layers and ungrouping them.
 - [Component instances](./component-instances.md) covers save, insert, and detach of a linked mark.

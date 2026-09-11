@@ -165,7 +165,11 @@ import { InspectorPanel } from './components/InspectorPanel'
 import { InstrumentsPalette } from './components/InstrumentsPalette'
 import { LiveSelectionHud } from './components/LiveSelectionHud'
 import { ToolRail } from './components/ToolRail'
+import { hasUnsavedWork, type ReplaceReason } from './lib/newPoster'
 import { HomeScreen } from './components/HomeScreen'
+import { NewPosterDialog } from './components/NewPosterDialog'
+import { OpenPosterDialog } from './components/OpenPosterDialog'
+import { UnsavedWorkDialog } from './components/UnsavedWorkDialog'
 import { TopBar } from './components/TopBar'
 import { TreatmentChips } from './components/TreatmentChips'
 import { OnboardingCoach } from './components/OnboardingCoach'
@@ -270,6 +274,7 @@ type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 
 type EditorIntent =
   | { kind: 'seed'; walkthrough?: boolean }
+  | { kind: 'blank'; preset: PosterPreset }
   | { kind: 'project'; project: StoredProject }
   | { kind: 'autosave'; project: StoredProject }
 
@@ -313,9 +318,15 @@ function App() {
   const [homeReady, setHomeReady] = useState(false)
   const [storageError, setStorageError] = useState(false)
   const [screen, setScreen] = useState<EditorScreen>('home')
+  const [editorSession, setEditorSession] = useState(0)
+  const [newDialogOpen, setNewDialogOpen] = useState(false)
+  const [openDialogOpen, setOpenDialogOpen] = useState(false)
+  const [unsavedOpen, setUnsavedOpen] = useState(false)
+  const [unsavedReason, setUnsavedReason] = useState<ReplaceReason>('open')
   const editorIntentRef = useRef<EditorIntent | null>(null)
   const screenRef = useRef<EditorScreen>('home')
   const savedCleanRef = useRef(true)
+  const unsavedResolverRef = useRef<((choice: 'cancel' | 'discard' | 'save') => void) | null>(null)
   screenRef.current = screen
   const [projectName, setProjectName] = useState('Untitled poster')
   const [projectId, setProjectId] = useState<string>(() => newProjectId())
@@ -653,13 +664,29 @@ function App() {
         if (intent.kind === 'project' || intent.kind === 'autosave') {
           if (cancelled) return
           await loadProject(intent.project, { keepId: intent.kind === 'project' })
+          savedCleanRef.current = true
           return
         }
         if (cancelled || canvasRef.current !== canvas) return
+        if (intent.kind === 'blank') {
+          setDocumentMeta(createDefaultDocument(poster, canvas.toObject(HISTORY_PROPS as unknown as string[])))
+          captureStyleBaseline()
+          syncSelected()
+          syncLayers()
+          resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
+          savedCleanRef.current = true
+          setStatus('Started a new poster')
+          return
+        }
         seedPoster(canvas, poster)
         if (cancelled || canvasRef.current !== canvas) return
         setDocumentMeta(createDefaultDocument(poster, canvas.toObject(HISTORY_PROPS as unknown as string[])))
-        commitHistory('Started a new poster')
+        captureStyleBaseline()
+        syncSelected()
+        syncLayers()
+        resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
+        savedCleanRef.current = true
+        setStatus('Started a new poster')
         if (intent.walkthrough) startWalkthrough()
       } catch {
         if (!cancelled) setStatus('Could not open this poster')
@@ -672,7 +699,7 @@ function App() {
       canvasRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen])
+  }, [screen, editorSession])
 
   useEffect(() => {
     canvasRef.current?.requestRenderAll()
@@ -742,6 +769,7 @@ function App() {
       posterInitRef.current = false
       return
     }
+    if (canvas.getWidth() === poster.width && canvas.getHeight() === poster.height) return
     canvas.setDimensions({ width: poster.width, height: poster.height })
     canvas.backgroundColor = '#f6f1e6'
     canvas.requestRenderAll()
@@ -796,6 +824,8 @@ function App() {
       redo()
     },
     save: () => void saveProjectAction(),
+    newPoster: () => openNewPosterDialog(),
+    openPoster: () => openOpenPosterDialog(),
     export: () => void exportPoster(),
     duplicate: () => void duplicateSelected(),
     delete: deleteSelected,
@@ -879,6 +909,26 @@ function App() {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      const actions = keyActionsRef.current
+      const meta = event.metaKey || event.ctrlKey
+      if (meta) {
+        const key = event.key.toLowerCase()
+        if (key === 'n') {
+          event.preventDefault()
+          actions.newPoster()
+          return
+        }
+        if (key === 'o') {
+          event.preventDefault()
+          actions.openPoster()
+          return
+        }
+        if (key === 'k' && screenRef.current === 'home') {
+          event.preventDefault()
+          actions.commandPalette()
+          return
+        }
+      }
       if (screenRef.current !== 'editor') return
       if (event.key === ' ' && !isTypingContext(event.target)) {
         if (!spaceDownRef.current) {
@@ -893,9 +943,6 @@ function App() {
         event.preventDefault()
         return
       }
-
-      const actions = keyActionsRef.current
-      const meta = event.metaKey || event.ctrlKey
 
       if (meta) {
         const key = event.key.toLowerCase()
@@ -2708,16 +2755,84 @@ function App() {
     scrollRef.current?.focus({ preventScroll: true })
   }
 
-  function enterEditor(intent: EditorIntent) {
+  function openNewPosterDialog() {
+    setCommandOpen(false)
+    setOpenDialogOpen(false)
+    setNewDialogOpen(true)
+  }
+
+  function openOpenPosterDialog() {
+    setCommandOpen(false)
+    setNewDialogOpen(false)
+    setOpenDialogOpen(true)
+  }
+
+  function confirmIfDirty(reason: ReplaceReason): Promise<boolean> {
+    if (screenRef.current !== 'editor' || !hasUnsavedWork(savedCleanRef.current)) {
+      return Promise.resolve(true)
+    }
+    if (unsavedResolverRef.current) return Promise.resolve(false)
+    setUnsavedReason(reason)
+    setUnsavedOpen(true)
+    return new Promise((resolve) => {
+      unsavedResolverRef.current = (choice) => {
+        void (async () => {
+          unsavedResolverRef.current = null
+          if (choice === 'cancel') {
+            setUnsavedOpen(false)
+            resolve(false)
+            return
+          }
+          if (choice === 'save') {
+            await saveProjectAction()
+            if (!savedCleanRef.current) {
+              setUnsavedOpen(false)
+              resolve(false)
+              return
+            }
+          }
+          setUnsavedOpen(false)
+          resolve(true)
+        })()
+      }
+    })
+  }
+
+  function applyEditorIntent(intent: EditorIntent) {
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
     editorIntentRef.current = intent
     posterInitRef.current = true
     layerIdRef.current = 0
+    setWalkthroughStep(null)
+    walkthroughStepRef.current = null
+    setCommandOpen(false)
+    setNewDialogOpen(false)
+    setOpenDialogOpen(false)
     if (intent.kind === 'seed') {
-      setPoster(applyPosterPreset('a3'))
+      const preset = applyPosterPreset('a3')
+      setPoster(preset)
       setPresetId('a3')
       setProjectName('Untitled poster')
       setProjectId(newProjectId())
       setDocumentMeta(null)
+      setPrintDpi(preset.dpi ?? 300)
+      setBleedMm(3)
+      setDocumentPalette(['#111111', '#e11d48', '#05b6d4', '#f6f1e6'])
+    } else if (intent.kind === 'blank') {
+      setPoster(intent.preset)
+      setPresetId(intent.preset.id)
+      if (intent.preset.id === 'custom') {
+        setCustomSize({ width: intent.preset.width, height: intent.preset.height })
+      }
+      setProjectName('Untitled poster')
+      setProjectId(newProjectId())
+      setDocumentMeta(null)
+      setPrintDpi(intent.preset.dpi ?? 300)
+      setBleedMm(3)
+      setDocumentPalette(['#111111', '#e11d48', '#05b6d4', '#f6f1e6'])
     } else {
       setPoster(intent.project.preset)
       setPresetId(intent.project.preset.id)
@@ -2728,8 +2843,41 @@ function App() {
     setSelected(null)
     setSelectedLayerIds([])
     setLayers([])
+    setEditorTool('move')
+    setPenMode(false)
+    lastChaosRef.current = null
+    setLastChaos(null)
     savedCleanRef.current = true
-    setScreen('editor')
+    if (screenRef.current === 'editor') setEditorSession((value) => value + 1)
+    else setScreen('editor')
+  }
+
+  async function requestNewPoster(preset: PosterPreset) {
+    const allowed = await confirmIfDirty('new')
+    if (!allowed) return
+    applyEditorIntent({ kind: 'blank', preset })
+  }
+
+  async function requestOpenProject(project: StoredProject) {
+    const allowed = await confirmIfDirty('open')
+    if (!allowed) return
+    applyEditorIntent({ kind: 'project', project })
+  }
+
+  async function requestRecoverSession(project: StoredProject) {
+    const allowed = await confirmIfDirty('restore')
+    if (!allowed) return
+    applyEditorIntent({ kind: 'autosave', project })
+  }
+
+  async function requestStartFromWreck(walkthrough = false) {
+    const allowed = await confirmIfDirty('new')
+    if (!allowed) return
+    applyEditorIntent({ kind: 'seed', walkthrough })
+  }
+
+  function enterEditor(intent: EditorIntent) {
+    applyEditorIntent(intent)
   }
 
   async function goHome() {
@@ -2755,6 +2903,13 @@ function App() {
     setWalkthroughStep(null)
     walkthroughStepRef.current = null
     editorIntentRef.current = null
+    setNewDialogOpen(false)
+    setOpenDialogOpen(false)
+    if (unsavedResolverRef.current) {
+      unsavedResolverRef.current('cancel')
+    } else {
+      setUnsavedOpen(false)
+    }
     setScreen('home')
     await refreshHomeLists()
   }
@@ -3889,6 +4044,7 @@ function App() {
   async function loadProject(project: StoredProject, options: { keepId: boolean } = { keepId: true }) {
     const canvas = canvasRef.current
     if (!canvas) return
+    posterInitRef.current = true
     setPoster(project.preset)
     setPresetId(project.preset.id)
     setProjectName(project.name)
@@ -3915,6 +4071,7 @@ function App() {
     syncSelected()
     syncLayers()
     setStatus(`Loaded ${project.name}`)
+    savedCleanRef.current = true
     if (options.keepId) {
       try {
         await touchProjectOpened(project.id)
@@ -4208,6 +4365,8 @@ function App() {
   }
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
+    { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
+    { id: 'open-poster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
@@ -4368,6 +4527,32 @@ function App() {
             onSkip={completeOnboarding}
           />
         ) : null}
+        {newDialogOpen ? (
+          <NewPosterDialog
+            open={!unsavedOpen}
+            onCreate={(preset) => void requestNewPoster(preset)}
+            onClose={() => setNewDialogOpen(false)}
+          />
+        ) : null}
+        {openDialogOpen ? (
+          <OpenPosterDialog
+            open={!unsavedOpen}
+            loading={!homeReady}
+            storageError={storageError}
+            projects={savedProjects}
+            onOpen={(project) => void requestOpenProject(project)}
+            onClose={() => setOpenDialogOpen(false)}
+          />
+        ) : null}
+        {unsavedOpen ? (
+          <UnsavedWorkDialog
+            open
+            reason={unsavedReason}
+            onCancel={() => unsavedResolverRef.current?.('cancel')}
+            onDiscard={() => unsavedResolverRef.current?.('discard')}
+            onSave={() => unsavedResolverRef.current?.('save')}
+          />
+        ) : null}
         {variantCompare ? (
           <VariantCompareModal
             open
@@ -4429,9 +4614,10 @@ function App() {
           storageError={storageError}
           projects={savedProjects}
           recovered={recoveredSession}
-          onOpenProject={(project) => enterEditor({ kind: 'project', project })}
-          onRecoverSession={(project) => enterEditor({ kind: 'autosave', project })}
-          onStartPoster={() => enterEditor({ kind: 'seed' })}
+          onOpenProject={(project) => void requestOpenProject(project)}
+          onRecoverSession={(project) => void requestRecoverSession(project)}
+          onNewPoster={openNewPosterDialog}
+          onStartFromWreck={() => void requestStartFromWreck()}
         />
       ) : (
         <>
@@ -4444,6 +4630,8 @@ function App() {
         onHome={() => {
           void goHome()
         }}
+        onNewPoster={openNewPosterDialog}
+        onOpenPoster={openOpenPosterDialog}
         onUndo={() => {
           void handleUserUndo()
         }}
@@ -4677,7 +4865,7 @@ function App() {
           posterHeight={poster.height}
           onExport={() => void exportPoster()}
           savedProjects={savedProjects}
-          onLoadProject={(project) => void loadProject(project)}
+          onLoadProject={(project) => void requestOpenProject(project)}
           onDeleteProject={(id, name) => void deleteSavedProject(id, name)}
           posterTreatments={posterTreatments}
           selected={selected}

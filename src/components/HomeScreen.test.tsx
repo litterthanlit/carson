@@ -18,8 +18,7 @@ function project(partial: Partial<StoredProject> & Pick<StoredProject, 'id' | 'n
 afterEach(() => cleanup())
 
 describe('HomeScreen', () => {
-  it('shows an empty studio with a way into the editor', () => {
-    const onStartPoster = vi.fn()
+  it('shows an empty studio with New poster instead of the seed', () => {
     render(
       <HomeScreen
         loading={false}
@@ -28,12 +27,15 @@ describe('HomeScreen', () => {
         recovered={undefined}
         onOpenProject={vi.fn()}
         onRecoverSession={vi.fn()}
-        onStartPoster={onStartPoster}
+        onNewPoster={vi.fn()}
+        onStartFromWreck={vi.fn()}
       />,
     )
 
     expect(screen.getByRole('region', { name: 'Home' })).toBeTruthy()
     expect(screen.getByText('No saved posters yet.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New poster' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start from wreck' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^Open / })).toBeNull()
   })
 
@@ -54,7 +56,8 @@ describe('HomeScreen', () => {
         recovered={undefined}
         onOpenProject={onOpenProject}
         onRecoverSession={vi.fn()}
-        onStartPoster={vi.fn()}
+        onNewPoster={vi.fn()}
+        onStartFromWreck={vi.fn()}
       />,
     )
 
@@ -63,6 +66,7 @@ describe('HomeScreen', () => {
     expect(screen.queryByText('No saved posters yet.')).toBeNull()
     await user.click(card)
     expect(onOpenProject).toHaveBeenCalledWith(saved)
+    expect(screen.getByRole('button', { name: 'New poster' })).toBeTruthy()
   })
 
   it('surfaces a storage error without hiding the empty start path', () => {
@@ -74,11 +78,12 @@ describe('HomeScreen', () => {
         recovered={undefined}
         onOpenProject={vi.fn()}
         onRecoverSession={vi.fn()}
-        onStartPoster={vi.fn()}
+        onNewPoster={vi.fn()}
+        onStartFromWreck={vi.fn()}
       />,
     )
 
     expect(screen.getByRole('alert')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Start a poster' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New poster' })).toBeTruthy()
   })
 })
