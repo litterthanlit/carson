@@ -29,21 +29,21 @@ React 19 + Fabric.js 7 local poster editor. Moat = **seeded, non-destructive cha
 - **Poster treatments:** `src/lib/posterTreatments.ts` → `scrapeTreatment.ts`; stored on `Artboard.posterTreatments`.
 - **History:** `src/lib/historyLog.ts` + `useEditorHistory` — op log with periodic snapshots (`SNAPSHOT_EVERY = 20`). Trail frames in `src/lib/explorationTrail.ts`.
 - **Persistence:** IndexedDB `carson-poster` via `src/lib/storage.ts`. No cloud. No Convex.
-- **Native:** bare WKWebView in `macos/Sources/Carson/main.swift` — window + load `web/index.html`. No menus, no `.carson` files, no native save/open.
+- **Native:** WKWebView in `macos/Sources/Carson/main.swift` — window + load `web/index.html`. No menus, no `.carson` files, no native save/open.
 
 **285 tests** · always run `npm test && npm run build` before handoff. UI proof: [`.cursor/skills/verify-carson/SKILL.md`](../.cursor/skills/verify-carson/SKILL.md).
 
 ---
 
-## Horizon 2 leftovers (optional — only if they block 3.2)
+## Horizon 2 leftovers (closed)
 
-These are **not** Horizon 3. Do them when they are in the way of Instruments, Press Check, or CRDT.
+These shipped with the Horizon 2 leftovers pass. They are no longer open work.
 
-| Leftover | Why it blocks H3 | Where |
-|----------|------------------|--------|
-| Pen is freehand `PencilBrush`, not click-to-place bezier | Not an H3 blocker | `App.tsx` pen mode |
-| Soft-proof CMYK, not true plates | Press Check export fidelity | `cmykPreview.ts` / `print.ts` |
-| Status line still sits above the trail | Cosmetic vs §9.5 | `EditorCanvas` `.stage-status` |
+| Leftover | Status | Where |
+|----------|--------|--------|
+| Click-to-place bezier pen | **Shipped** | Shape → Pen (`useBezierPen` + `bezierPen.ts`); Pencil remains freehand |
+| True CMYK plates | **Shipped** | Print → Export CMYK plates (4-page grayscale PDF) |
+| Status line above the trail | **Shipped** | `role=status` lives in the exploration trail (§9.5) |
 
 ---
 
@@ -229,6 +229,9 @@ Every action commits history and appears on the trail.
 
 | File | Horizon 3 role |
 |------|----------------|
+| `src/lib/bezierPen.ts` | Click-to-place bezier draft (Horizon 2 leftover) |
+| `src/hooks/useBezierPen.ts` | Canvas pen session + preview overlay |
+| `src/lib/cmykPlates.ts` | RGB → C/M/Y/K ink plates |
 | `src/lib/instruments.ts` | Typed Instrument registry — palette Age / Ink loss / Fold / Wear / Misprint / Type strip play through this |
 | `src/lib/decayMarksTreatment.ts` | Ink-loss / fold / wear overlay as stack artifacts |
 | `src/lib/misprintTreatment.ts` | Misregistered echo as a stack companion |
@@ -324,6 +327,8 @@ UI slices: launch with `.cursor/skills/verify-carson/scripts/launch.sh`, doctor,
 | Trail / comps | Scatter → Fork → jump to earlier chip → Comps → Compare |
 | Scrape | White scrapes → poster chip → re-roll/bypass → Cmd+Z |
 | Print | Print guides on → export PDF → guides not in artwork |
+| Bezier pen | Shape → Pen → click 3 anchors → Enter → Pen stroke layer → Edit points |
+| CMYK plates | Print → Export CMYK plates → 4-page C/M/Y/K PDF |
 | Onboarding | Fresh profile → Let's wreck it → scatter / xerox / re-roll / undo |
 
 ### Definition of done (Horizon 3 item)

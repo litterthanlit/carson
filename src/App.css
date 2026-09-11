@@ -1052,13 +1052,19 @@ input[type='color'] {
 }
 
 .stage-toolbar .stage-status {
+  display: none;
+}
+
+.trail-status,
+.exploration-trail .stage-status {
   color: var(--text);
   text-transform: none;
   font-family: var(--font);
   font-size: 12px;
-  text-align: right;
-  flex: 1;
-  min-width: 0;
+  text-align: left;
+  flex: 0 1 220px;
+  min-width: 120px;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

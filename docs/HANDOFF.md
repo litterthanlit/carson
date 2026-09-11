@@ -142,7 +142,7 @@ See **[`docs/HANDOFF-HORIZON-3.md`](./HANDOFF-HORIZON-3.md)** for scorecard, pha
 
 ## Still open from REIMAGINED.md (high level)
 
-- **Horizon 2 leftovers:** click-to-place bezier; true CMYK plates; status line above the trail
+- **Horizon 2 leftovers:** closed — click-to-place bezier; CMYK plate export; status in the trail
 - **Horizon 3:** cloud/CRDT, AI assistant (covenant), remaining WebGPU live renderer, native shell, marketplace, cross-device
 
 REIMAGINED is **not done** — it's the 18-month vision. Carson is **Horizon 1 complete**, Horizon 2 **program closed**, ~60% Horizon 3.

@@ -54,4 +54,6 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Press Check](./press-check.md) covers the live print look as a keepable poster treatment.
 - [Instrument and Gesture assets](./instrument-assets.md) covers saving a tuned Instrument in the document and replaying it.
 - [Export PNG](./export-png.md) covers the header Export control and a downloaded PNG.
+- [Bezier pen](./bezier-pen.md) covers click-to-place bezier from Shape → Pen.
+- [CMYK plates](./cmyk-plates.md) covers Print → Export CMYK plates.
 - [Variations trail](./variations-trail.md) covers the history filmstrip, fork, comps gallery, and compare.

@@ -75,6 +75,7 @@ import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, 
 import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
 import { alignObjects, clampGridOverlay, distributeObjects, gridTensionScale, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
+import { PLATE_CHANNELS, PLATE_LABELS, plateChannel, plateToDataUrl, rgbaToCmykPlates } from './lib/cmykPlates'
 import {
   ACCENTS,
   BLEND_MODES,
@@ -173,6 +174,7 @@ import { snapshotObjectToImage } from './lib/rasterizeLayer'
 import { coverScale, layerScale, textureUrl } from './lib/textureGallery'
 import { useCanvasEvents } from './hooks/useCanvasEvents'
 import { usePathEditing } from './hooks/usePathEditing'
+import { useBezierPen, type BezierPenActions } from './hooks/useBezierPen'
 import { useTreatments } from './hooks/useTreatments'
 import { useEditorHistory } from './hooks/useEditorHistory'
 import { createLayerThumbnail, invalidateLayerThumbnail } from './lib/layerThumbnail'
@@ -220,6 +222,7 @@ import type {
   InspectorTab,
   LayerKind,
   OpenTypeFeatures,
+  PenKind,
   SelectedState,
   StrokeDashPreset,
   TextSelectionRange,
@@ -336,6 +339,7 @@ function App() {
   const [showCmykPreview, setShowCmykPreview] = useState(false)
   const [editorTool, setEditorTool] = useState<EditorTool>('move')
   const [penMode, setPenMode] = useState(false)
+  const [penKind, setPenKind] = useState<PenKind>('bezier')
   const [maskBrushSize, setMaskBrushSize] = useState(36)
   const [maskHardness, setMaskHardness] = useState(35)
   const [pathEditMode, setPathEditMode] = useState(false)
@@ -396,6 +400,13 @@ function App() {
     closePath: () => false,
     isPathClosed: () => false,
   })
+  const bezierPenActionsRef = useRef<BezierPenActions>({
+    finish: () => false,
+    cancel: () => false,
+    undoPoint: () => false,
+    isDrawing: () => false,
+  })
+  const penModeRef = useRef(false)
   const selectedPathAnchorRef = useRef<import('./lib/pathEditing').PathAnchorPoint | null>(null)
   const notifyPathGeometryChangeRef = useRef(() => setPathGeometryTick((tick) => tick + 1))
   const tagObjectRef = useRef<(object: FabricObject, kind: LayerKind, name: string) => void>(() => {})
@@ -557,6 +568,20 @@ function App() {
     notifyPathGeometryChangeRef,
   })
 
+  useBezierPen({
+    canvasRef,
+    active: penMode && penKind === 'bezier',
+    strokeColorRef: penStrokeColorRef,
+    strokeWidthRef: penStrokeWidthRef,
+    displayScaleRef,
+    tagObject,
+    commitHistory,
+    syncSelected,
+    syncLayers,
+    setStatus,
+    actionsRef: bezierPenActionsRef,
+  })
+
   showPrintGuidesRef.current = showPrintGuides
   showLayoutGridRef.current = showLayoutGrid
   showBaselineGridRef.current = showBaselineGrid
@@ -566,6 +591,7 @@ function App() {
   snapToGridRef.current = snapToGrid
   printDpiRef.current = printDpi
   bleedMmRef.current = bleedMm
+  penModeRef.current = penMode
 
   const fitScale = useMemo(() => {
     if (stageSize) {
@@ -625,12 +651,18 @@ function App() {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    canvas.isDrawingMode = penMode
-    if (penMode) {
+    canvas.isDrawingMode = penMode && penKind === 'freehand'
+    if (penMode && penKind === 'freehand') {
       const brush = new PencilBrush(canvas)
       brush.color = penStrokeColor
       brush.width = penStrokeWidth
       canvas.freeDrawingBrush = brush
+      canvas.selection = false
+      canvas.skipTargetFind = true
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      syncSelected()
+    } else if (penMode) {
       canvas.selection = false
       canvas.skipTargetFind = true
       canvas.discardActiveObject()
@@ -641,7 +673,7 @@ function App() {
       canvas.skipTargetFind = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [penMode, penStrokeColor, penStrokeWidth])
+  }, [penMode, penKind, penStrokeColor, penStrokeWidth])
 
   editorToolRef.current = editorTool
 
@@ -744,14 +776,8 @@ function App() {
     commandPalette: () => setCommandOpen(true),
     forkVariant: () => void forkVariation(),
     openCompsGallery: () => setCompsGalleryOpen(true),
-    togglePen: () => {
-      setPenMode((value) => {
-        const next = !value
-        if (next) setEditorTool('shape')
-        else setEditorTool('move')
-        return next
-      })
-    },
+    togglePen: () => togglePenKind('bezier'),
+    togglePencil: () => togglePenKind('freehand'),
     moveTool: () => {
       setPenMode(false)
       setEditorTool('move')
@@ -881,7 +907,16 @@ function App() {
         return
       }
 
+      if (event.key === 'Enter' && bezierPenActionsRef.current.finish()) {
+        event.preventDefault()
+        return
+      }
+
       if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (bezierPenActionsRef.current.undoPoint()) {
+          event.preventDefault()
+          return
+        }
         if (!isTypingContext(event.target) && pathEditMode && pathEditActionsRef.current.deleteSelectedAnchor()) {
           event.preventDefault()
           return
@@ -889,6 +924,10 @@ function App() {
         event.preventDefault()
         actions.delete()
       } else if (event.key === 'Escape') {
+        if (bezierPenActionsRef.current.cancel()) {
+          event.preventDefault()
+          return
+        }
         actions.deselect()
       } else if (event.key === 'ArrowLeft') {
         if (nudgeSelection(event.shiftKey ? -10 : -1, 0)) event.preventDefault()
@@ -946,8 +985,10 @@ function App() {
         if (canvas) {
           const masking = editorToolRef.current === 'mask'
           canvas.selection =
-            (editorToolRef.current === 'move' || editorToolRef.current === 'instruments') && !canvas.isDrawingMode
-          canvas.skipTargetFind = masking || canvas.isDrawingMode
+            (editorToolRef.current === 'move' || editorToolRef.current === 'instruments') &&
+            !canvas.isDrawingMode &&
+            !penModeRef.current
+          canvas.skipTargetFind = masking || canvas.isDrawingMode || penModeRef.current
         }
       }
     }
@@ -3880,6 +3921,71 @@ function App() {
     }
   }
 
+  async function exportCmykPlates() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const baseName = safeFileName(projectName)
+    const previousBackground = canvas.backgroundColor
+    const previousActive = canvas.getActiveObject()
+    const previousRenderOnAddRemove = canvas.renderOnAddRemove
+    const tensionScale = gridTensionScale(gridOverlay.tension)
+    const needsExportBake = exportScale !== 1
+    const posterTreatmentsForBake = readPosterTreatments(documentMeta ? getActiveArtboard(documentMeta) : undefined)
+
+    try {
+      canvas.renderOnAddRemove = false
+      canvas.discardActiveObject()
+      canvas.backgroundColor = '#ffffff'
+      if (needsExportBake) {
+        await rebakeCopyMachineTreatments(canvas, exportScale, tensionScale)
+        await rebakePressCheckTreatments(
+          canvas,
+          posterTreatmentsForBake,
+          poster,
+          (object, name) => {
+            object.set({
+              kind: 'fragment',
+              name,
+              selectable: false,
+              evented: false,
+            } as Partial<FabricObject>)
+          },
+          tensionScale,
+          exportScale,
+        )
+      }
+      const raster = await rasterizeCanvasTiled(canvas, exportScale)
+      const plates = rgbaToCmykPlates(canvasElementToRgba(raster), raster.width, raster.height)
+      const { downloadCmykPlatesPdf } = await import('./lib/print')
+      await downloadCmykPlatesPdf(
+        PLATE_CHANNELS.map((channel) => ({
+          label: PLATE_LABELS[channel],
+          dataUrl: plateToDataUrl(plates.width, plates.height, plateChannel(plates, channel)),
+        })),
+        `${baseName}-plates.pdf`,
+        poster.width,
+        poster.height,
+        printDpi,
+        { printerMarks: pdfRegistrationMarks, bleedMm },
+      )
+      setStatus('Exported CMYK plates (C M Y K)')
+    } catch {
+      setStatus('Plate export failed — try a smaller export size')
+    } finally {
+      if (needsExportBake) {
+        await rebakeCopyMachineTreatments(canvas, 1, tensionScale)
+        await refreshPosterTreatments()
+      }
+      canvas.backgroundColor = previousBackground
+      canvas.renderOnAddRemove = previousRenderOnAddRemove
+      if (previousActive && canvas.getObjects().includes(previousActive)) {
+        canvas.setActiveObject(previousActive)
+      }
+      canvas.requestRenderAll()
+      syncSelected()
+    }
+  }
+
   function pushRecentColor(color: string) {
     setRecentColors((current) => [color, ...current.filter((item) => item !== color)].slice(0, 8))
   }
@@ -3936,13 +4042,29 @@ function App() {
     if (next !== 'shape') setPenMode(false)
     if (next === 'mask') setStatus('Mask — paint to conceal, Alt to reveal · [ ] size')
   }, [])
-  const handleTogglePenMode = useCallback(() => {
-    setPenMode((value) => {
-      const next = !value
-      if (next) setEditorTool('shape')
-      return next
-    })
-  }, [])
+  function togglePenKind(kind: PenKind) {
+    if (penMode && penKind === kind) {
+      setPenMode(false)
+      setEditorTool('move')
+      return
+    }
+    setPenKind(kind)
+    setPenMode(true)
+    setPathEditMode(false)
+    setPathAddPointMode(false)
+    setEditorTool('shape')
+    setStatus(
+      kind === 'bezier'
+        ? 'Pen — click to place, drag for handles, Enter to finish, click start to close'
+        : 'Pencil — drag to draw a freehand stroke',
+    )
+  }
+  function handleTogglePenMode() {
+    togglePenKind('bezier')
+  }
+  function handleTogglePencilMode() {
+    togglePenKind('freehand')
+  }
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
@@ -4026,6 +4148,8 @@ function App() {
     { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
     { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
+    { id: 'export-plates', label: 'Export CMYK plates', keywords: ['cmyk', 'plates', 'print', 'separation', 'cyan', 'magenta'], scope: 'canvas', run: () => void exportCmykPlates() },
+    { id: 'pen-tool', label: 'Pen tool', keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
@@ -4175,6 +4299,7 @@ function App() {
         <ToolRail
           tool={editorTool}
           penMode={penMode}
+          penKind={penKind}
           fileInputRef={fileInputRef}
           onToolChange={handleToolChange}
           onAddShape={addShape}
@@ -4182,6 +4307,7 @@ function App() {
           onAddLine={addLine}
           onAddStar={addStarShape}
           onTogglePenMode={handleTogglePenMode}
+          onTogglePencilMode={handleTogglePencilMode}
           onImageInputChange={(file) => void handleImageFile(file)}
           onClipToShape={() => void clipSelectionToShape()}
           onBrushMask={() => void paintBrushMask()}
@@ -4537,6 +4663,7 @@ function App() {
           onTogglePrintGuides={() => setShowPrintGuides((value) => !value)}
           showCmykPreview={showCmykPreview}
           onToggleCmykPreview={() => toggleCmykPreview(!showCmykPreview)}
+          onExportCmykPlates={() => void exportCmykPlates()}
           pdfRegistrationMarks={pdfRegistrationMarks}
           onPdfRegistrationMarksChange={setPdfRegistrationMarks}
           onAddArtboard={addNewArtboard}
