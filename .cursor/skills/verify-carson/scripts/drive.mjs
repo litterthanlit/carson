@@ -37,6 +37,17 @@ async function dismissOnboarding(page) {
   }
   await skip.click()
   await dialog.waitFor({ state: 'hidden' })
+}
+
+async function enterEditorFromHome(page) {
+  const home = page.getByRole('region', { name: 'Home' })
+  await home.waitFor({ state: 'visible' })
+  const start = page.getByRole('button', { name: 'Start a poster' })
+  if (await start.count()) await start.click()
+  else {
+    const card = page.getByRole('button', { name: /^Open / }).first()
+    await card.click()
+  }
   await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
 }
 
@@ -59,6 +70,36 @@ function inspectorName(page) {
 }
 
 const FEATURES = {
+  async 'home-recents'(page, outDir) {
+    const home = page.getByRole('region', { name: 'Home' })
+    await home.waitFor({ state: 'visible' })
+    if (await page.getByRole('region', { name: 'Poster canvas' }).count()) {
+      fail('Launch showed the editor instead of Home')
+    }
+    await page.getByText('No saved posters yet.').waitFor()
+    await page.getByRole('button', { name: 'Start a poster' }).waitFor()
+    await capture(page, outDir, 'empty-home')
+    await page.getByRole('button', { name: 'Start a poster' }).click()
+    await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
+    await openTab(page, 'Layers')
+    await layerSelect(page, 'Oversized headline').waitFor()
+    await page.getByRole('textbox', { name: 'Project name' }).fill('Home recents proof')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('status').filter({ hasText: /Saved/ }).waitFor()
+    await page.getByRole('button', { name: 'Home', exact: true }).click()
+    await home.waitFor({ state: 'visible' })
+    const card = page.getByRole('button', { name: 'Open Home recents proof' })
+    await card.waitFor()
+    if (!(await card.locator('img').count())) fail('Saved card was missing a thumbnail image')
+    await capture(page, outDir, 'saved-grid')
+    await card.click()
+    await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
+    await page.getByRole('button', { name: 'Carson home' }).click()
+    await home.waitFor({ state: 'visible' })
+    await card.waitFor()
+    await capture(page, outDir, 'reopened')
+  },
+
   async 'editor-baseline'(page, outDir) {
     await page.getByRole('heading', { name: 'Carson', level: 1 }).waitFor()
     await openTab(page, 'Layers')
@@ -437,6 +478,7 @@ try {
   })
   await page.goto(run.url, { waitUntil: 'domcontentloaded' })
   if (feature !== 'wreck-this-poster') await dismissOnboarding(page)
+  if (feature !== 'wreck-this-poster' && feature !== 'home-recents') await enterEditorFromHome(page)
   await FEATURES[feature](page, outDir)
   await writeFile(join(outDir, 'meta.json'), JSON.stringify({ feature, url: run.url, runId: run.runId }, null, 2))
   console.log(`ok feature=${feature} out=${outDir}`)

@@ -12,7 +12,7 @@ First load shows the seeded poster after the intro dialog, with `Oversized headl
 ## How to get to it (user POV)
 
 - Open the launched origin in a fresh browser profile.
-- Choose `Skip intro` on `Wreck this poster`.
+- Choose `Skip intro` on `Wreck this poster`, then `Start a poster` to enter the seeded editor.
 - Choose the `Layers` tab, then a layer row, then the `Inspect` tab.
 
 ## Driving it with verify-carson
@@ -23,7 +23,7 @@ Preconditions:
 - Playwright profile is empty so onboarding can appear.
 - No prior grouping of the seed layers.
 
-- **Skip intro.** Choose `Skip intro`. The driver does this before every feature. The dialog closes and region `Poster canvas` is visible.
+- **Skip intro.** Choose `Skip intro`. The driver does this before every feature. The dialog closes and region `Home` is visible. Editor recipes then choose `Start a poster` so region `Poster canvas` is visible.
 - **Open layers.** Choose tab `Layers`. Run `node .cursor/skills/verify-carson/scripts/drive.mjs --feature editor-baseline`. Buttons matching `Oversized headline` and `Red interruption` are present.
 - **Select headline.** Choose the `Oversized headline` layer, then tab `Inspect`. The Name textbox value is `Oversized headline`. The Text control value contains `RAY GUN`.
 - **Proof.** Artifacts `inspect-headline.proof.json` (name and text), `inspect-headline.aria.txt`, and `inspect-headline.png` show heading `Carson`, Inspect selected, and headline name `Oversized headline`.

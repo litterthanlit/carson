@@ -238,6 +238,150 @@
   fill: var(--text);
 }
 
+.brand-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.brand-home:hover,
+.brand-home:focus-visible {
+  background: var(--bg-muted);
+}
+
+.home-root {
+  min-height: 100dvh;
+  color: var(--text);
+  background: var(--canvas-bg);
+}
+
+.home-shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.home-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-radius: 0;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  background: #2d2d2d;
+}
+
+.home-body {
+  padding: 28px 32px 48px;
+  max-width: 1120px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.home-status {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+}
+
+.home-empty {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  max-width: 420px;
+  padding: 28px 0;
+}
+
+.home-empty .hint {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-card {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  min-height: 0;
+  align-items: start;
+}
+
+.home-card:hover:not(:disabled),
+.home-card:focus-visible {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.home-card-recovered {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.home-card-thumb {
+  display: grid;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #f6f1e6;
+}
+
+.home-card-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.home-card-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 12px;
+  color: #6b6560;
+  font-size: 11px;
+}
+
+.home-card strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-card small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+@media (max-width: 920px) {
+  .home-body {
+    padding: 20px 16px 32px;
+  }
+}
+
 .brand h1,
 .brand p,
 .rail h2,

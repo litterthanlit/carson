@@ -49,8 +49,10 @@ node .cursor/skills/verify-carson/scripts/drive.mjs --run-dir "$CARSON_VERIFY_RU
 Stable handles:
 
 - Dialog `Wreck this poster`, buttons `Let's wreck it` and `Skip intro`
+- Region `Home`, buttons `Start a poster`, `Open <name>`, `Recover <name>`
 - Region `Wreck this poster` (coach, after Let's wreck it)
 - Region `Poster canvas`, heading `Carson`
+- Buttons `Home` and `Carson home` in the editor top bar
 - Tabs `Inspect`, `Treatments`, `Layers`, `Assets`, `Layout`, `Print`
 - Layer rows: the control titled `Select layer · double-click to zoom to layer`
 - Seed layer names `Oversized headline`, `Red interruption`
@@ -99,4 +101,4 @@ Kills only the pid recorded in `run.json`. Removes the Playwright profile under 
 | `scripts/drive.mjs --feature <id>` | Plays one mapped feature |
 | `scripts/cleanup.sh` | Stops this run's Vite pid |
 
-Feature ids: `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `bezier-pen`, `cmyk-plates`, `variations-trail`.
+Feature ids: `home-recents`, `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `bezier-pen`, `cmyk-plates`, `variations-trail`.

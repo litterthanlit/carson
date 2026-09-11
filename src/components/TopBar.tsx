@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { Download, Redo2, Save, Shuffle, Sparkles, Undo2 } from 'lucide-react'
+import { Download, House, Redo2, Save, Shuffle, Sparkles, Undo2 } from 'lucide-react'
+import { BrandMark } from './BrandMark'
 import { TensionDial } from './TensionDial'
 
 type TopBarProps = {
@@ -8,6 +9,7 @@ type TopBarProps = {
   tension: number
   onTensionChange: (value: number) => void
   onTensionCommit: () => void
+  onHome: () => void
   onUndo: () => void
   onRedo: () => void
   onSave: () => void
@@ -23,6 +25,7 @@ export const TopBar = memo(function TopBar({
   tension,
   onTensionChange,
   onTensionCommit,
+  onHome,
   onUndo,
   onRedo,
   onSave,
@@ -34,11 +37,9 @@ export const TopBar = memo(function TopBar({
   return (
     <header className="topbar glass-bar">
       <div className="brand">
-        <svg className="brand-mark" viewBox="0 0 1452 1311" aria-hidden="true">
-          <rect x="339" y="0" width="851" height="395" rx="20" />
-          <rect x="0" y="460" width="395" height="851" rx="20" />
-          <rect x="601" y="916" width="851" height="395" rx="20" />
-        </svg>
+        <button type="button" className="brand-home" aria-label="Carson home" title="Home" onClick={onHome}>
+          <BrandMark />
+        </button>
         <div className="brand-copy">
           <h1 className="visually-hidden">Carson</h1>
           <label className="project-name-field">
@@ -54,6 +55,9 @@ export const TopBar = memo(function TopBar({
       </div>
       <TensionDial value={tension} onChange={onTensionChange} onCommit={onTensionCommit} />
       <div className="top-actions" aria-label="Poster actions">
+        <button type="button" className="icon-button" aria-label="Home" title="Home" onClick={onHome}>
+          <House size={15} />
+        </button>
         <button type="button" className="icon-button" data-tour="undo" aria-label="Undo" title="Undo (Cmd+Z)" onClick={onUndo}>
           <Undo2 size={15} />
         </button>

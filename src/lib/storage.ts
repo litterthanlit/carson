@@ -5,11 +5,14 @@
  */
 import type { DocumentMeta } from './document'
 import type { PosterPreset } from './editorModel'
+import { sortProjectsForHome } from './home'
 
 export type StoredProject = {
   id: string
   name: string
   savedAt: string
+  lastUsedAt?: string
+  thumbnail?: string
   preset: PosterPreset
   canvas: Record<string, unknown>
   document?: DocumentMeta
@@ -54,7 +57,21 @@ export async function listProjects(): Promise<StoredProject[]> {
   const request = tx.objectStore(STORE).getAll()
   await txDone(tx)
   const projects = (request.result as StoredProject[]).filter((p) => p.id !== AUTOSAVE_ID)
-  return projects.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+  return sortProjectsForHome(projects)
+}
+
+export async function getProject(id: string): Promise<StoredProject | undefined> {
+  const db = await openDb()
+  const tx = db.transaction(STORE, 'readonly')
+  const request = tx.objectStore(STORE).get(id)
+  await txDone(tx)
+  return request.result as StoredProject | undefined
+}
+
+export async function touchProjectOpened(id: string): Promise<void> {
+  const project = await getProject(id)
+  if (!project || project.id === AUTOSAVE_ID) return
+  await saveProject({ ...project, lastUsedAt: new Date().toISOString() })
 }
 
 export async function findProjectByName(name: string): Promise<StoredProject | undefined> {

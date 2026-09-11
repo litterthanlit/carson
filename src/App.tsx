@@ -38,6 +38,7 @@ import {
   newProjectId,
   saveAutosave,
   saveProject as persistProject,
+  touchProjectOpened,
   type StoredProject,
 } from './lib/storage'
 import {
@@ -164,6 +165,7 @@ import { InspectorPanel } from './components/InspectorPanel'
 import { InstrumentsPalette } from './components/InstrumentsPalette'
 import { LiveSelectionHud } from './components/LiveSelectionHud'
 import { ToolRail } from './components/ToolRail'
+import { HomeScreen } from './components/HomeScreen'
 import { TopBar } from './components/TopBar'
 import { TreatmentChips } from './components/TreatmentChips'
 import { OnboardingCoach } from './components/OnboardingCoach'
@@ -266,6 +268,13 @@ type StyleBaseline = {
 type EyeDropperResult = { sRGBHex: string }
 type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 
+type EditorIntent =
+  | { kind: 'seed'; walkthrough?: boolean }
+  | { kind: 'project'; project: StoredProject }
+  | { kind: 'autosave'; project: StoredProject }
+
+type EditorScreen = 'home' | 'editor'
+
 function App() {
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const canvasRef = useRef<Canvas | null>(null)
@@ -300,6 +309,14 @@ function App() {
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([])
   const [layers, setLayers] = useState<SelectedState[]>([])
   const [savedProjects, setSavedProjects] = useState<StoredProject[]>([])
+  const [recoveredSession, setRecoveredSession] = useState<StoredProject | undefined>()
+  const [homeReady, setHomeReady] = useState(false)
+  const [storageError, setStorageError] = useState(false)
+  const [screen, setScreen] = useState<EditorScreen>('home')
+  const editorIntentRef = useRef<EditorIntent | null>(null)
+  const screenRef = useRef<EditorScreen>('home')
+  const savedCleanRef = useRef(true)
+  screenRef.current = screen
   const [projectName, setProjectName] = useState('Untitled poster')
   const [projectId, setProjectId] = useState<string>(() => newProjectId())
   const [exportFormat, setExportFormat] = useState<ExportFormat>('png')
@@ -461,7 +478,7 @@ function App() {
     }
   }, [])
 
-  const { commitHistory, commitObjectPatchesHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId } = useEditorHistory({
+  const { commitHistory, commitObjectPatchesHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId, historyLogRef } = useEditorHistory({
     canvasRef,
     setStatus,
     syncSelected: () => syncSelected(),
@@ -608,10 +625,13 @@ function App() {
 
   useEffect(() => {
     markLibraryLoaded()
+    void initializeStorage()
+    void refreshAssets()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
-    if (!canvasEl.current) return
+    if (screen !== 'editor' || !canvasEl.current) return
 
     const canvas = new Canvas(canvasEl.current, {
       width: poster.width,
@@ -624,20 +644,35 @@ function App() {
     })
 
     canvasRef.current = canvas
-    seedPoster(canvas, poster)
     registerCanvasEvents(canvas)
-    setDocumentMeta(createDefaultDocument(poster, canvas.toObject(HISTORY_PROPS as unknown as string[])))
-    commitHistory('Started a new poster')
-    void initializeStorage()
-    void refreshAssets()
-    if (!localStorage.getItem(ONBOARDING_KEY)) setOnboardingOpen(true)
+
+    const intent = editorIntentRef.current ?? { kind: 'seed' as const }
+    let cancelled = false
+    void (async () => {
+      try {
+        if (intent.kind === 'project' || intent.kind === 'autosave') {
+          if (cancelled) return
+          await loadProject(intent.project, { keepId: intent.kind === 'project' })
+          return
+        }
+        if (cancelled || canvasRef.current !== canvas) return
+        seedPoster(canvas, poster)
+        if (cancelled || canvasRef.current !== canvas) return
+        setDocumentMeta(createDefaultDocument(poster, canvas.toObject(HISTORY_PROPS as unknown as string[])))
+        commitHistory('Started a new poster')
+        if (intent.walkthrough) startWalkthrough()
+      } catch {
+        if (!cancelled) setStatus('Could not open this poster')
+      }
+    })()
 
     return () => {
+      cancelled = true
       canvas.dispose()
       canvasRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [screen])
 
   useEffect(() => {
     canvasRef.current?.requestRenderAll()
@@ -701,13 +736,12 @@ function App() {
   }, [displayScale])
 
   useEffect(() => {
-    // Fix: previously this also ran on mount, double-committing history.
+    const canvas = canvasRef.current
+    if (!canvas) return
     if (posterInitRef.current) {
       posterInitRef.current = false
       return
     }
-    const canvas = canvasRef.current
-    if (!canvas) return
     canvas.setDimensions({ width: poster.width, height: poster.height })
     canvas.backgroundColor = '#f6f1e6'
     canvas.requestRenderAll()
@@ -723,18 +757,30 @@ function App() {
     }
   }
 
+  async function refreshHomeLists() {
+    try {
+      const [projects, autosaved] = await Promise.all([listProjects(), loadAutosave()])
+      setSavedProjects(projects)
+      setRecoveredSession(autosaved)
+      setStorageError(false)
+    } catch {
+      setSavedProjects([])
+      setRecoveredSession(undefined)
+      setStorageError(true)
+      setStatus('Storage unavailable — saves are disabled in this browser context')
+    } finally {
+      setHomeReady(true)
+    }
+  }
+
   async function initializeStorage() {
     try {
       const migrated = await migrateLegacyProjects()
-      const projects = await listProjects()
-      setSavedProjects(projects)
+      await refreshHomeLists()
       if (migrated > 0) setStatus(`Migrated ${migrated} saved poster${migrated === 1 ? '' : 's'} to durable storage`)
-      const autosaved = await loadAutosave()
-      if (autosaved && window.confirm(`Restore autosaved session “${autosaved.name}”?`)) {
-        await loadProject(autosaved, { keepId: false })
-        setStatus('Restored autosaved session')
-      }
     } catch {
+      setStorageError(true)
+      setHomeReady(true)
       setStatus('Storage unavailable — saves are disabled in this browser context')
     }
   }
@@ -833,6 +879,7 @@ function App() {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (screenRef.current !== 'editor') return
       if (event.key === ' ' && !isTypingContext(event.target)) {
         if (!spaceDownRef.current) {
           spaceDownRef.current = true
@@ -1014,7 +1061,7 @@ function App() {
     })
     observer.observe(scroller)
     return () => observer.disconnect()
-  }, [])
+  }, [screen])
 
   useEffect(() => {
     const scroller = scrollRef.current
@@ -1028,7 +1075,7 @@ function App() {
     }
     scroller.addEventListener('wheel', onWheel, { passive: false })
     return () => scroller.removeEventListener('wheel', onWheel)
-  }, [])
+  }, [screen])
 
   function clampZoom(value: number) {
     return Math.min(8, Math.max(0.1, value))
@@ -1235,19 +1282,46 @@ function App() {
     )
   }
 
+  async function captureOpenPosterThumbnail() {
+    const canvas = canvasRef.current
+    if (!canvas) return undefined
+    try {
+      const preview = canvas.toDataURL({ format: 'jpeg', quality: 0.75, multiplier: 0.12 })
+      return await createThumbnail(preview, 240)
+    } catch {
+      return undefined
+    }
+  }
+
+  async function persistOpenPosterSnapshot(snapshot: Omit<StoredProject, 'id'> & { id?: string }) {
+    const thumbnail = await captureOpenPosterThumbnail()
+    const now = new Date().toISOString()
+    return {
+      ...snapshot,
+      savedAt: now,
+      lastUsedAt: now,
+      thumbnail: thumbnail ?? snapshot.thumbnail,
+    }
+  }
+
   function scheduleAutosave() {
+    if (screenRef.current !== 'editor') return
+    savedCleanRef.current = false
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = window.setTimeout(() => {
       const canvas = canvasRef.current
-      if (!canvas) return
+      if (!canvas || screenRef.current !== 'editor') return
       const { poster: currentPoster, projectName: currentName } = liveRef.current
-      void saveAutosave({
-        name: currentName.trim() || 'Untitled poster',
-        savedAt: new Date().toISOString(),
-        preset: currentPoster,
-        canvas: serializeCanvasForSave(),
-        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
-      }).catch(() => setStatus('Autosave failed — storage may be full'))
+      void (async () => {
+        const snapshot = await persistOpenPosterSnapshot({
+          name: currentName.trim() || 'Untitled poster',
+          savedAt: new Date().toISOString(),
+          preset: currentPoster,
+          canvas: serializeCanvasForSave(),
+          document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
+        })
+        await saveAutosave(snapshot)
+      })().catch(() => setStatus('Autosave failed — storage may be full'))
     }, 2500)
   }
 
@@ -2634,6 +2708,57 @@ function App() {
     scrollRef.current?.focus({ preventScroll: true })
   }
 
+  function enterEditor(intent: EditorIntent) {
+    editorIntentRef.current = intent
+    posterInitRef.current = true
+    layerIdRef.current = 0
+    if (intent.kind === 'seed') {
+      setPoster(applyPosterPreset('a3'))
+      setPresetId('a3')
+      setProjectName('Untitled poster')
+      setProjectId(newProjectId())
+      setDocumentMeta(null)
+    } else {
+      setPoster(intent.project.preset)
+      setPresetId(intent.project.preset.id)
+      setProjectName(intent.project.name)
+      if (intent.kind === 'project') setProjectId(intent.project.id)
+      else setProjectId(newProjectId())
+    }
+    setSelected(null)
+    setSelectedLayerIds([])
+    setLayers([])
+    savedCleanRef.current = true
+    setScreen('editor')
+  }
+
+  async function goHome() {
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
+    if (!savedCleanRef.current && historyLogRef.current.cursor > 0) {
+      const { poster: currentPoster, projectName: currentName } = liveRef.current
+      try {
+        const snapshot = await persistOpenPosterSnapshot({
+          name: currentName.trim() || 'Untitled poster',
+          savedAt: new Date().toISOString(),
+          preset: currentPoster,
+          canvas: serializeCanvasForSave(),
+          document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
+        })
+        await saveAutosave(snapshot)
+      } catch {
+        setStatus('Autosave failed — storage may be full')
+      }
+    }
+    setWalkthroughStep(null)
+    walkthroughStepRef.current = null
+    editorIntentRef.current = null
+    setScreen('home')
+    await refreshHomeLists()
+  }
+
   function noteWalkthrough(event: WalkthroughEvent) {
     const current = walkthroughStepRef.current
     if (!current) return
@@ -3740,16 +3865,21 @@ function App() {
         id = existing.id
         setProjectId(existing.id)
       }
+      const now = new Date().toISOString()
+      const thumbnail = await captureOpenPosterThumbnail()
       await persistProject({
         id,
         name,
-        savedAt: new Date().toISOString(),
+        savedAt: now,
+        lastUsedAt: now,
+        thumbnail,
         preset: poster,
         canvas: serializeCanvasForSave(),
         document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
       })
       setSavedProjects(await listProjects())
       await clearAutosave()
+      savedCleanRef.current = true
       setStatus(`Saved “${name}”`)
     } catch {
       setStatus('Save failed — storage may be full or unavailable')
@@ -3771,7 +3901,9 @@ function App() {
     }
     restoringRef.current = true
     await ensureLibraryFonts(collectFontFamilies(project.canvas))
+    if (canvasRef.current !== canvas) return
     await canvas.loadFromJSON(project.canvas)
+    if (canvasRef.current !== canvas) return
     restoringRef.current = false
     await reconcileArtifactTreatments()
     await refreshPosterTreatments()
@@ -3783,6 +3915,14 @@ function App() {
     syncSelected()
     syncLayers()
     setStatus(`Loaded ${project.name}`)
+    if (options.keepId) {
+      try {
+        await touchProjectOpened(project.id)
+        setSavedProjects(await listProjects())
+      } catch {
+        /* opening still succeeded */
+      }
+    }
   }
 
   async function deleteSavedProject(id: string, name: string) {
@@ -4215,11 +4355,18 @@ function App() {
   ]
 
   return (
-    <main className="editor-shell" data-tour={walkthroughStep ?? undefined}>
+    <main className={screen === 'home' ? 'home-root' : 'editor-shell'} data-tour={walkthroughStep ?? undefined}>
       <Suspense fallback={null}>
         {commandOpen ? <CommandPalette open commands={commands} onClose={() => setCommandOpen(false)} /> : null}
         {onboardingOpen ? (
-          <OnboardingModal open onStart={startWalkthrough} onSkip={completeOnboarding} />
+          <OnboardingModal
+            open
+            onStart={() => {
+              setOnboardingOpen(false)
+              enterEditor({ kind: 'seed', walkthrough: true })
+            }}
+            onSkip={completeOnboarding}
+          />
         ) : null}
         {variantCompare ? (
           <VariantCompareModal
@@ -4276,12 +4423,27 @@ function App() {
           />
         ) : null}
       </Suspense>
+      {screen === 'home' ? (
+        <HomeScreen
+          loading={!homeReady}
+          storageError={storageError}
+          projects={savedProjects}
+          recovered={recoveredSession}
+          onOpenProject={(project) => enterEditor({ kind: 'project', project })}
+          onRecoverSession={(project) => enterEditor({ kind: 'autosave', project })}
+          onStartPoster={() => enterEditor({ kind: 'seed' })}
+        />
+      ) : (
+        <>
       <TopBar
         projectName={projectName}
         onProjectNameChange={setProjectName}
         tension={gridOverlay.tension}
         onTensionChange={handleTensionChange}
         onTensionCommit={commitTension}
+        onHome={() => {
+          void goHome()
+        }}
         onUndo={() => {
           void handleUserUndo()
         }}
@@ -4674,6 +4836,8 @@ function App() {
         />
         </div>
       </section>
+        </>
+      )}
 
     </main>
   )
