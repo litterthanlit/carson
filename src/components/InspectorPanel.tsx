@@ -464,7 +464,12 @@ export function InspectorPanel({
         ) : (
           savedProjects.map((project) => (
             <div key={project.id} className="saved-row">
-              <button type="button" title={`Load “${project.name}”`} onClick={() => onLoadProject(project)}>
+              <button
+                type="button"
+                aria-label={`Load ${project.name}`}
+                title={`Load “${project.name}”`}
+                onClick={() => onLoadProject(project)}
+              >
                 <span>{project.name}</span>
                 <small>{new Date(project.savedAt).toLocaleString()}</small>
               </button>

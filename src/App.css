@@ -274,12 +274,20 @@
   height: 40px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 0 16px;
   border-radius: 0;
   border-top: 0;
   border-left: 0;
   border-right: 0;
   background: #2d2d2d;
+}
+
+.home-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .home-body {
@@ -1873,6 +1881,83 @@ input[type='color'] {
   padding: 12px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.file-dialog {
+  width: min(560px, calc(100vw - 32px));
+  padding: 22px;
+  border-radius: var(--radius-xl);
+}
+
+.file-dialog h2 {
+  margin: 0 0 8px;
+}
+
+.file-dialog .hint {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+}
+
+.file-dialog .button-row {
+  margin-top: 16px;
+  gap: 8px;
+}
+
+.new-poster-choices {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.new-poster-choices button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.new-poster-choices button.active,
+.new-poster-choices button:hover {
+  background: var(--accent-soft);
+}
+
+.new-poster-choices small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.new-poster-custom {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.new-poster-custom label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.new-poster-custom input {
+  width: 120px;
+}
+
+.open-poster-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  max-height: 420px;
+  overflow: auto;
+  list-style: none;
+}
+
+.unsaved-backdrop {
+  z-index: 60;
 }
 
 .onboarding-modal {

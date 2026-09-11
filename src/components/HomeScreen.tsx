@@ -9,7 +9,8 @@ type HomeScreenProps = {
   recovered: StoredProject | undefined
   onOpenProject: (project: StoredProject) => void
   onRecoverSession: (project: StoredProject) => void
-  onStartPoster: () => void
+  onNewPoster: () => void
+  onStartFromWreck: () => void
 }
 
 function PosterThumb({ project, recovered }: { project: StoredProject; recovered?: boolean }) {
@@ -31,7 +32,8 @@ export function HomeScreen({
   recovered,
   onOpenProject,
   onRecoverSession,
-  onStartPoster,
+  onNewPoster,
+  onStartFromWreck,
 }: HomeScreenProps) {
   const empty = !loading && !recovered && projects.length === 0
 
@@ -44,6 +46,16 @@ export function HomeScreen({
             <h1>Carson</h1>
             <p>Your posters</p>
           </div>
+        </div>
+        <div className="home-top-actions">
+          {!empty ? (
+            <button type="button" className="primary-button" onClick={onNewPoster}>
+              New poster
+            </button>
+          ) : null}
+          <button type="button" onClick={onStartFromWreck}>
+            Start from wreck
+          </button>
         </div>
       </header>
 
@@ -59,9 +71,9 @@ export function HomeScreen({
         {empty ? (
           <div className="home-empty">
             <p className="empty">No saved posters yet.</p>
-            <p className="hint">Start a poster to open the editor. Saves in this browser will show up here as pictures.</p>
-            <button type="button" className="primary-button" onClick={onStartPoster}>
-              Start a poster
+            <p className="hint">New poster picks a size and starts a blank file. Saves in this browser show up here as pictures.</p>
+            <button type="button" className="primary-button" onClick={onNewPoster}>
+              New poster
             </button>
           </div>
         ) : null}

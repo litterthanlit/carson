@@ -42,8 +42,8 @@ async function dismissOnboarding(page) {
 async function enterEditorFromHome(page) {
   const home = page.getByRole('region', { name: 'Home' })
   await home.waitFor({ state: 'visible' })
-  const start = page.getByRole('button', { name: 'Start a poster' })
-  if (await start.count()) await start.click()
+  const wreck = page.getByRole('button', { name: 'Start from wreck' })
+  if (await wreck.count()) await wreck.click()
   else {
     const card = page.getByRole('button', { name: /^Open / }).first()
     await card.click()
@@ -77,12 +77,12 @@ const FEATURES = {
       fail('Launch showed the editor instead of Home')
     }
     await page.getByText('No saved posters yet.').waitFor()
-    await page.getByRole('button', { name: 'Start a poster' }).waitFor()
+    await page.getByRole('button', { name: 'New poster' }).waitFor()
     await capture(page, outDir, 'empty-home')
-    await page.getByRole('button', { name: 'Start a poster' }).click()
+    await page.getByRole('button', { name: 'New poster' }).click()
+    await page.getByRole('dialog', { name: 'New poster' }).waitFor()
+    await page.getByRole('button', { name: 'Create poster' }).click()
     await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
-    await openTab(page, 'Layers')
-    await layerSelect(page, 'Oversized headline').waitFor()
     await page.getByRole('textbox', { name: 'Project name' }).fill('Home recents proof')
     await page.getByRole('button', { name: 'Save' }).click()
     await page.getByRole('status').filter({ hasText: /Saved/ }).waitFor()
@@ -452,6 +452,74 @@ const FEATURES = {
     await capture(page, outDir, 'commands')
     await page.keyboard.press('Escape')
   },
+
+  async 'new-open'(page, outDir) {
+    const home = page.getByRole('region', { name: 'Home' })
+    await home.waitFor({ state: 'visible' })
+    await page.getByText('No saved posters yet.').waitFor()
+    await page.getByRole('button', { name: 'New poster' }).waitFor()
+    await page.keyboard.press('Control+o')
+    await page.getByRole('dialog', { name: 'Open poster' }).waitFor()
+    await page.getByText('No saved posters yet.').waitFor()
+    await capture(page, outDir, 'open-empty')
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('dialog', { name: 'Open poster' }).waitFor({ state: 'hidden' })
+
+    await page.getByRole('button', { name: 'New poster' }).click()
+    const newDialog = page.getByRole('dialog', { name: 'New poster' })
+    await newDialog.waitFor()
+    await newDialog.getByRole('option', { name: /Instagram portrait/ }).click()
+    await newDialog.getByRole('button', { name: 'Create poster' }).click()
+    await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
+    await openTab(page, 'Layers')
+    if (await layerSelect(page, 'Oversized headline').count()) {
+      fail('New poster seeded the RAY GUN demo instead of a blank file')
+    }
+    await capture(page, outDir, 'blank-new')
+    await page.getByRole('textbox', { name: 'Project name' }).fill('Night bus')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('status').filter({ hasText: /Saved/ }).waitFor()
+
+    await page.getByRole('button', { name: 'New poster' }).click()
+    await newDialog.waitFor()
+    await newDialog.getByRole('option', { name: /Square/ }).click()
+    await newDialog.getByRole('button', { name: 'Create poster' }).click()
+    await page.getByRole('status').filter({ hasText: 'Started a new poster' }).waitFor()
+    await page.getByRole('button', { name: 'Shape tool' }).click()
+    await page.getByRole('menuitem', { name: 'Block' }).click()
+    await page.getByRole('status').filter({ hasText: 'Added block' }).waitFor()
+
+    await page.getByRole('button', { name: 'Open poster' }).click()
+    const openDialog = page.getByRole('dialog', { name: 'Open poster' })
+    await openDialog.waitFor()
+    await openDialog.getByRole('button', { name: 'Open Night bus' }).click()
+    const unsaved = page.getByRole('dialog', { name: 'Unsaved changes' })
+    await unsaved.waitFor()
+    await capture(page, outDir, 'unsaved-open')
+    await unsaved.getByRole('button', { name: 'Cancel' }).click()
+    await unsaved.waitFor({ state: 'hidden' })
+    await page.getByRole('region', { name: 'Poster canvas' }).waitFor()
+
+    await openDialog.getByRole('button', { name: 'Open Night bus' }).click()
+    await unsaved.waitFor()
+    await unsaved.getByRole('button', { name: "Don't save" }).click()
+    await page.getByRole('status').filter({ hasText: 'Loaded Night bus' }).waitFor()
+    await capture(page, outDir, 'opened-poster')
+
+    await page.getByRole('button', { name: 'Shape tool' }).click()
+    await page.getByRole('menuitem', { name: 'Block' }).click()
+    await page.getByRole('button', { name: 'New poster' }).click()
+    await newDialog.waitFor()
+    await newDialog.getByRole('button', { name: 'Create poster' }).click()
+    await unsaved.waitFor()
+    await capture(page, outDir, 'unsaved-new')
+    await unsaved.getByRole('button', { name: "Don't save" }).click()
+    await page.getByRole('status').filter({ hasText: 'Started a new poster' }).waitFor()
+    await openTab(page, 'Layers')
+    if (await layerSelect(page, 'Oversized headline').count()) {
+      fail('New after discard still showed the seed poster')
+    }
+  },
 }
 
 const args = parseArgs(process.argv.slice(2))
@@ -478,7 +546,7 @@ try {
   })
   await page.goto(run.url, { waitUntil: 'domcontentloaded' })
   if (feature !== 'wreck-this-poster') await dismissOnboarding(page)
-  if (feature !== 'wreck-this-poster' && feature !== 'home-recents') await enterEditorFromHome(page)
+  if (feature !== 'wreck-this-poster' && feature !== 'home-recents' && feature !== 'new-open') await enterEditorFromHome(page)
   await FEATURES[feature](page, outDir)
   await writeFile(join(outDir, 'meta.json'), JSON.stringify({ feature, url: run.url, runId: run.runId }, null, 2))
   console.log(`ok feature=${feature} out=${outDir}`)

@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Download, House, Redo2, Save, Shuffle, Sparkles, Undo2 } from 'lucide-react'
+import { Download, FilePlus2, FolderOpen, House, Redo2, Save, Shuffle, Sparkles, Undo2 } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { TensionDial } from './TensionDial'
 
@@ -10,6 +10,8 @@ type TopBarProps = {
   onTensionChange: (value: number) => void
   onTensionCommit: () => void
   onHome: () => void
+  onNewPoster: () => void
+  onOpenPoster: () => void
   onUndo: () => void
   onRedo: () => void
   onSave: () => void
@@ -26,6 +28,8 @@ export const TopBar = memo(function TopBar({
   onTensionChange,
   onTensionCommit,
   onHome,
+  onNewPoster,
+  onOpenPoster,
   onUndo,
   onRedo,
   onSave,
@@ -57,6 +61,12 @@ export const TopBar = memo(function TopBar({
       <div className="top-actions" aria-label="Poster actions">
         <button type="button" className="icon-button" aria-label="Home" title="Home" onClick={onHome}>
           <House size={15} />
+        </button>
+        <button type="button" className="icon-button" aria-label="New poster" title="New poster (Cmd+N)" onClick={onNewPoster}>
+          <FilePlus2 size={15} />
+        </button>
+        <button type="button" className="icon-button" aria-label="Open poster" title="Open poster (Cmd+O)" onClick={onOpenPoster}>
+          <FolderOpen size={15} />
         </button>
         <button type="button" className="icon-button" data-tour="undo" aria-label="Undo" title="Undo (Cmd+Z)" onClick={onUndo}>
           <Undo2 size={15} />
