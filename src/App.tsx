@@ -769,6 +769,7 @@ function App() {
       posterInitRef.current = false
       return
     }
+    if (canvas.getWidth() === poster.width && canvas.getHeight() === poster.height) return
     canvas.setDimensions({ width: poster.width, height: poster.height })
     canvas.backgroundColor = '#f6f1e6'
     canvas.requestRenderAll()
@@ -2798,6 +2799,10 @@ function App() {
   }
 
   function applyEditorIntent(intent: EditorIntent) {
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
     editorIntentRef.current = intent
     posterInitRef.current = true
     layerIdRef.current = 0
@@ -4039,6 +4044,7 @@ function App() {
   async function loadProject(project: StoredProject, options: { keepId: boolean } = { keepId: true }) {
     const canvas = canvasRef.current
     if (!canvas) return
+    posterInitRef.current = true
     setPoster(project.preset)
     setPresetId(project.preset.id)
     setProjectName(project.name)
@@ -4065,6 +4071,7 @@ function App() {
     syncSelected()
     syncLayers()
     setStatus(`Loaded ${project.name}`)
+    savedCleanRef.current = true
     if (options.keepId) {
       try {
         await touchProjectOpened(project.id)
