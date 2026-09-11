@@ -4522,14 +4522,14 @@ function App() {
         ) : null}
         {newDialogOpen ? (
           <NewPosterDialog
-            open
+            open={!unsavedOpen}
             onCreate={(preset) => void requestNewPoster(preset)}
             onClose={() => setNewDialogOpen(false)}
           />
         ) : null}
         {openDialogOpen ? (
           <OpenPosterDialog
-            open
+            open={!unsavedOpen}
             loading={!homeReady}
             storageError={storageError}
             projects={savedProjects}

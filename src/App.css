@@ -1958,6 +1958,7 @@ input[type='color'] {
 
 .unsaved-backdrop {
   z-index: 60;
+  background: rgb(0 0 0 / 0.72);
 }
 
 .onboarding-modal {
