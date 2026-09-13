@@ -1945,6 +1945,21 @@ input[type='color'] {
   width: 120px;
 }
 
+.save-as-name {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.save-as-name input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
 .open-poster-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

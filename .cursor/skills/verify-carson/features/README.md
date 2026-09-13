@@ -45,6 +45,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Editor baseline](./editor-baseline.md) covers first load, onboarding skip, seed layers, and Inspect on the headline.
 - [Home recents](./home-recents.md) covers launch onto the posters grid, empty start, thumbnails, open, and Home back.
 - [New and Open](./new-open.md) covers New poster size, Open as an action, and unsaved-work warnings.
+- [File identity](./file-identity.md) covers Save as / Duplicate, last-opened Home order, and recovered session cards.
 - [Wreck this poster](./wreck-this-poster.md) covers the interactive first-run walkthrough: scatter, xerox, re-roll, undo.
 - [Layer groups](./layer-groups.md) covers grouping two seed layers and ungrouping them.
 - [Component instances](./component-instances.md) covers save, insert, and detach of a linked mark.
