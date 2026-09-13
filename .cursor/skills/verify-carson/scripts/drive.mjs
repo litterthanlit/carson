@@ -84,7 +84,7 @@ const FEATURES = {
     await page.getByRole('button', { name: 'Create poster' }).click()
     await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
     await page.getByRole('textbox', { name: 'Project name' }).fill('Home recents proof')
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
     await page.getByRole('status').filter({ hasText: /Saved/ }).waitFor()
     await page.getByRole('button', { name: 'Home', exact: true }).click()
     await home.waitFor({ state: 'visible' })
@@ -478,7 +478,7 @@ const FEATURES = {
     }
     await capture(page, outDir, 'blank-new')
     await page.getByRole('textbox', { name: 'Project name' }).fill('Night bus')
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
     await page.getByRole('status').filter({ hasText: /Saved/ }).waitFor()
 
     await page.getByRole('button', { name: 'New poster', exact: true }).click()
@@ -522,6 +522,101 @@ const FEATURES = {
       fail('New after discard still showed the seed poster')
     }
   },
+
+  async 'file-identity'(page, outDir) {
+    const home = page.getByRole('region', { name: 'Home' })
+    await home.waitFor({ state: 'visible' })
+    await page.getByText('No saved posters yet.').waitFor()
+    await capture(page, outDir, 'empty-home')
+
+    async function createNamedPoster(name) {
+      await page.getByRole('button', { name: 'New poster', exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: 'New poster' })
+      await dialog.waitFor()
+      await dialog.getByRole('button', { name: 'Create poster' }).click()
+      await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
+      await page.getByRole('textbox', { name: 'Project name' }).fill(name)
+      await page.getByRole('button', { name: 'Save', exact: true }).click()
+      await page.getByRole('status').filter({ hasText: /Saved/ }).waitFor()
+      await page.getByRole('button', { name: 'Home', exact: true }).click()
+      await home.waitFor({ state: 'visible' })
+    }
+
+    await createNamedPoster('Night bus')
+    await createNamedPoster('Day plaza')
+    const firstAfterSaves = await home.getByRole('button', { name: /^Open / }).first().getAttribute('aria-label')
+    if (firstAfterSaves !== 'Open Day plaza') fail(`Expected Day plaza first after save, got "${firstAfterSaves}"`)
+
+    await home.getByRole('button', { name: 'Open Night bus', exact: true }).click()
+    await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
+    await page.getByRole('button', { name: 'Duplicate poster' }).click()
+    await page.getByRole('status').filter({ hasText: /Duplicated as “Night bus copy”/ }).waitFor()
+    await page.getByRole('button', { name: 'Home', exact: true }).click()
+    await home.waitFor({ state: 'visible' })
+    await home.getByRole('button', { name: 'Open Night bus', exact: true }).waitFor()
+    await home.getByRole('button', { name: 'Open Night bus copy', exact: true }).waitFor()
+    await capture(page, outDir, 'duplicated-grid')
+
+    await home.getByRole('button', { name: 'Open Day plaza', exact: true }).click()
+    await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
+    await page.getByRole('status').filter({ hasText: 'Loaded Day plaza' }).waitFor()
+    await page.getByRole('button', { name: 'Home', exact: true }).click()
+    await home.waitFor({ state: 'visible' })
+    const firstAfterOpen = await home.getByRole('button', { name: /^Open / }).first().getAttribute('aria-label')
+    if (firstAfterOpen !== 'Open Day plaza') fail(`Expected Day plaza first after open, got "${firstAfterOpen}"`)
+    await capture(page, outDir, 'last-opened')
+
+    await home.getByRole('button', { name: 'Open Night bus', exact: true }).click()
+    await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
+    await page.getByRole('button', { name: 'Save as', exact: true }).click()
+    const saveAs = page.getByRole('dialog', { name: 'Save as' })
+    await saveAs.waitFor()
+    const nameField = saveAs.getByRole('textbox', { name: 'Save as name' })
+    await nameField.fill('Night bus evening')
+    await saveAs.getByRole('button', { name: 'Save copy' }).click()
+    await page.getByRole('status').filter({ hasText: /Saved as “Night bus evening”/ }).waitFor()
+    await page.getByRole('button', { name: 'Home', exact: true }).click()
+    await home.waitFor({ state: 'visible' })
+    await home.getByRole('button', { name: 'Open Night bus', exact: true }).waitFor()
+    await home.getByRole('button', { name: 'Open Night bus evening', exact: true }).waitFor()
+    await capture(page, outDir, 'saved-as-grid')
+
+    await home.getByRole('button', { name: 'Open Night bus evening', exact: true }).click()
+    await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
+    await page.getByRole('button', { name: 'Save as', exact: true }).click()
+    await saveAs.waitFor()
+    await nameField.fill('Night bus')
+    await saveAs.getByRole('alert').waitFor()
+    if (!(await saveAs.getByRole('button', { name: 'Save copy' }).isDisabled())) {
+      fail('Save copy stayed enabled for a colliding name')
+    }
+    await capture(page, outDir, 'save-as-collision')
+    await saveAs.getByRole('button', { name: 'Cancel' }).click()
+    await saveAs.waitFor({ state: 'hidden' })
+
+    await page.getByRole('button', { name: 'New poster', exact: true }).click()
+    const newDialog = page.getByRole('dialog', { name: 'New poster' })
+    await newDialog.waitFor()
+    await newDialog.getByRole('button', { name: 'Create poster' }).click()
+    await page.getByRole('status').filter({ hasText: 'Started a new poster' }).waitFor()
+    await page.getByRole('button', { name: 'Shape tool' }).click()
+    await page.getByRole('menuitem', { name: 'Block' }).click()
+    await page.getByRole('status').filter({ hasText: 'Added block' }).waitFor()
+    await page.getByRole('button', { name: 'Home', exact: true }).click()
+    await home.waitFor({ state: 'visible' })
+    await home.getByRole('button', { name: 'Recover Untitled poster', exact: true }).waitFor()
+    await capture(page, outDir, 'recovered-card')
+
+    let restoreConfirm = false
+    page.on('dialog', (dialog) => {
+      if (/restore|session|autosave/i.test(dialog.message())) restoreConfirm = true
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await home.waitFor({ state: 'visible' })
+    if (restoreConfirm) fail('Reload asked to restore with window.confirm')
+    await home.getByRole('button', { name: 'Recover Untitled poster', exact: true }).waitFor()
+    await capture(page, outDir, 'recovered-reload')
+  },
 }
 
 const args = parseArgs(process.argv.slice(2))
@@ -548,7 +643,7 @@ try {
   })
   await page.goto(run.url, { waitUntil: 'domcontentloaded' })
   if (feature !== 'wreck-this-poster') await dismissOnboarding(page)
-  if (feature !== 'wreck-this-poster' && feature !== 'home-recents' && feature !== 'new-open') await enterEditorFromHome(page)
+  if (feature !== 'wreck-this-poster' && feature !== 'home-recents' && feature !== 'new-open' && feature !== 'file-identity') await enterEditorFromHome(page)
   await FEATURES[feature](page, outDir)
   await writeFile(join(outDir, 'meta.json'), JSON.stringify({ feature, url: run.url, runId: run.runId }, null, 2))
   console.log(`ok feature=${feature} out=${outDir}`)

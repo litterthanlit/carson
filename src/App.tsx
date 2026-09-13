@@ -166,9 +166,11 @@ import { InstrumentsPalette } from './components/InstrumentsPalette'
 import { LiveSelectionHud } from './components/LiveSelectionHud'
 import { ToolRail } from './components/ToolRail'
 import { hasUnsavedWork, type ReplaceReason } from './lib/newPoster'
+import { saveAsNameError, uniqueCopyName } from './lib/fileIdentity'
 import { HomeScreen } from './components/HomeScreen'
 import { NewPosterDialog } from './components/NewPosterDialog'
 import { OpenPosterDialog } from './components/OpenPosterDialog'
+import { SaveAsDialog } from './components/SaveAsDialog'
 import { UnsavedWorkDialog } from './components/UnsavedWorkDialog'
 import { TopBar } from './components/TopBar'
 import { TreatmentChips } from './components/TreatmentChips'
@@ -321,6 +323,7 @@ function App() {
   const [editorSession, setEditorSession] = useState(0)
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [openDialogOpen, setOpenDialogOpen] = useState(false)
+  const [saveAsOpen, setSaveAsOpen] = useState(false)
   const [unsavedOpen, setUnsavedOpen] = useState(false)
   const [unsavedReason, setUnsavedReason] = useState<ReplaceReason>('open')
   const editorIntentRef = useRef<EditorIntent | null>(null)
@@ -824,6 +827,8 @@ function App() {
       redo()
     },
     save: () => void saveProjectAction(),
+    saveAs: () => openSaveAsDialog(),
+    duplicatePoster: () => void duplicatePosterAction(),
     newPoster: () => openNewPosterDialog(),
     openPoster: () => openOpenPosterDialog(),
     export: () => void exportPoster(),
@@ -955,7 +960,8 @@ function App() {
           actions.redo()
         } else if (key === 's') {
           event.preventDefault()
-          actions.save()
+          if (event.shiftKey) actions.saveAs()
+          else actions.save()
         } else if (key === 'e') {
           event.preventDefault()
           actions.export()
@@ -2758,13 +2764,23 @@ function App() {
   function openNewPosterDialog() {
     setCommandOpen(false)
     setOpenDialogOpen(false)
+    setSaveAsOpen(false)
     setNewDialogOpen(true)
   }
 
   function openOpenPosterDialog() {
     setCommandOpen(false)
     setNewDialogOpen(false)
+    setSaveAsOpen(false)
     setOpenDialogOpen(true)
+  }
+
+  function openSaveAsDialog() {
+    if (screenRef.current !== 'editor') return
+    setCommandOpen(false)
+    setNewDialogOpen(false)
+    setOpenDialogOpen(false)
+    setSaveAsOpen(true)
   }
 
   function confirmIfDirty(reason: ReplaceReason): Promise<boolean> {
@@ -2811,6 +2827,7 @@ function App() {
     setCommandOpen(false)
     setNewDialogOpen(false)
     setOpenDialogOpen(false)
+    setSaveAsOpen(false)
     if (intent.kind === 'seed') {
       const preset = applyPosterPreset('a3')
       setPoster(preset)
@@ -2900,11 +2917,17 @@ function App() {
         setStatus('Autosave failed — storage may be full')
       }
     }
+    try {
+      await touchProjectOpened(liveRef.current.projectId)
+    } catch {
+      /* Home still opens; last-opened may stay stale */
+    }
     setWalkthroughStep(null)
     walkthroughStepRef.current = null
     editorIntentRef.current = null
     setNewDialogOpen(false)
     setOpenDialogOpen(false)
+    setSaveAsOpen(false)
     if (unsavedResolverRef.current) {
       unsavedResolverRef.current('cancel')
     } else {
@@ -4003,6 +4026,29 @@ function App() {
     commitHistory(`Applied ${style} preset`)
   }
 
+  async function persistCurrentPoster(id: string, name: string): Promise<boolean> {
+    const canvas = canvasRef.current
+    if (!canvas) return false
+    try {
+      const now = new Date().toISOString()
+      const thumbnail = await captureOpenPosterThumbnail()
+      await persistProject({
+        id,
+        name,
+        savedAt: now,
+        lastUsedAt: now,
+        thumbnail,
+        preset: poster,
+        canvas: serializeCanvasForSave(),
+        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
+      })
+      return true
+    } catch {
+      setStatus('Save failed — storage may be full or unavailable')
+      return false
+    }
+  }
+
   async function saveProjectAction() {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -4020,24 +4066,59 @@ function App() {
         id = existing.id
         setProjectId(existing.id)
       }
-      const now = new Date().toISOString()
-      const thumbnail = await captureOpenPosterThumbnail()
-      await persistProject({
-        id,
-        name,
-        savedAt: now,
-        lastUsedAt: now,
-        thumbnail,
-        preset: poster,
-        canvas: serializeCanvasForSave(),
-        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
-      })
+      const ok = await persistCurrentPoster(id, name)
+      if (!ok) return
       setSavedProjects(await listProjects())
       await clearAutosave()
       savedCleanRef.current = true
       setStatus(`Saved “${name}”`)
     } catch {
       setStatus('Save failed — storage may be full or unavailable')
+    }
+  }
+
+  async function duplicatePosterAction() {
+    if (screenRef.current !== 'editor' || !canvasRef.current) return
+    try {
+      const projects = await listProjects()
+      const name = uniqueCopyName(
+        projectName.trim() || 'Untitled poster',
+        projects.map((project) => project.name),
+      )
+      const ok = await persistCurrentPoster(newProjectId(), name)
+      if (!ok) return
+      setSavedProjects(await listProjects())
+      setStatus(`Duplicated as “${name}”`)
+    } catch {
+      setStatus('Duplicate failed — storage may be full or unavailable')
+    }
+  }
+
+  async function saveAsPosterAction(name: string) {
+    if (screenRef.current !== 'editor' || !canvasRef.current) return
+    try {
+      const projects = await listProjects()
+      const error = saveAsNameError(
+        name,
+        projects.map((project) => project.name),
+      )
+      if (error) {
+        setStatus(error)
+        return
+      }
+      const trimmed = name.trim()
+      const id = newProjectId()
+      const ok = await persistCurrentPoster(id, trimmed)
+      if (!ok) return
+      setProjectId(id)
+      setProjectName(trimmed)
+      setSavedProjects(await listProjects())
+      await clearAutosave()
+      savedCleanRef.current = true
+      setSaveAsOpen(false)
+      setStatus(`Saved as “${trimmed}”`)
+    } catch {
+      setStatus('Save as failed — storage may be full or unavailable')
     }
   }
 
@@ -4451,6 +4532,22 @@ function App() {
     { id: 'export-plates', label: 'Export CMYK plates', keywords: ['cmyk', 'plates', 'print', 'separation', 'cyan', 'magenta'], scope: 'canvas', run: () => void exportCmykPlates() },
     { id: 'pen-tool', label: 'Pen tool', keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
+    {
+      id: 'save-as',
+      label: 'Save as',
+      keywords: ['save as', 'copy', 'duplicate', 'file'],
+      scope: 'canvas',
+      disabled: screen !== 'editor',
+      run: () => openSaveAsDialog(),
+    },
+    {
+      id: 'duplicate-poster',
+      label: 'Duplicate poster',
+      keywords: ['duplicate', 'copy', 'save as', 'file'],
+      scope: 'canvas',
+      disabled: screen !== 'editor',
+      run: () => void duplicatePosterAction(),
+    },
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
@@ -4542,6 +4639,18 @@ function App() {
             projects={savedProjects}
             onOpen={(project) => void requestOpenProject(project)}
             onClose={() => setOpenDialogOpen(false)}
+          />
+        ) : null}
+        {saveAsOpen ? (
+          <SaveAsDialog
+            open={!unsavedOpen}
+            suggestedName={uniqueCopyName(
+              projectName.trim() || 'Untitled poster',
+              savedProjects.map((project) => project.name),
+            )}
+            existingNames={savedProjects.map((project) => project.name)}
+            onSaveAs={(name) => void saveAsPosterAction(name)}
+            onClose={() => setSaveAsOpen(false)}
           />
         ) : null}
         {unsavedOpen ? (
@@ -4640,6 +4749,8 @@ function App() {
           redo()
         }}
         onSave={() => void saveProjectAction()}
+        onDuplicatePoster={() => void duplicatePosterAction()}
+        onSaveAs={openSaveAsDialog}
         onOpenCommands={handleOpenCommands}
         onScramble={() => void scrambleCanvas()}
         scrambleDisabled={scrambleSourceObjects().length === 0}

@@ -86,4 +86,30 @@ describe('HomeScreen', () => {
     expect(screen.getByRole('alert')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'New poster' })).toBeTruthy()
   })
+
+  it('shows a recovered dirty session as a Home card, not a confirm dialog', async () => {
+    const user = userEvent.setup()
+    const onRecoverSession = vi.fn()
+    const recovered = project({ id: '__autosave__', name: 'Night bus' })
+    const saved = project({ id: 'p1', name: 'Night bus', lastUsedAt: '2026-09-11T12:00:00.000Z' })
+
+    render(
+      <HomeScreen
+        loading={false}
+        storageError={false}
+        projects={[saved]}
+        recovered={recovered}
+        onOpenProject={vi.fn()}
+        onRecoverSession={onRecoverSession}
+        onNewPoster={vi.fn()}
+        onStartFromWreck={vi.fn()}
+      />,
+    )
+
+    const card = screen.getByRole('button', { name: 'Recover Night bus' })
+    expect(card.textContent).toMatch(/Recovered session/)
+    expect(screen.queryByText('No saved posters yet.')).toBeNull()
+    await user.click(card)
+    expect(onRecoverSession).toHaveBeenCalledWith(recovered)
+  })
 })

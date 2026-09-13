@@ -25,6 +25,7 @@ import type { FabricObject } from 'fabric'
 import type { PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
 import type { StoredAsset } from '../lib/assets'
+import { formatProjectTimestamp } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
 import type { GridOverlay, LayoutGuide } from '../lib/grid'
 import { FONT_STACKS, POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
@@ -471,7 +472,7 @@ export function InspectorPanel({
                 onClick={() => onLoadProject(project)}
               >
                 <span>{project.name}</span>
-                <small>{new Date(project.savedAt).toLocaleString()}</small>
+                <small>{formatProjectTimestamp(project.lastUsedAt ?? project.savedAt)}</small>
               </button>
               <button
                 type="button"

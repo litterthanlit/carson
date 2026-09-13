@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Download, FilePlus2, FolderOpen, House, Redo2, Save, Shuffle, Sparkles, Undo2 } from 'lucide-react'
+import { Copy, Download, FilePlus2, Files, FolderOpen, House, Redo2, Save, Shuffle, Sparkles, Undo2 } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { TensionDial } from './TensionDial'
 
@@ -15,6 +15,8 @@ type TopBarProps = {
   onUndo: () => void
   onRedo: () => void
   onSave: () => void
+  onDuplicatePoster: () => void
+  onSaveAs: () => void
   onOpenCommands: () => void
   onScramble: () => void
   scrambleDisabled?: boolean
@@ -33,6 +35,8 @@ export const TopBar = memo(function TopBar({
   onUndo,
   onRedo,
   onSave,
+  onDuplicatePoster,
+  onSaveAs,
   onOpenCommands,
   onScramble,
   scrambleDisabled,
@@ -76,6 +80,24 @@ export const TopBar = memo(function TopBar({
         </button>
         <button type="button" className="icon-button" title="Save to this browser (Cmd+S)" aria-label="Save" onClick={onSave}>
           <Save size={15} />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          title="Duplicate this poster as a new file"
+          aria-label="Duplicate poster"
+          onClick={onDuplicatePoster}
+        >
+          <Copy size={15} />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          title="Save as a new file (Cmd+Shift+S)"
+          aria-label="Save as"
+          onClick={onSaveAs}
+        >
+          <Files size={15} />
         </button>
         <button type="button" className="icon-button" title="Command palette (Cmd+K)" aria-label="Commands" onClick={onOpenCommands}>
           <Sparkles size={15} />

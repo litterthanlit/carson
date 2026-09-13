@@ -53,7 +53,8 @@ Stable handles:
 - Dialog `New poster`, options `A3 portrait` / `Instagram portrait` / `Square`, button `Create poster`
 - Dialog `Open poster`, buttons `Open <name>`, empty copy `No saved posters yet`
 - Dialog `Unsaved changes`, buttons `Save`, `Don't save`, `Cancel`
-- Buttons `New poster` and `Open poster` in the editor top bar
+- Dialog `Save as`, textbox `Save as name`, button `Save copy`
+- Buttons `New poster`, `Open poster`, `Duplicate poster`, and `Save as` in the editor top bar
 - Region `Wreck this poster` (coach, after Let's wreck it)
 - Region `Poster canvas`, heading `Carson`
 - Buttons `Home` and `Carson home` in the editor top bar
@@ -105,4 +106,4 @@ Kills only the pid recorded in `run.json`. Removes the Playwright profile under 
 | `scripts/drive.mjs --feature <id>` | Plays one mapped feature |
 | `scripts/cleanup.sh` | Stops this run's Vite pid |
 
-Feature ids: `home-recents`, `new-open`, `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `bezier-pen`, `cmyk-plates`, `variations-trail`.
+Feature ids: `home-recents`, `new-open`, `file-identity`, `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `bezier-pen`, `cmyk-plates`, `variations-trail`.
