@@ -222,3 +222,25 @@ describe('historyLog', () => {
     })
   })
 })
+
+describe('restoreActionsForUndo', () => {
+  it('replays lighter ops after the earlier snapshot when undoing a snapshot op', async () => {
+    const { createHistoryState, pushHistoryOp, restoreActionsForUndo } = await import('./historyLog')
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: 'S0' })
+    state = pushHistoryOp(state, { type: 'objectPatch', label: 'Nudged', objectId: 'a', before: 'p0', after: 'p1' })
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Added block', data: 'S1' })
+    const actions = restoreActionsForUndo(state)
+    expect(actions.map((action) => action?.kind)).toEqual(['snapshot', 'objectPatch'])
+    expect(actions[0]).toMatchObject({ data: 'S0' })
+    expect(actions[1]).toMatchObject({ patchJson: 'p1', label: 'Undo: Added block' })
+  })
+
+  it('undoes a light op directly', async () => {
+    const { createHistoryState, pushHistoryOp, restoreActionsForUndo } = await import('./historyLog')
+    let state = createHistoryState()
+    state = pushHistoryOp(state, { type: 'snapshot', label: 'Start', data: 'S0' })
+    state = pushHistoryOp(state, { type: 'objectPatch', label: 'Nudged', objectId: 'a', before: 'p0', after: 'p1' })
+    expect(restoreActionsForUndo(state)).toEqual([{ kind: 'objectPatch', objectId: 'a', patchJson: 'p0', label: 'Undo: Nudged' }])
+  })
+})

@@ -1,5 +1,6 @@
 import { memo, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import { LayoutGuidesOverlay } from './LayoutGuidesOverlay'
+import { ViewportRulers } from './ViewportRulers'
 import type { LayoutGuide } from '../lib/grid'
 import { Dices, Grid3x3, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { PosterPreset, PosterPresetId } from '../lib/editorModel'
@@ -10,6 +11,8 @@ import type { TrailFrame } from '../lib/explorationTrail'
 type EditorCanvasProps = {
   poster: PosterPreset
   displayScale: number
+  /** Extra working space around the poster when zoomed past fit, so zoom can anchor anywhere. */
+  pasteboard: { x: number; y: number } | null
   status: string
   isPanMode: boolean
   documentMeta: DocumentMeta | null
@@ -20,6 +23,8 @@ type EditorCanvasProps = {
   scrollRef: RefObject<HTMLDivElement | null>
   hud?: ReactNode
   stackBar?: ReactNode
+  /** Floating options for the active tool (e.g. the brush bar). */
+  toolBar?: ReactNode
   coach?: ReactNode
   onPresetChange: (presetId: PosterPresetId) => void
   onCustomSizeChange: (size: { width: number; height: number }) => void
@@ -53,6 +58,7 @@ type EditorCanvasProps = {
 export const EditorCanvas = memo(function EditorCanvas({
   poster,
   displayScale,
+  pasteboard,
   status,
   isPanMode,
   documentMeta,
@@ -63,6 +69,7 @@ export const EditorCanvas = memo(function EditorCanvas({
   scrollRef,
   hud,
   stackBar,
+  toolBar,
   coach,
   onPresetChange,
   onCustomSizeChange,
@@ -206,7 +213,16 @@ export const EditorCanvas = memo(function EditorCanvas({
           </button>
         ) : null}
       </div>
-      {stackBar}
+      <div className="canvas-viewport">
+      {toolBar ? <div className="canvas-tool-float">{toolBar}</div> : stackBar ? <div className="canvas-stack-float">{stackBar}</div> : null}
+      <ViewportRulers
+        scrollRef={scrollRef}
+        displayScale={displayScale}
+        posterWidth={poster.width}
+        posterHeight={poster.height}
+        dpi={poster.dpi}
+        onAddGuide={onAddLayoutGuide}
+      />
       <div
         ref={scrollRef}
         className={isPanMode ? 'canvas-scroll panning' : 'canvas-scroll'}
@@ -231,6 +247,7 @@ export const EditorCanvas = memo(function EditorCanvas({
               '--poster-height': `${poster.height}px`,
               '--poster-display-width': `${poster.width * displayScale}px`,
               '--poster-display-height': `${poster.height * displayScale}px`,
+              ...(pasteboard ? { margin: `${pasteboard.y}px ${pasteboard.x}px` } : null),
             } as CSSProperties
           }
         >
@@ -246,6 +263,7 @@ export const EditorCanvas = memo(function EditorCanvas({
           />
           {hud}
         </div>
+      </div>
       </div>
       <ExplorationTrail
         frames={trailFrames}

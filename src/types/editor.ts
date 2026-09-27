@@ -1,9 +1,11 @@
-export type EditorTool = 'move' | 'text' | 'shape' | 'image' | 'mask' | 'instruments'
+import type { LayerStyle } from '../lib/layerStyles'
+import type { Adjustment } from '../lib/adjustments'
+export type EditorTool = 'move' | 'text' | 'shape' | 'image' | 'select' | 'brush' | 'mask' | 'instruments'
 export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'star' | 'pen'
 export type MaskKind = 'clip' | 'brush' | 'scrape'
 export type PenKind = 'bezier' | 'freehand'
 
-export type LayerKind = 'text' | 'image' | 'shape' | 'fragment' | 'group'
+export type LayerKind = 'text' | 'image' | 'shape' | 'fragment' | 'group' | 'adjustment'
 export type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff' | 'svg'
 export type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'layout' | 'print'
 export type StrokeDashPreset = 'solid' | 'dashed' | 'dotted'
@@ -53,4 +55,6 @@ export type SelectedState = {
   parentId?: string | null
   componentId?: string
   overrideCount?: number
+  layerStyle?: LayerStyle | null
+  adjustment?: Adjustment
 }

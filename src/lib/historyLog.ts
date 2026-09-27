@@ -13,6 +13,18 @@ export type HistoryOp =
       patches: Array<{ objectId: string; before: string; after: string }>
     }
   | { id?: string; type: 'layerOrder'; label: string; before: string; after: string }
+  | {
+      id?: string
+      type: 'pixels'
+      label: string
+      objectId: string
+      rect: PixelRect
+      /** pixelStore keys */
+      before: string
+      after: string
+    }
+
+export type PixelRect = { x: number; y: number; width: number; height: number }
 
 export type HistoryState = {
   ops: HistoryOp[]
@@ -30,6 +42,7 @@ export type HistoryRestoreAction =
       label: string
     }
   | { kind: 'layerOrder'; orderJson: string; label: string }
+  | { kind: 'pixels'; objectId: string; rect: PixelRect; pixelsKey: string; label: string }
   | null
 
 const MAX_OPS = 200
@@ -179,9 +192,29 @@ export function restoreActionForUndo(state: HistoryState): HistoryRestoreAction 
       label: `Undo: ${op.label}`,
     }
   }
+  if (op.type === 'pixels') {
+    return { kind: 'pixels', objectId: op.objectId, rect: op.rect, pixelsKey: op.before, label: `Undo: ${op.label}` }
+  }
   const snapshot = snapshotForUndo({ ...state, cursor: state.cursor - 1 })
   if (!snapshot) return null
   return { kind: 'snapshot', data: snapshot, label: `Undo: ${op.label}` }
+}
+
+/**
+ * Everything needed to step back one op. Undoing a snapshot op must rebuild the
+ * previous state as "nearest earlier snapshot + every lighter op after it";
+ * restoring the earlier snapshot alone silently dropped those ops (a nudge or
+ * mask edit made before an "Added block" vanished when the block was undone).
+ */
+export function restoreActionsForUndo(state: HistoryState): HistoryRestoreAction[] {
+  if (!canUndo(state)) return []
+  const op = state.ops[state.cursor]
+  if (!op) return []
+  if (op.type !== 'snapshot') return [restoreActionForUndo(state)]
+  const actions = jumpRestoreActions(state, state.cursor - 1)
+  const last = actions[actions.length - 1]
+  if (last) actions[actions.length - 1] = { ...last, label: `Undo: ${op.label}` }
+  return actions
 }
 
 export function restoreActionForRedo(state: HistoryState): HistoryRestoreAction {
@@ -225,6 +258,9 @@ export function restoreActionForRedo(state: HistoryState): HistoryRestoreAction 
       orderJson: op.after,
       label: `Redo: ${op.label}`,
     }
+  }
+  if (op.type === 'pixels') {
+    return { kind: 'pixels', objectId: op.objectId, rect: op.rect, pixelsKey: op.after, label: `Redo: ${op.label}` }
   }
   return { kind: 'snapshot', data: op.data, label: `Redo: ${op.label}` }
 }

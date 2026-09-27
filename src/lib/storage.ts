@@ -115,7 +115,7 @@ export function newProjectId(): string {
 
 /** One-time migration of legacy localStorage saves into IndexedDB. */
 export async function migrateLegacyProjects(): Promise<number> {
-  let legacy: Array<Omit<StoredProject, 'id'>> = []
+  let legacy: Array<Omit<StoredProject, 'id'>>
   try {
     legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) ?? '[]')
   } catch {

@@ -53,6 +53,10 @@ import { LayersPanel } from './LayersPanel'
 import { FontPicker } from './FontPicker'
 import { BlendModePicker } from './BlendModePicker'
 import { Slider } from './Slider'
+import { LayerStylePanel } from './LayerStylePanel'
+import { layerStyleScale, type LayerStyle } from '../lib/layerStyles'
+import { AdjustmentPanel } from './AdjustmentPanel'
+import { ADJUSTMENT_LABELS, type Adjustment, type AdjustmentType } from '../lib/adjustments'
 import { ScopeSel } from './ScopeBadge'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
 
@@ -133,6 +137,9 @@ export type InspectorPanelProps = {
   textContrast: number | null
   onUpdateActive: (values: Partial<SelectedState>) => void
   onFinalizeActive: (message: string) => void
+  onLayerStyleChange: (style: LayerStyle) => void
+  onAddAdjustment?: (type: AdjustmentType) => void
+  onAdjustmentChange?: (adjustment: Adjustment) => void
   onPreviewBlendMode: (mode: string | null) => void
   onApplyBlendMode: (mode: string) => void
   onLoadGoogleFont: (family: string) => Promise<void>
@@ -310,6 +317,9 @@ export function InspectorPanel({
   textContrast,
   onUpdateActive,
   onFinalizeActive,
+  onLayerStyleChange,
+  onAddAdjustment,
+  onAdjustmentChange,
   onPreviewBlendMode,
   onApplyBlendMode,
   onLoadGoogleFont,
@@ -860,6 +870,26 @@ export function InspectorPanel({
       {inspectorTab === 'layers' ? (
         <div className="panel-section">
           <h2>Layers</h2>
+          {onAddAdjustment ? (
+            <label className="add-adjustment">
+              <span className="visually-hidden">Add adjustment layer</span>
+              <select
+                aria-label="Add adjustment layer"
+                value=""
+                onChange={(event) => {
+                  const type = event.target.value as AdjustmentType
+                  if (type) onAddAdjustment(type)
+                }}
+              >
+                <option value="">＋ Adjustment layer…</option>
+                {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {ADJUSTMENT_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <div className="button-row">
             <button type="button" title="Group selected layers (Cmd+G)" disabled={!canGroupLayers} onClick={onGroupLayers}>
               <Group size={14} />
@@ -901,7 +931,6 @@ export function InspectorPanel({
             ) : (
               <div className="control-stack">
                 <div className="property-heading">
-                  <p className="property-kicker">Properties</p>
                   <div className="property-title-row">
                     <h3>{selected.name}</h3>
                     <span className="property-badge">{selected.kind}</span>
@@ -927,14 +956,20 @@ export function InspectorPanel({
                     </div>
                   </div>
                 ) : null}
-                <div className="button-row">
-                  <button type="button" title="Group selected layers (Cmd+G)" disabled={!canGroupLayers} onClick={onGroupLayers}>
-                    Group
-                  </button>
-                  <button type="button" title="Ungroup (Cmd+Shift+G)" disabled={!canUngroupLayers} onClick={onUngroupLayers}>
-                    Ungroup
-                  </button>
-                </div>
+                {canGroupLayers || canUngroupLayers ? (
+                  <div className="button-row">
+                    {canGroupLayers ? (
+                      <button type="button" title="Group selected layers (Cmd+G)" onClick={onGroupLayers}>
+                        Group
+                      </button>
+                    ) : null}
+                    {canUngroupLayers ? (
+                      <button type="button" title="Ungroup (Cmd+Shift+G)" onClick={onUngroupLayers}>
+                        Ungroup
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 <label>
                   Name
                   <input
@@ -943,6 +978,16 @@ export function InspectorPanel({
                     onBlur={() => onFinalizeActive('Renamed layer')}
                   />
                 </label>
+                {selected.adjustment && onAdjustmentChange ? (
+                  <AdjustmentPanel
+                    adjustment={selected.adjustment}
+                    opacity={selected.opacity}
+                    onChange={onAdjustmentChange}
+                    onOpacityChange={(opacity) => onUpdateActive({ opacity })}
+                    onCommit={onFinalizeActive}
+                  />
+                ) : null}
+                {selected.adjustment ? null : (<>
                 {selectedIsText ? (
                   <>
                     <label>
@@ -1290,6 +1335,14 @@ export function InspectorPanel({
                     </button>
                   </div>
                 ) : null}
+                {selected && selectedLayerIds.length <= 1 ? (
+                  <LayerStylePanel
+                    style={selected.layerStyle ?? null}
+                    onChange={onLayerStyleChange}
+                    onCommit={onFinalizeActive}
+                    scale={layerStyleScale(posterWidth, posterHeight)}
+                  />
+                ) : null}
                 {selected ? (
                   <div className="property-card">
                     <h3 className="property-kicker">Layer mask</h3>
@@ -1432,6 +1485,7 @@ export function InspectorPanel({
                   />
                 </label>
                 <p className="hint">Hover a mode to preview it on the canvas. Click to apply.</p>
+                </>)}
                 <div className="button-row">
                   <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
                     <BringToFront size={16} />
@@ -1848,7 +1902,7 @@ export function InspectorPanel({
             Export CMYK plates
           </button>
           <PrintGamutReadout hex={typeof selected?.fill === 'string' ? selected.fill : undefined} />
-          <label>
+          <label className="toggle-row">
             <input type="checkbox" checked={pdfRegistrationMarks} onChange={(event) => onPdfRegistrationMarksChange(event.target.checked)} />
             Printer’s marks in PDF export
           </label>

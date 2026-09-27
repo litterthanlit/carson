@@ -6,7 +6,8 @@ type LayoutGuidesOverlayProps = {
   posterHeight: number
   displayScale: number
   guides: LayoutGuide[]
-  onAddGuide: (axis: 'v' | 'h', position: number) => void
+  /** Guides are added from the viewport rulers; kept for API compatibility. */
+  onAddGuide?: (axis: 'v' | 'h', position: number) => void
   onMoveGuide: (id: string, position: number) => void
   onRemoveGuide: (id: string) => void
 }
@@ -20,7 +21,6 @@ export function LayoutGuidesOverlay({
   posterHeight,
   displayScale,
   guides,
-  onAddGuide,
   onMoveGuide,
   onRemoveGuide,
 }: LayoutGuidesOverlayProps) {
@@ -60,39 +60,6 @@ export function LayoutGuidesOverlay({
 
   return (
     <div className="layout-guides-overlay" ref={shellRef} aria-hidden="true">
-      <button
-        type="button"
-        className="layout-ruler layout-ruler-corner"
-        tabIndex={-1}
-        title="Layout rulers"
-        onPointerDown={(event) => event.preventDefault()}
-      />
-      <button
-        type="button"
-        className="layout-ruler layout-ruler-top"
-        tabIndex={-1}
-        title="Click to add a vertical guide"
-        aria-label="Add vertical guide"
-        onPointerDown={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          const point = posterPoint(event.clientX, event.clientY)
-          onAddGuide('v', clamp(point.x, posterWidth))
-        }}
-      />
-      <button
-        type="button"
-        className="layout-ruler layout-ruler-left"
-        tabIndex={-1}
-        title="Click to add a horizontal guide"
-        aria-label="Add horizontal guide"
-        onPointerDown={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          const point = posterPoint(event.clientX, event.clientY)
-          onAddGuide('h', clamp(point.y, posterHeight))
-        }}
-      />
       {guides.map((guide) => (
         <button
           key={guide.id}

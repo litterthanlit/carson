@@ -54,10 +54,10 @@ Stable handles:
 - Dialog `Open poster`, buttons `Open <name>`, empty copy `No saved posters yet`
 - Dialog `Unsaved changes`, buttons `Save`, `Don't save`, `Cancel`
 - Dialog `Save as`, textbox `Save as name`, button `Save copy`
-- Buttons `New poster`, `Open poster`, `Duplicate poster`, and `Save as` in the editor top bar
+- Editor top bar: button `File` opens menu `File` with menuitems `New poster`, `Open poster`, `Save as`, `Duplicate poster`, `Home`; button `Save` shows saved state
 - Region `Wreck this poster` (coach, after Let's wreck it)
 - Region `Poster canvas`, heading `Carson`
-- Buttons `Home` and `Carson home` in the editor top bar
+- Button `Carson home` in the editor top bar (Home is also in the `File` menu)
 - Tabs `Inspect`, `Treatments`, `Layers`, `Assets`, `Layout`, `Print`
 - Layer rows: the control titled `Select layer · double-click to zoom to layer`
 - Seed layer names `Oversized headline`, `Red interruption`
@@ -75,6 +75,11 @@ Stable handles:
 - Dialog `Comps`, dialog `Compare variations`
 - Shape tool, then `Pen` (click-to-place bezier) or `Pencil` (freehand)
 - Print tab, then `Export CMYK plates`
+- `Select tool` (L) with menuitemradios `Rectangle marquee` / `Ellipse marquee` / `Lasso`; after a drag, toolbar `Selection actions` with `Mask out`, `Keep only`, `Layer via copy`, `Cut`, `Invert`, spinbutton `Feather`, `Deselect`
+- Inspect card `Layer style` with checkboxes `Drop shadow`, `Outer glow`, `Outline`
+- Layers tab combobox `Add adjustment layer` (Levels, Hue/Saturation, Brightness/Contrast, Gradient map, Threshold, Posterize, Invert); adjustment layers are not canvas-clickable — select them in Layers
+- `Brush tool` (B; E = eraser) with menuitemradios `Brush` / `Eraser`; toolbar `Brush options` with sliders `Size`, `Hardness`, `Opacity`, `Flow`, `Smoothing`, radios `Brush`/`Eraser`, pressure toggles `Size`/`Opacity`. First stroke creates layer `Paint`; the eraser masks non-paint layers
+- Dev builds expose `window.__carsonCanvas` (the Fabric canvas) for assertions
 
 `window.prompt` during Save selection is accepted as `Mark` by the driver.
 

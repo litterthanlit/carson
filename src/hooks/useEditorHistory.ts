@@ -1,4 +1,8 @@
 import { useCallback, useRef } from 'react'
+import { loadPixels } from '../lib/pixelStore'
+import { isPaintLayer, writePaintPixels } from '../lib/paintLayer'
+import { invalidateLayerThumbnail } from '../lib/layerThumbnail'
+import { parseHistorySnapshot, rehydratePaintLayers, serializeHistorySnapshot } from '../lib/historySnapshot'
 import type { Canvas } from 'fabric'
 import type { MutableRefObject, RefObject } from 'react'
 import { HISTORY_PROPS } from '../lib/editorConstants'
@@ -12,6 +16,8 @@ import {
   pushHistoryOp,
   restoreActionForRedo,
   restoreActionForUndo,
+  restoreActionsForUndo,
+  type PixelRect,
   shouldSnapshot,
   type HistoryOp,
   type HistoryState,
@@ -90,10 +96,11 @@ export function useEditorHistory({
       const canvas = canvasRef.current
       if (!canvas) return
       restoringRef.current = true
-      const parsed = JSON.parse(snapshot) as Record<string, unknown>
+      const parsed = parseHistorySnapshot(snapshot)
       await ensureLibraryFonts(collectFontFamilies(parsed))
       await withLayerSyncSuppressed(async () => {
         await canvas.loadFromJSON(parsed)
+        await rehydratePaintLayers(canvas.getObjects() as unknown as Parameters<typeof rehydratePaintLayers>[0])
         await onAfterRestore()
       })
       restoringRef.current = false
@@ -145,6 +152,19 @@ export function useEditorHistory({
         setStatus(action.label)
         return
       }
+      if (action.kind === 'pixels') {
+        const canvas = canvasRef.current
+        const object = canvas?.getObjects().find((item) => String(readObjectProp(item, 'id') ?? '') === action.objectId)
+        const pixels = await loadPixels(action.pixelsKey)
+        if (canvas && object && isPaintLayer(object) && pixels) {
+          writePaintPixels(object, action.rect, pixels)
+          invalidateLayerThumbnail(action.objectId)
+          canvas.requestRenderAll()
+          syncLayers()
+        }
+        setStatus(action.label)
+        return
+      }
       if (action.kind === 'layerOrder') {
         const canvas = canvasRef.current
         if (canvas) {
@@ -174,7 +194,7 @@ export function useEditorHistory({
     (message: string) => {
       const canvas = canvasRef.current
       if (!canvas || restoringRef.current) return
-      const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
+      const snapshot = serializeHistorySnapshot(canvas, HISTORY_PROPS)
       const lastOp = historyLogRef.current.ops[historyLogRef.current.cursor]
       if (lastOp?.type === 'snapshot' && lastOp.data === snapshot) {
         syncSelected()
@@ -204,7 +224,7 @@ export function useEditorHistory({
       if ('before' in op && 'after' in op && op.before === op.after) return
 
       if (shouldSnapshot(historyLogRef.current)) {
-        const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
+        const snapshot = serializeHistorySnapshot(canvas, HISTORY_PROPS)
         historyLogRef.current = pushHistoryOp(historyLogRef.current, {
           type: 'snapshot',
           label,
@@ -260,6 +280,13 @@ export function useEditorHistory({
     [pushIncrementalOp],
   )
 
+  const commitPixelsHistory = useCallback(
+    (objectId: string, label: string, rect: PixelRect, before: string, after: string) => {
+      pushIncrementalOp({ type: 'pixels', label, objectId, rect, before, after }, label)
+    },
+    [pushIncrementalOp],
+  )
+
   const commitLayerOrderHistory = useCallback(
     (label: string, before: string, after: string) => {
       pushIncrementalOp({ type: 'layerOrder', label, before, after }, label)
@@ -268,13 +295,22 @@ export function useEditorHistory({
   )
 
   const undoAsync = useCallback(async () => {
-    const action = restoreActionForUndo(historyLogRef.current)
-    if (!action) return
+    const actions = restoreActionsForUndo(historyLogRef.current)
+    if (actions.length === 0) return
     historyLogRef.current = {
       ...historyLogRef.current,
       cursor: historyLogRef.current.cursor - 1,
     }
-    await applyRestoreAction(action)
+    restoringRef.current = true
+    try {
+      for (const action of actions) {
+        if (!action) continue
+        await applyRestoreAction(action)
+        restoringRef.current = true
+      }
+    } finally {
+      restoringRef.current = false
+    }
     notifyCursor()
   }, [applyRestoreAction, notifyCursor])
 
@@ -339,6 +375,7 @@ export function useEditorHistory({
     commitObjectPatchHistory,
     commitObjectPatchesHistory,
     commitLayerOrderHistory,
+    commitPixelsHistory,
     restoreSnapshot,
     undoAsync,
     redo,

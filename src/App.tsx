@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ActiveSelection,
   Canvas,
@@ -28,6 +28,20 @@ import {
   type PosterPresetId,
 } from './lib/editorModel'
 import { createSeededRandom, newSeed } from './lib/random'
+import { preparePaintSources, serializeHistorySnapshot } from './lib/historySnapshot'
+import { runWhenIdle } from './lib/idle'
+import type { PixelSelection, SelectionMode } from './lib/selection'
+import { SelectionOverlay } from './components/SelectionOverlay'
+import { BrushOverlay, type BrushInputSample } from './components/BrushOverlay'
+import { BrushBar } from './components/BrushBar'
+import { DEFAULT_BRUSH, type BrushSettings } from './lib/brush'
+import { StrokeSession, bumpPaintVersion, createPaintLayer, isPaintLayer, posterToPaintPixel } from './lib/paintLayer'
+import { storePixels } from './lib/pixelStore'
+import { AdjustmentLayer, readAdjustment } from './lib/adjustmentLayer'
+import { ADJUSTMENT_LABELS, defaultAdjustment, type Adjustment, type AdjustmentType } from './lib/adjustments'
+import { layerStyleScale, readLayerStyle, scaledLayerStyleDefaults, writeLayerStyle, type LayerStyle, type LayerStyleKind } from './lib/layerStyles'
+import { applyBackstore, backstoreScale, installDynamicBackstore } from './lib/backstoreScale'
+import { installDetailOverlay, type DetailOverlay } from './lib/detailOverlay'
 import {
   clearAutosave,
   deleteProject,
@@ -99,9 +113,11 @@ import {
   captureClipGeom,
   emptyLayerMask,
   hasMaskContent,
+  objectUnscaledSize,
   readLayerMask,
   stampsAlongSegment,
   writeLayerMask,
+  type MaskRegion,
 } from './lib/layerMask'
 import type { PathEditActions } from './hooks/usePathEditing'
 import { applyPathData, isPathClosed, type PathData } from './lib/pathEditing'
@@ -276,7 +292,7 @@ type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 
 type EditorIntent =
   | { kind: 'seed'; walkthrough?: boolean }
-  | { kind: 'blank'; preset: PosterPreset }
+  | { kind: 'blank'; preset: PosterPreset; image?: File }
   | { kind: 'project'; project: StoredProject }
   | { kind: 'autosave'; project: StoredProject }
 
@@ -289,6 +305,9 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const displayScaleRef = useRef(1)
+  const backstoreScaleRef = useRef(0)
+  const detailOverlayRef = useRef<DetailOverlay | null>(null)
+  const zoomAnchorRef = useRef<{ clientX: number; clientY: number; posterX: number; posterY: number } | null>(null)
   const guidesRef = useRef<{ v: number[]; h: number[] }>({ v: [], h: [] })
   const lastChaosRef = useRef<ChaosRun | null>(null)
   const walkthroughStepRef = useRef<WalkthroughStep | null>(null)
@@ -329,6 +348,11 @@ function App() {
   const editorIntentRef = useRef<EditorIntent | null>(null)
   const screenRef = useRef<EditorScreen>('home')
   const savedCleanRef = useRef(true)
+  const [isDirty, setIsDirty] = useState(false)
+  const markSavedClean = (clean: boolean) => {
+    savedCleanRef.current = clean
+    setIsDirty(!clean)
+  }
   const unsavedResolverRef = useRef<((choice: 'cancel' | 'discard' | 'save') => void) | null>(null)
   screenRef.current = screen
   const [projectName, setProjectName] = useState('Untitled poster')
@@ -373,6 +397,14 @@ function App() {
   const [penKind, setPenKind] = useState<PenKind>('bezier')
   const [maskBrushSize, setMaskBrushSize] = useState(36)
   const [maskHardness, setMaskHardness] = useState(35)
+  const [selectMode, setSelectMode] = useState<SelectionMode>('rect')
+  const [brush, setBrush] = useState<BrushSettings>(DEFAULT_BRUSH)
+  const brushRef = useRef(brush)
+  brushRef.current = brush
+  const strokeRef = useRef<{ session: StrokeSession | null; createdLayer: boolean; maskFallback: boolean } | null>(null)
+  const [pixelSelection, setPixelSelection] = useState<PixelSelection | null>(null)
+  const pixelSelectionRef = useRef<PixelSelection | null>(null)
+  pixelSelectionRef.current = pixelSelection
   const [pathEditMode, setPathEditMode] = useState(false)
   const [pathAddPointMode, setPathAddPointMode] = useState(false)
   const [pathGeometryTick, setPathGeometryTick] = useState(0)
@@ -492,7 +524,7 @@ function App() {
     }
   }, [])
 
-  const { commitHistory, commitObjectPatchesHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId, historyLogRef } = useEditorHistory({
+  const { commitHistory, commitObjectPatchesHistory, commitPixelsHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId, historyLogRef } = useEditorHistory({
     canvasRef,
     setStatus,
     syncSelected: () => syncSelected(),
@@ -631,7 +663,18 @@ function App() {
     return Math.min(1, 660 / poster.width, 780 / poster.height)
   }, [poster.height, poster.width, stageSize])
   const displayScale = zoom ?? fitScale
+  const selectionTargetName = selected && selectedLayerIds.length <= 1 ? selected.name : null
   displayScaleRef.current = displayScale
+  const pasteboard = useMemo(
+    () =>
+      stageSize && displayScale > fitScale * 1.02
+        ? { x: Math.round(stageSize.width * 0.45), y: Math.round(stageSize.height * 0.45) }
+        : null,
+    [displayScale, fitScale, stageSize],
+  )
+  if (backstoreScaleRef.current === 0) {
+    backstoreScaleRef.current = backstoreScale(displayScale, window.devicePixelRatio || 1, poster.width, poster.height)
+  }
 
   // Keep latest values reachable from stable event listeners.
   const liveRef = useRef({ poster, projectName, projectId, displayScale, fitScale, zoom })
@@ -657,8 +700,13 @@ function App() {
       selectionLineWidth: 1,
     })
 
+    // Size the backing store to what the screen shows instead of poster × DPR.
+    installDynamicBackstore(canvas, () => backstoreScaleRef.current)
+    // Dev-only handle for debugging and browser-driven verification.
+    if (import.meta.env.DEV) (window as unknown as { __carsonCanvas?: Canvas }).__carsonCanvas = canvas
     canvasRef.current = canvas
     registerCanvasEvents(canvas)
+    detailOverlayRef.current = installDetailOverlay(canvas, visibleDetailViewport)
 
     const intent = editorIntentRef.current ?? { kind: 'seed' as const }
     let cancelled = false
@@ -667,7 +715,7 @@ function App() {
         if (intent.kind === 'project' || intent.kind === 'autosave') {
           if (cancelled) return
           await loadProject(intent.project, { keepId: intent.kind === 'project' })
-          savedCleanRef.current = true
+          markSavedClean(true)
           return
         }
         if (cancelled || canvasRef.current !== canvas) return
@@ -676,9 +724,10 @@ function App() {
           captureStyleBaseline()
           syncSelected()
           syncLayers()
-          resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
-          savedCleanRef.current = true
+          resetHistory(serializeHistorySnapshot(canvas, HISTORY_PROPS), 'Started a new poster')
+          markSavedClean(true)
           setStatus('Started a new poster')
+          if (intent.image) await handleImageFile(intent.image, { fill: true })
           return
         }
         seedPoster(canvas, poster)
@@ -687,8 +736,8 @@ function App() {
         captureStyleBaseline()
         syncSelected()
         syncLayers()
-        resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
-        savedCleanRef.current = true
+        resetHistory(serializeHistorySnapshot(canvas, HISTORY_PROPS), 'Started a new poster')
+        markSavedClean(true)
         setStatus('Started a new poster')
         if (intent.walkthrough) startWalkthrough()
       } catch {
@@ -698,6 +747,8 @@ function App() {
 
     return () => {
       cancelled = true
+      detailOverlayRef.current?.dispose()
+      detailOverlayRef.current = null
       canvas.dispose()
       canvasRef.current = null
     }
@@ -755,6 +806,21 @@ function App() {
   }, [editorTool, penMode, isPanMode])
 
   useEffect(() => {
+    detailOverlayRef.current?.invalidate()
+  }, [displayScale, poster.width, poster.height])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const next = backstoreScale(displayScale, window.devicePixelRatio || 1, poster.width, poster.height)
+    if (next === backstoreScaleRef.current) return
+    backstoreScaleRef.current = next
+    applyBackstore(canvas)
+    canvas.requestRenderAll()
+    detailOverlayRef.current?.invalidate()
+  }, [displayScale, poster.width, poster.height, screen, editorSession])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     for (const object of canvas.getObjects()) {
@@ -774,6 +840,7 @@ function App() {
     }
     if (canvas.getWidth() === poster.width && canvas.getHeight() === poster.height) return
     canvas.setDimensions({ width: poster.width, height: poster.height })
+    applyBackstore(canvas)
     canvas.backgroundColor = '#f6f1e6'
     canvas.requestRenderAll()
     commitHistory('Changed poster size')
@@ -842,7 +909,7 @@ function App() {
     addText: () => setEditorTool('text'),
     addShape,
     zoomFit: () => setZoom(null),
-    zoom100: () => setZoom(1),
+    zoom100: () => zoomAround(1),
     zoomIn: () => stepZoom(1),
     zoomOut: () => stepZoom(-1),
     reroll: () => void rerollLast(),
@@ -867,6 +934,29 @@ function App() {
       setPenMode(false)
       setEditorTool('shape')
     },
+    brushTool: () => {
+      setPenMode(false)
+      setEditorTool('brush')
+      setBrush((current) => ({ ...current, erase: false }))
+      setStatus('Brush — paint on a new layer or the selected paint layer · [ ] size · E eraser')
+    },
+    eraserTool: () => {
+      setPenMode(false)
+      setEditorTool('brush')
+      setBrush((current) => ({ ...current, erase: true }))
+      setStatus('Eraser — erases paint layers; on other layers it paints the mask')
+    },
+    selectTool: () => {
+      setPenMode(false)
+      setEditorTool('select')
+      setStatus('Select — drag a marquee (Shift square, Alt from center), then mask or lift it')
+    },
+    selectionMaskOut: () => void applySelectionRegion('conceal', 'Masked out selection'),
+    selectionViaCopy: () => void liftSelectionToLayer(false),
+    selectionViaCut: () => void liftSelectionToLayer(true),
+    selectionInvert: () =>
+      setPixelSelection((current) => (current ? { ...current, inverted: !current.inverted } : current)),
+    selectionClear: () => setPixelSelection(null),
     maskTool: () => {
       setPenMode(false)
       setEditorTool('mask')
@@ -994,6 +1084,13 @@ function App() {
         } else if (key === 'f') {
           event.preventDefault()
           actions.filterGallery()
+        } else if (key === 'j' && pixelSelectionRef.current) {
+          event.preventDefault()
+          if (event.shiftKey) actions.selectionViaCut()
+          else actions.selectionViaCopy()
+        } else if (key === 'i' && event.shiftKey && pixelSelectionRef.current) {
+          event.preventDefault()
+          actions.selectionInvert()
         }
         return
       }
@@ -1022,10 +1119,16 @@ function App() {
           return
         }
         event.preventDefault()
-        actions.delete()
+        // With a pixel selection, Delete masks the area out (Photoshop) instead of deleting the layer.
+        if (pixelSelectionRef.current) actions.selectionMaskOut()
+        else actions.delete()
       } else if (event.key === 'Escape') {
         if (bezierPenActionsRef.current.cancel()) {
           event.preventDefault()
+          return
+        }
+        if (pixelSelectionRef.current) {
+          actions.selectionClear()
           return
         }
         actions.deselect()
@@ -1045,6 +1148,9 @@ function App() {
       } else if (event.key.toLowerCase() === 's') {
         event.preventDefault()
         actions.shapeTool()
+      } else if (event.key.toLowerCase() === 'l') {
+        event.preventDefault()
+        actions.selectTool()
       } else if (event.key.toLowerCase() === 'm') {
         event.preventDefault()
         actions.maskTool()
@@ -1060,7 +1166,15 @@ function App() {
         event.preventDefault()
         actions.instrumentsTool()
       } else if (event.key.toLowerCase() === 'b') {
-        actions.addShape()
+        event.preventDefault()
+        actions.brushTool()
+      } else if (event.key.toLowerCase() === 'e') {
+        event.preventDefault()
+        actions.eraserTool()
+      } else if ((event.key === '[' || event.key === ']') && editorToolRef.current === 'brush') {
+        event.preventDefault()
+        const factor = event.key === ']' ? 1.2 : 1 / 1.2
+        setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
       } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
         actions.togglePen()
       } else if (event.key.toLowerCase() === 'g') {
@@ -1124,11 +1238,72 @@ function App() {
       event.preventDefault()
       const current = liveRef.current.zoom ?? liveRef.current.fitScale
       const next = clampZoom(current * Math.exp(-event.deltaY * 0.0015))
-      setZoom(next)
+      zoomAround(next, { x: event.clientX, y: event.clientY })
     }
+    // WebKit (Safari, the macOS WKWebView shell) reports trackpad pinch as gesture
+    // events rather than ctrl+wheel.
+    let gestureStart = 1
+    const onGestureStart = (event: Event) => {
+      event.preventDefault()
+      gestureStart = liveRef.current.zoom ?? liveRef.current.fitScale
+    }
+    const onGestureChange = (event: Event) => {
+      event.preventDefault()
+      const gesture = event as Event & { scale?: number; clientX?: number; clientY?: number }
+      if (!gesture.scale) return
+      const point = gesture.clientX != null && gesture.clientY != null ? { x: gesture.clientX, y: gesture.clientY } : undefined
+      zoomAround(clampZoom(gestureStart * gesture.scale), point)
+    }
+    const onScroll = () => detailOverlayRef.current?.invalidate()
+    scroller.addEventListener('scroll', onScroll, { passive: true })
     scroller.addEventListener('wheel', onWheel, { passive: false })
-    return () => scroller.removeEventListener('wheel', onWheel)
+    scroller.addEventListener('gesturestart', onGestureStart)
+    scroller.addEventListener('gesturechange', onGestureChange)
+    return () => {
+      scroller.removeEventListener('scroll', onScroll)
+      scroller.removeEventListener('wheel', onWheel)
+      scroller.removeEventListener('gesturestart', onGestureStart)
+      scroller.removeEventListener('gesturechange', onGestureChange)
+    }
   }, [screen])
+
+  function applyZoomAnchor(scale: number) {
+    const anchor = zoomAnchorRef.current
+    zoomAnchorRef.current = null
+    const scroller = scrollRef.current
+    const shell = scroller?.querySelector<HTMLElement>('.canvas-shell')
+    if (!anchor || !scroller || !shell) return
+    const rect = shell.getBoundingClientRect()
+    scroller.scrollLeft += rect.left + anchor.posterX * scale - anchor.clientX
+    scroller.scrollTop += rect.top + anchor.posterY * scale - anchor.clientY
+  }
+
+  useLayoutEffect(() => {
+    applyZoomAnchor(displayScale)
+  }, [displayScale, pasteboard])
+
+  /** Visible part of the poster, in poster px, for the deep-zoom detail layer. */
+  function visibleDetailViewport() {
+    const scroller = scrollRef.current
+    const shell = scroller?.querySelector<HTMLElement>('.canvas-shell')
+    if (!scroller || !shell) return null
+    const view = scroller.getBoundingClientRect()
+    const rect = shell.getBoundingClientRect()
+    const scale = displayScaleRef.current
+    const { poster: current } = liveRef.current
+    const left = Math.max(0, (view.left - rect.left) / scale)
+    const top = Math.max(0, (view.top - rect.top) / scale)
+    const right = Math.min(current.width, (view.right - rect.left) / scale)
+    const bottom = Math.min(current.height, (view.bottom - rect.top) / scale)
+    return {
+      left: Math.floor(left),
+      top: Math.floor(top),
+      width: Math.ceil(right - left),
+      height: Math.ceil(bottom - top),
+      scale,
+      dpr: window.devicePixelRatio || 1,
+    }
+  }
 
   function clampZoom(value: number) {
     return Math.min(8, Math.max(0.1, value))
@@ -1140,7 +1315,29 @@ function App() {
       direction === 1
         ? ZOOM_LEVELS.find((level) => level > current + 0.001)
         : [...ZOOM_LEVELS].reverse().find((level) => level < current - 0.001)
-    setZoom(clampZoom(next ?? current))
+    zoomAround(clampZoom(next ?? current))
+  }
+
+  /**
+   * Zoom while keeping a screen point pinned over the same poster pixel
+   * (cursor for wheel/pinch, viewport center for buttons and shortcuts).
+   */
+  function zoomAround(next: number | null, screenPoint?: { x: number; y: number }) {
+    const scroller = scrollRef.current
+    const shell = scroller?.querySelector<HTMLElement>('.canvas-shell')
+    if (scroller && shell) {
+      const view = scroller.getBoundingClientRect()
+      const rect = shell.getBoundingClientRect()
+      const anchor = screenPoint ?? { x: view.left + view.width / 2, y: view.top + view.height / 2 }
+      const scale = liveRef.current.displayScale
+      zoomAnchorRef.current = {
+        clientX: anchor.x,
+        clientY: anchor.y,
+        posterX: (anchor.x - rect.left) / scale,
+        posterY: (anchor.y - rect.top) / scale,
+      }
+    }
+    setZoom(next)
   }
 
   function handlePanMouseDown(event: React.MouseEvent) {
@@ -1359,13 +1556,14 @@ function App() {
 
   function scheduleAutosave() {
     if (screenRef.current !== 'editor') return
-    savedCleanRef.current = false
+    markSavedClean(false)
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
-    autosaveTimerRef.current = window.setTimeout(() => {
+    autosaveTimerRef.current = window.setTimeout(() => runWhenIdle(() => {
       const canvas = canvasRef.current
       if (!canvas || screenRef.current !== 'editor') return
       const { poster: currentPoster, projectName: currentName } = liveRef.current
       void (async () => {
+        await preparePaintSources(canvas.getObjects() as never)
         const snapshot = await persistOpenPosterSnapshot({
           name: currentName.trim() || 'Untitled poster',
           savedAt: new Date().toISOString(),
@@ -1375,7 +1573,7 @@ function App() {
         })
         await saveAutosave(snapshot)
       })().catch(() => setStatus('Autosave failed — storage may be full'))
-    }, 2500)
+    }), 2500)
   }
 
   function scheduleSyncLayers() {
@@ -1465,6 +1663,8 @@ function App() {
       openTypeFeatures: readOpenTypeFeatures(object),
       componentId: readComponentId(object) ?? undefined,
       overrideCount: overrideCount(readComponentOverrides(object)),
+      layerStyle: readLayerStyle(object),
+      adjustment: readAdjustment(object),
     }
   }
 
@@ -1556,7 +1756,12 @@ function App() {
       patch.globalCompositeOperation = values.blendMode as GlobalCompositeOperation
       delete (patch as Partial<SelectedState>).blendMode
     }
+    // Rotate around the visual center (Photoshop/Figma behavior) rather than the
+    // top-left origin point.
+    const nextAngle = patch.angle
+    delete patch.angle
     object.set(patch)
+    if (nextAngle !== undefined) object.rotate(nextAngle)
     if (values.text !== undefined || values.fill !== undefined || values.stroke !== undefined) {
       recordOverrideFromPatch(object, {
         text: values.text,
@@ -1569,6 +1774,66 @@ function App() {
     syncSelected()
     invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
     scheduleSyncLayers()
+  }
+
+  function updateLayerStyle(style: LayerStyle) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+    beginObjectEditSession(object)
+    writeLayerStyle(object, style)
+    canvas.requestRenderAll()
+    syncSelected()
+    invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
+    scheduleSyncLayers()
+  }
+
+  /** Add an adjustment layer above the selected layer (or on top), covering the poster. */
+  function addAdjustmentLayer(type: AdjustmentType) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const layer = new AdjustmentLayer({
+      left: 0,
+      top: 0,
+      width: poster.width,
+      height: poster.height,
+      adjustment: defaultAdjustment(type),
+    })
+    tagObject(layer, 'adjustment', ADJUSTMENT_LABELS[type])
+    const active = activeObject()
+    const anchor = active && active.type !== 'activeselection' ? topLevelLayer(active) : null
+    const index = anchor ? canvas.getObjects().indexOf(anchor) : -1
+    if (index >= 0) canvas.insertAt(index + 1, layer)
+    else canvas.add(layer)
+    canvas.setActiveObject(layer)
+    canvas.requestRenderAll()
+    setInspectorTab('inspect')
+    commitHistory(`Added ${ADJUSTMENT_LABELS[type].toLowerCase()} adjustment`)
+  }
+
+  function updateAdjustment(adjustment: Adjustment) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || !readAdjustment(object)) return
+    beginObjectEditSession(object)
+    object.set({ adjustment } as Partial<FabricObject>)
+    canvas.requestRenderAll()
+    syncSelected()
+  }
+
+  function toggleLayerStyleEffect(kind: LayerStyleKind, label: string) {
+    const object = activeObject()
+    if (!object || object.type === 'activeselection') return
+    const current = readLayerStyle(object) ?? {}
+    const next: LayerStyle = { ...current }
+    if (next[kind]) {
+      delete next[kind]
+    } else {
+      const defaults = scaledLayerStyleDefaults(layerStyleScale(poster.width, poster.height))
+      Object.assign(next, { [kind]: defaults[kind] })
+    }
+    updateLayerStyle(next)
+    finalizeActive(`${current[kind] ? 'Removed' : 'Added'} ${label.toLowerCase()}`)
   }
 
   function finalizeActive(message: string) {
@@ -1725,8 +1990,15 @@ function App() {
     if (!canvas || !active) return
     const objects = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
     alignObjects(objects, mode)
+    refreshSelectionBounds(active)
     canvas.requestRenderAll()
     commitHistory(`Aligned ${mode}`)
+  }
+
+  function refreshSelectionBounds(active: FabricObject) {
+    // Children moved inside an ActiveSelection; re-fit the selection box to them.
+    if (active.type === 'activeselection') (active as FabricGroup).triggerLayout()
+    active.setCoords()
   }
 
   function distributeSelection(axis: 'horizontal' | 'vertical') {
@@ -1735,6 +2007,7 @@ function App() {
     if (!canvas || !active) return
     const objects = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
     distributeObjects(objects, axis)
+    refreshSelectionBounds(active)
     canvas.requestRenderAll()
     commitHistory(`Distributed ${axis}`)
   }
@@ -1813,6 +2086,170 @@ function App() {
       return
     }
     setStatus('Paint mask — drag to conceal, Alt-drag to reveal · [ ] brush size')
+  }
+
+  function brushMaxSize() {
+    return Math.round(Math.max(200, Math.min(liveRef.current.poster.width, liveRef.current.poster.height) / 3))
+  }
+
+  /** The layer the next stroke lands on: the selected paint layer, or null for "new layer". */
+  function brushTarget(): FabricObject | null {
+    const active = activeObject()
+    if (!active || active.type === 'activeselection') return null
+    return active
+  }
+
+  function handleStrokeStart(sample: BrushInputSample) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const settings = brushRef.current
+    const target = brushTarget()
+    // Eraser on a non-paint layer paints its mask (non-destructive), like a layer mask in Photoshop.
+    if (settings.erase && target && !isPaintLayer(target)) {
+      strokeRef.current = { session: null, createdLayer: false, maskFallback: true }
+      handleMaskPaint('down', sample, false)
+      return
+    }
+    if (settings.erase && !target) {
+      setStatus('Pick a layer to erase')
+      strokeRef.current = null
+      return
+    }
+    let layer = target && isPaintLayer(target) && !target.group ? target : null
+    let createdLayer = false
+    if (!layer) {
+      layer = createPaintLayer(poster.width, poster.height)
+      tagObject(layer, 'image', 'Paint')
+      const anchor = target ? topLevelLayer(target) : null
+      const index = anchor ? canvas.getObjects().indexOf(anchor) : -1
+      if (index >= 0) canvas.insertAt(index + 1, layer)
+      else canvas.add(layer)
+      canvas.setActiveObject(layer)
+      createdLayer = true
+    }
+    const session = new StrokeSession(layer, settings)
+    strokeRef.current = { session, createdLayer, maskFallback: false }
+    const point = posterToPaintPixel(layer, sample.x, sample.y)
+    session.addSamples([{ ...point, pressure: sample.pressure }])
+    canvas.requestRenderAll()
+  }
+
+  function handleStrokeMove(samples: BrushInputSample[]) {
+    const stroke = strokeRef.current
+    const canvas = canvasRef.current
+    if (!stroke || !canvas) return
+    if (stroke.maskFallback) {
+      const last = samples[samples.length - 1]
+      if (last) handleMaskPaint('move', last, false)
+      return
+    }
+    const session = stroke.session
+    if (!session) return
+    const mapped = samples.map((sample) => ({ ...posterToPaintPixel(session.layer, sample.x, sample.y), pressure: sample.pressure }))
+    if (session.addSamples(mapped)) canvas.requestRenderAll()
+  }
+
+  function handleStrokeEnd() {
+    const stroke = strokeRef.current
+    strokeRef.current = null
+    const canvas = canvasRef.current
+    if (!stroke || !canvas) return
+    if (stroke.maskFallback) {
+      handleMaskPaint('up', { x: 0, y: 0 }, false)
+      return
+    }
+    const session = stroke.session
+    if (!session) return
+    const result = session.end()
+    const layer = session.layer
+    const objectId = String(readObjectProp(layer, 'id') ?? '')
+    bumpPaintVersion(layer)
+    invalidateLayerThumbnail(objectId)
+    canvas.requestRenderAll()
+    const label = brushRef.current.erase ? 'Erased paint' : 'Brush stroke'
+    if (stroke.createdLayer) {
+      commitHistory('Painted on a new layer')
+    } else if (result) {
+      commitPixelsHistory(objectId, label, result.rect, storePixels(result.before), storePixels(result.after))
+      scheduleAutosave()
+    }
+    scheduleSyncLayers()
+    syncSelected()
+    setStatus(stroke.createdLayer ? 'Painted on a new layer' : label)
+  }
+
+  /** Map a poster-space selection into a mask region on `object`. */
+  function selectionRegionFor(object: FabricObject, selection: PixelSelection, op: MaskRegion['op']): MaskRegion {
+    const size = objectUnscaledSize(object)
+    const shortSide = Math.min(size.width * Math.abs(object.scaleX ?? 1), size.height * Math.abs(object.scaleY ?? 1))
+    const mask = readLayerMask(object) ?? emptyLayerMask()
+    return {
+      points: selection.points.map((point) => canvasPointToMaskLocal(object, point.x, point.y)),
+      op,
+      feather: selection.feather / Math.max(1, shortSide),
+      inverted: selection.inverted || undefined,
+      at: mask.strokes.length,
+    }
+  }
+
+  function pushMaskRegion(object: FabricObject, region: MaskRegion) {
+    const mask = readLayerMask(object) ?? emptyLayerMask()
+    writeLayerMask(object, { ...mask, enabled: true, regions: [...(mask.regions ?? []), region] })
+  }
+
+  async function applySelectionRegion(op: MaskRegion['op'], label: string) {
+    const canvas = canvasRef.current
+    const selection = pixelSelectionRef.current
+    const object = resolveMaskTarget()
+    if (!canvas || !selection) return
+    if (!object) {
+      setStatus('Pick a layer first — the selection masks the active layer')
+      return
+    }
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    pushMaskRegion(object, selectionRegionFor(object, selection, op))
+    await applyLayerMask(object)
+    canvas.requestRenderAll()
+    invalidateLayerThumbnail(objectId)
+    commitObjectPatchHistoryRef.current(objectId, label, before, captureObjectPatch(object))
+    scheduleSyncLayers()
+    setStatus(`${label} on ${String(readObjectProp(object, 'name') ?? 'layer')}`)
+  }
+
+  /** Photoshop's Layer via Copy / Cut: lift the selected area onto a new layer above. */
+  async function liftSelectionToLayer(cut: boolean) {
+    const canvas = canvasRef.current
+    const selection = pixelSelectionRef.current
+    const object = resolveMaskTarget()
+    if (!canvas || !selection) return
+    if (!object) {
+      setStatus('Pick a layer first — the selection lifts from the active layer')
+      return
+    }
+    if (object.group) {
+      setStatus('Ungroup first — lifting works on top-level layers')
+      return
+    }
+    const clone = await object.clone()
+    retargetObjectIds(clone, nextIdForKind)
+    const baseName = String(readObjectProp(object, 'name') ?? 'Layer')
+    tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'image', `${baseName} ${cut ? 'cut' : 'piece'}`)
+    pushMaskRegion(clone, selectionRegionFor(object, selection, 'intersect'))
+    await applyLayerMask(clone)
+    if (cut) {
+      pushMaskRegion(object, selectionRegionFor(object, selection, 'conceal'))
+      await applyLayerMask(object)
+      invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
+    }
+    const index = canvas.getObjects().indexOf(object)
+    if (index >= 0) canvas.insertAt(index + 1, clone)
+    else canvas.add(clone)
+    setPixelSelection(null)
+    setEditorTool('move')
+    canvas.setActiveObject(clone)
+    canvas.requestRenderAll()
+    commitHistory(cut ? 'Cut selection to a new layer' : 'Copied selection to a new layer')
   }
 
   function stampMaskStrokes(
@@ -2384,6 +2821,7 @@ function App() {
       setPoster(target.preset)
       setPresetId(target.preset.id)
       canvas.setDimensions({ width: target.preset.width, height: target.preset.height })
+      applyBackstore(canvas)
       void refreshPosterTreatments()
       canvas.requestRenderAll()
     }
@@ -2815,6 +3253,7 @@ function App() {
   }
 
   function applyEditorIntent(intent: EditorIntent) {
+    setPixelSelection(null)
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
@@ -2864,15 +3303,37 @@ function App() {
     setPenMode(false)
     lastChaosRef.current = null
     setLastChaos(null)
-    savedCleanRef.current = true
+    markSavedClean(true)
     if (screenRef.current === 'editor') setEditorSession((value) => value + 1)
     else setScreen('editor')
   }
 
-  async function requestNewPoster(preset: PosterPreset) {
+  async function requestNewPoster(preset: PosterPreset, image?: File) {
     const allowed = await confirmIfDirty('new')
     if (!allowed) return
-    applyEditorIntent({ kind: 'blank', preset })
+    applyEditorIntent({ kind: 'blank', preset, image })
+  }
+
+  /** New poster sized to an image (long edge capped at 4000px) with the image placed full bleed. */
+  async function startFromImage(file: File) {
+    if (!file.type.startsWith('image/')) {
+      setStatus('That file is not an image')
+      return
+    }
+    let width: number
+    let height: number
+    try {
+      const bitmap = await createImageBitmap(file)
+      width = bitmap.width
+      height = bitmap.height
+      bitmap.close()
+    } catch {
+      setStatus('Could not read that image')
+      return
+    }
+    const fit = Math.min(1, 4000 / Math.max(width, height))
+    const preset = { ...applyPosterPreset('custom', { width: width * fit, height: height * fit }), dpi: 72 }
+    await requestNewPoster(preset, file)
   }
 
   async function requestOpenProject(project: StoredProject) {
@@ -2905,6 +3366,7 @@ function App() {
     if (!savedCleanRef.current && historyLogRef.current.cursor > 0) {
       const { poster: currentPoster, projectName: currentName } = liveRef.current
       try {
+        if (canvasRef.current) await preparePaintSources(canvasRef.current.getObjects() as never)
         const snapshot = await persistOpenPosterSnapshot({
           name: currentName.trim() || 'Untitled poster',
           savedAt: new Date().toISOString(),
@@ -3056,14 +3518,15 @@ function App() {
     const viewW = Math.max(160, scroller.clientWidth - padding * 2)
     const viewH = Math.max(160, scroller.clientHeight - padding * 2)
     const nextScale = clampZoom(Math.min(viewW / Math.max(bounds.width, 1), viewH / Math.max(bounds.height, 1), 4))
-    setZoom(nextScale)
-
-    window.requestAnimationFrame(() => {
-      const centerX = (bounds.left + bounds.width / 2) * nextScale
-      const centerY = (bounds.top + bounds.height / 2) * nextScale
-      scroller.scrollLeft = Math.max(0, centerX - scroller.clientWidth / 2)
-      scroller.scrollTop = Math.max(0, centerY - scroller.clientHeight / 2)
-    })
+    const view = scroller.getBoundingClientRect()
+    zoomAnchorRef.current = {
+      clientX: view.left + view.width / 2,
+      clientY: view.top + view.height / 2,
+      posterX: bounds.left + bounds.width / 2,
+      posterY: bounds.top + bounds.height / 2,
+    }
+    if (Math.abs(nextScale - displayScale) < 1e-6) applyZoomAnchor(displayScale)
+    else setZoom(nextScale)
     setStatus(`Zoomed to ${String(readObjectProp(object, 'name') ?? 'layer')}`)
   }
 
@@ -3199,11 +3662,26 @@ function App() {
     }
   }
 
-  async function handleImageFile(file: File) {
+  async function handleImageFile(file: File, options: { fill?: boolean } = {}) {
     const canvas = canvasRef.current
     if (!canvas) return
     const url = await readFileAsDataUrl(file)
     const image = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
+    if (options.fill) {
+      const scale = coverScale(image.width ?? 1, image.height ?? 1, poster.width, poster.height)
+      image.set({
+        left: (poster.width - (image.width ?? 1) * scale) / 2,
+        top: (poster.height - (image.height ?? 1) * scale) / 2,
+        scaleX: scale,
+        scaleY: scale,
+      })
+      tagObject(image, 'image', file.name)
+      canvas.add(image)
+      canvas.setActiveObject(image)
+      await persistAssetFromFile(file)
+      commitHistory('Placed image')
+      return
+    }
     const maxWidth = poster.width * 0.72
     const maxHeight = poster.height * 0.6
     image.scaleToWidth(Math.min(maxWidth, image.width ?? maxWidth))
@@ -4032,6 +4510,7 @@ function App() {
     try {
       const now = new Date().toISOString()
       const thumbnail = await captureOpenPosterThumbnail()
+      await preparePaintSources(canvas.getObjects() as never)
       await persistProject({
         id,
         name,
@@ -4070,7 +4549,7 @@ function App() {
       if (!ok) return
       setSavedProjects(await listProjects())
       await clearAutosave()
-      savedCleanRef.current = true
+      markSavedClean(true)
       setStatus(`Saved “${name}”`)
     } catch {
       setStatus('Save failed — storage may be full or unavailable')
@@ -4114,7 +4593,7 @@ function App() {
       setProjectName(trimmed)
       setSavedProjects(await listProjects())
       await clearAutosave()
-      savedCleanRef.current = true
+      markSavedClean(true)
       setSaveAsOpen(false)
       setStatus(`Saved as “${trimmed}”`)
     } catch {
@@ -4145,14 +4624,14 @@ function App() {
     await reconcileArtifactTreatments()
     await refreshPosterTreatments()
     canvas.requestRenderAll()
-    resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), `Loaded ${project.name}`)
+    resetHistory(serializeHistorySnapshot(canvas, HISTORY_PROPS), `Loaded ${project.name}`)
     lastChaosRef.current = null
     setLastChaos(null)
     captureStyleBaseline()
     syncSelected()
     syncLayers()
     setStatus(`Loaded ${project.name}`)
-    savedCleanRef.current = true
+    markSavedClean(true)
     if (options.keepId) {
       try {
         await touchProjectOpened(project.id)
@@ -4448,6 +4927,25 @@ function App() {
   const commands: CommandAction[] = [
     { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
     { id: 'open-poster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
+    ...(['dropShadow', 'outerGlow', 'outline'] as const).map((kind) => {
+      const label = kind === 'dropShadow' ? 'Drop shadow' : kind === 'outerGlow' ? 'Outer glow' : 'Outline'
+      const on = Boolean(selected?.layerStyle?.[kind])
+      return {
+        id: `layer-style-${kind}`,
+        label: `${on ? 'Remove' : 'Add'} ${label.toLowerCase()}`,
+        keywords: ['layer style', 'effect', 'fx', 'shadow', 'glow', 'stroke', 'outline', label.toLowerCase()],
+        scope: 'selection' as const,
+        disabled: !selected || selectedLayerIds.length > 1,
+        run: () => toggleLayerStyleEffect(kind, label),
+      }
+    }),
+    ...(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => ({
+      id: `adjustment-${type}`,
+      label: `Add ${ADJUSTMENT_LABELS[type].toLowerCase()} adjustment layer`,
+      keywords: ['adjustment', 'layer', 'color', 'grade', type, ADJUSTMENT_LABELS[type].toLowerCase()],
+      scope: 'canvas' as const,
+      run: () => addAdjustmentLayer(type),
+    })),
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
@@ -4727,6 +5225,9 @@ function App() {
           onRecoverSession={(project) => void requestRecoverSession(project)}
           onNewPoster={openNewPosterDialog}
           onStartFromWreck={() => void requestStartFromWreck()}
+          onStartPreset={(presetId) => void requestNewPoster(applyPosterPreset(presetId))}
+          onStartFromImage={(file) => void startFromImage(file)}
+          onOpenPoster={openOpenPosterDialog}
         />
       ) : (
         <>
@@ -4749,6 +5250,7 @@ function App() {
           redo()
         }}
         onSave={() => void saveProjectAction()}
+        isDirty={isDirty}
         onDuplicatePoster={() => void duplicatePosterAction()}
         onSaveAs={openSaveAsDialog}
         onOpenCommands={handleOpenCommands}
@@ -4774,6 +5276,10 @@ function App() {
           onClipToShape={() => void clipSelectionToShape()}
           onBrushMask={() => void paintBrushMask()}
           onWhiteScrapes={() => addWhiteScrapes()}
+          selectMode={selectMode}
+          onSelectModeChange={setSelectMode}
+          brushErase={brush.erase}
+          onBrushModeChange={(erase) => setBrush((current) => ({ ...current, erase }))}
         />
         {editorTool === 'instruments' ? (
           <InstrumentsPalette
@@ -4854,6 +5360,7 @@ function App() {
         <EditorCanvas
           poster={poster}
           displayScale={displayScale}
+          pasteboard={pasteboard}
           status={status}
           isPanMode={isPanMode}
           documentMeta={documentMeta}
@@ -4882,8 +5389,48 @@ function App() {
               onRemoveLayerTreatment={removeLayerTreatment}
             />
           }
+          toolBar={
+            editorTool === 'brush' ? (
+              <BrushBar
+                brush={brush}
+                maxSize={brushMaxSize()}
+                targetName={
+                  brush.erase
+                    ? (selected?.name ?? null)
+                    : selected && selectedLayerIds.length <= 1 && selected.name && isPaintLayer(activeObject())
+                      ? selected.name
+                      : null
+                }
+                onChange={(patch) => setBrush((current) => ({ ...current, ...patch }))}
+              />
+            ) : null
+          }
           hud={
-            selected ? (
+            <>
+            <BrushOverlay
+              active={editorTool === 'brush' && !isPanMode}
+              displayScale={displayScale}
+              size={brush.size}
+              erase={brush.erase}
+              onStrokeStart={handleStrokeStart}
+              onStrokeMove={handleStrokeMove}
+              onStrokeEnd={handleStrokeEnd}
+            />
+            <SelectionOverlay
+              posterWidth={poster.width}
+              posterHeight={poster.height}
+              displayScale={displayScale}
+              active={editorTool === 'select' && !isPanMode}
+              mode={selectMode}
+              selection={pixelSelection}
+              onSelectionChange={setPixelSelection}
+              targetName={selectionTargetName}
+              onMaskOut={() => void applySelectionRegion('conceal', 'Masked out selection')}
+              onKeepOnly={() => void applySelectionRegion('intersect', 'Kept only selection')}
+              onLayerViaCopy={() => void liftSelectionToLayer(false)}
+              onLayerViaCut={() => void liftSelectionToLayer(true)}
+            />
+            {selected && editorTool !== 'select' && editorTool !== 'brush' ? (
               <LiveSelectionHud
                 canvasRef={canvasRef}
                 selected={selected}
@@ -4893,7 +5440,8 @@ function App() {
                 onUpdateActive={updateActive}
                 onFinalizeActive={finalizeActive}
               />
-            ) : null
+            ) : null}
+            </>
           }
           coach={
             walkthroughStep ? (
@@ -4905,7 +5453,7 @@ function App() {
           onSwitchArtboard={(artboardId) => void switchToArtboard(artboardId)}
           onChangeArtboardPreset={changeArtboardPreset}
           onStepZoom={stepZoom}
-          onZoom100={() => setZoom(1)}
+          onZoom100={() => zoomAround(1)}
           onZoomFit={() => setZoom(null)}
           onReroll={() => void rerollLast()}
           onPanMouseDown={handlePanMouseDown}
@@ -5046,6 +5594,9 @@ function App() {
           textContrast={textContrast}
           onUpdateActive={updateActive}
           onFinalizeActive={finalizeActive}
+          onLayerStyleChange={updateLayerStyle}
+          onAddAdjustment={addAdjustmentLayer}
+          onAdjustmentChange={updateAdjustment}
           onPreviewBlendMode={previewBlendMode}
           onApplyBlendMode={applyBlendMode}
           onLoadGoogleFont={loadGoogleFont}

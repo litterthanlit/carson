@@ -1,11 +1,13 @@
 import { FontPicker } from './FontPicker'
-import type { HudBounds } from '../lib/hudBounds'
+import { hudPlacement, type HudBounds } from '../lib/hudBounds'
 import type { SelectedState } from '../types/editor'
 
 type SelectionHudProps = {
   selected: SelectedState
   bounds: HudBounds
   displayScale: number
+  /** Fade out while the selection is being dragged so it doesn't obscure the move. */
+  dragging?: boolean
   customFonts: string[]
   onLoadGoogleFont: (family: string) => Promise<void>
   onUpdateActive: (values: Partial<SelectedState>) => void
@@ -16,6 +18,7 @@ export function SelectionHud({
   selected,
   bounds,
   displayScale,
+  dragging = false,
   customFonts,
   onLoadGoogleFont,
   onUpdateActive,
@@ -23,12 +26,14 @@ export function SelectionHud({
 }: SelectionHudProps) {
   const isText = selected.kind === 'text'
   const isShape = selected.kind === 'shape'
-  const left = bounds.left * displayScale
-  const top = (bounds.top + bounds.height) * displayScale + 8
+  const { left, top, side } = hudPlacement(bounds, displayScale)
 
   return (
     <div
-      className="selection-hud"
+      className={dragging ? 'selection-hud is-dragging' : 'selection-hud'}
+      data-side={side}
+      role="toolbar"
+      aria-label="Quick properties"
       style={{ left, top }}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -47,8 +52,8 @@ export function SelectionHud({
             Size
             <input
               type="number"
-              min={12}
-              max={360}
+              min={1}
+              max={4000}
               value={Math.round(selected.fontSize ?? 80)}
               onChange={(event) => onUpdateActive({ fontSize: Number(event.target.value) })}
               onBlur={() => onFinalizeActive('Changed type size')}
