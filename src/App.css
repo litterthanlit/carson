@@ -3444,3 +3444,113 @@ label:has(> input[type='radio']) {
 .add-adjustment select {
   font-size: 12px;
 }
+
+/* ── Brush ──────────────────────────────────────────────────────────────── */
+.brush-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  cursor: none;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.brush-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  /* Two rings so the cursor reads on light and dark art alike. */
+  border: 1px solid rgb(255 255 255 / 0.9);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.65);
+  transition: opacity 80ms linear;
+}
+
+.brush-overlay.is-erasing .brush-ring {
+  border-style: dashed;
+}
+
+.canvas-tool-float {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  right: 16px;
+  z-index: 7;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.brush-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 6px 10px;
+  pointer-events: auto;
+  font: 500 11px/1 var(--font);
+  color: var(--text-muted);
+  background: rgb(42 42 42 / 0.94);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px);
+}
+
+.brush-mode {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.brush-mode button[aria-checked='true'],
+.brush-pressure button[aria-pressed='true'] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.brush-color input {
+  width: 26px;
+  height: 22px;
+  padding: 1px;
+}
+
+.brush-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 500 11px/1 var(--font);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.brush-field input[type='range'] {
+  width: 78px;
+  padding: 0;
+  box-shadow: none;
+  accent-color: var(--accent);
+  background: transparent;
+  border: 0;
+}
+
+.brush-field output {
+  min-width: 30px;
+  font: 500 11px/1 var(--font-mono);
+  color: var(--text);
+}
+
+.brush-pressure {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.brush-target {
+  padding-left: 6px;
+  border-left: 1px solid var(--border-strong);
+  color: var(--text-faint);
+}

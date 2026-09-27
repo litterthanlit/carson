@@ -1,5 +1,8 @@
 import { useCallback, useRef } from 'react'
-import { parseHistorySnapshot, serializeHistorySnapshot } from '../lib/historySnapshot'
+import { loadPixels } from '../lib/pixelStore'
+import { isPaintLayer, writePaintPixels } from '../lib/paintLayer'
+import { invalidateLayerThumbnail } from '../lib/layerThumbnail'
+import { parseHistorySnapshot, rehydratePaintLayers, serializeHistorySnapshot } from '../lib/historySnapshot'
 import type { Canvas } from 'fabric'
 import type { MutableRefObject, RefObject } from 'react'
 import { HISTORY_PROPS } from '../lib/editorConstants'
@@ -14,6 +17,7 @@ import {
   restoreActionForRedo,
   restoreActionForUndo,
   restoreActionsForUndo,
+  type PixelRect,
   shouldSnapshot,
   type HistoryOp,
   type HistoryState,
@@ -96,6 +100,7 @@ export function useEditorHistory({
       await ensureLibraryFonts(collectFontFamilies(parsed))
       await withLayerSyncSuppressed(async () => {
         await canvas.loadFromJSON(parsed)
+        await rehydratePaintLayers(canvas.getObjects() as unknown as Parameters<typeof rehydratePaintLayers>[0])
         await onAfterRestore()
       })
       restoringRef.current = false
@@ -142,6 +147,19 @@ export function useEditorHistory({
           restoringRef.current = false
           canvas.requestRenderAll()
           syncSelected()
+          syncLayers()
+        }
+        setStatus(action.label)
+        return
+      }
+      if (action.kind === 'pixels') {
+        const canvas = canvasRef.current
+        const object = canvas?.getObjects().find((item) => String(readObjectProp(item, 'id') ?? '') === action.objectId)
+        const pixels = await loadPixels(action.pixelsKey)
+        if (canvas && object && isPaintLayer(object) && pixels) {
+          writePaintPixels(object, action.rect, pixels)
+          invalidateLayerThumbnail(action.objectId)
+          canvas.requestRenderAll()
           syncLayers()
         }
         setStatus(action.label)
@@ -262,6 +280,13 @@ export function useEditorHistory({
     [pushIncrementalOp],
   )
 
+  const commitPixelsHistory = useCallback(
+    (objectId: string, label: string, rect: PixelRect, before: string, after: string) => {
+      pushIncrementalOp({ type: 'pixels', label, objectId, rect, before, after }, label)
+    },
+    [pushIncrementalOp],
+  )
+
   const commitLayerOrderHistory = useCallback(
     (label: string, before: string, after: string) => {
       pushIncrementalOp({ type: 'layerOrder', label, before, after }, label)
@@ -350,6 +375,7 @@ export function useEditorHistory({
     commitObjectPatchHistory,
     commitObjectPatchesHistory,
     commitLayerOrderHistory,
+    commitPixelsHistory,
     restoreSnapshot,
     undoAsync,
     redo,

@@ -81,6 +81,27 @@ function inspectorName(page) {
 }
 
 const FEATURES = {
+  async brush(page, outDir) {
+    await page.getByRole('button', { name: 'Brush tool' }).click()
+    await page.getByRole('menuitemradio', { name: 'Brush' }).click()
+    await page.getByRole('toolbar', { name: 'Brush options' }).waitFor()
+    const surface = page.locator('.brush-overlay')
+    const box = await surface.boundingBox()
+    if (!box) fail('Brush overlay missing')
+    await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.7)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * 0.85, box.y + box.height * 0.72, { steps: 24 })
+    await page.mouse.up()
+    await page.getByRole('status').filter({ hasText: 'Painted on a new layer' }).waitFor()
+    await capture(page, outDir, 'painted')
+    await openTab(page, 'Layers')
+    if (!(await layerSelect(page, 'Paint').count())) fail('Stroke did not create a Paint layer')
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await page.getByRole('status').filter({ hasText: /Undo: Painted/ }).waitFor()
+    if (await layerSelect(page, 'Paint').count()) fail('Undo left the Paint layer behind')
+    await capture(page, outDir, 'undone')
+  },
+
   async 'home-recents'(page, outDir) {
     const home = page.getByRole('region', { name: 'Home' })
     await home.waitFor({ state: 'visible' })

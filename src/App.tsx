@@ -28,10 +28,15 @@ import {
   type PosterPresetId,
 } from './lib/editorModel'
 import { createSeededRandom, newSeed } from './lib/random'
-import { serializeHistorySnapshot } from './lib/historySnapshot'
+import { preparePaintSources, serializeHistorySnapshot } from './lib/historySnapshot'
 import { runWhenIdle } from './lib/idle'
 import type { PixelSelection, SelectionMode } from './lib/selection'
 import { SelectionOverlay } from './components/SelectionOverlay'
+import { BrushOverlay, type BrushInputSample } from './components/BrushOverlay'
+import { BrushBar } from './components/BrushBar'
+import { DEFAULT_BRUSH, type BrushSettings } from './lib/brush'
+import { StrokeSession, bumpPaintVersion, createPaintLayer, isPaintLayer, posterToPaintPixel } from './lib/paintLayer'
+import { storePixels } from './lib/pixelStore'
 import { AdjustmentLayer, readAdjustment } from './lib/adjustmentLayer'
 import { ADJUSTMENT_LABELS, defaultAdjustment, type Adjustment, type AdjustmentType } from './lib/adjustments'
 import { layerStyleScale, readLayerStyle, scaledLayerStyleDefaults, writeLayerStyle, type LayerStyle, type LayerStyleKind } from './lib/layerStyles'
@@ -393,6 +398,10 @@ function App() {
   const [maskBrushSize, setMaskBrushSize] = useState(36)
   const [maskHardness, setMaskHardness] = useState(35)
   const [selectMode, setSelectMode] = useState<SelectionMode>('rect')
+  const [brush, setBrush] = useState<BrushSettings>(DEFAULT_BRUSH)
+  const brushRef = useRef(brush)
+  brushRef.current = brush
+  const strokeRef = useRef<{ session: StrokeSession | null; createdLayer: boolean; maskFallback: boolean } | null>(null)
   const [pixelSelection, setPixelSelection] = useState<PixelSelection | null>(null)
   const pixelSelectionRef = useRef<PixelSelection | null>(null)
   pixelSelectionRef.current = pixelSelection
@@ -515,7 +524,7 @@ function App() {
     }
   }, [])
 
-  const { commitHistory, commitObjectPatchesHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId, historyLogRef } = useEditorHistory({
+  const { commitHistory, commitObjectPatchesHistory, commitPixelsHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId, historyLogRef } = useEditorHistory({
     canvasRef,
     setStatus,
     syncSelected: () => syncSelected(),
@@ -925,6 +934,18 @@ function App() {
       setPenMode(false)
       setEditorTool('shape')
     },
+    brushTool: () => {
+      setPenMode(false)
+      setEditorTool('brush')
+      setBrush((current) => ({ ...current, erase: false }))
+      setStatus('Brush — paint on a new layer or the selected paint layer · [ ] size · E eraser')
+    },
+    eraserTool: () => {
+      setPenMode(false)
+      setEditorTool('brush')
+      setBrush((current) => ({ ...current, erase: true }))
+      setStatus('Eraser — erases paint layers; on other layers it paints the mask')
+    },
     selectTool: () => {
       setPenMode(false)
       setEditorTool('select')
@@ -1145,7 +1166,15 @@ function App() {
         event.preventDefault()
         actions.instrumentsTool()
       } else if (event.key.toLowerCase() === 'b') {
-        actions.addShape()
+        event.preventDefault()
+        actions.brushTool()
+      } else if (event.key.toLowerCase() === 'e') {
+        event.preventDefault()
+        actions.eraserTool()
+      } else if ((event.key === '[' || event.key === ']') && editorToolRef.current === 'brush') {
+        event.preventDefault()
+        const factor = event.key === ']' ? 1.2 : 1 / 1.2
+        setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
       } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
         actions.togglePen()
       } else if (event.key.toLowerCase() === 'g') {
@@ -1534,6 +1563,7 @@ function App() {
       if (!canvas || screenRef.current !== 'editor') return
       const { poster: currentPoster, projectName: currentName } = liveRef.current
       void (async () => {
+        await preparePaintSources(canvas.getObjects() as never)
         const snapshot = await persistOpenPosterSnapshot({
           name: currentName.trim() || 'Untitled poster',
           savedAt: new Date().toISOString(),
@@ -2056,6 +2086,96 @@ function App() {
       return
     }
     setStatus('Paint mask — drag to conceal, Alt-drag to reveal · [ ] brush size')
+  }
+
+  function brushMaxSize() {
+    return Math.round(Math.max(200, Math.min(liveRef.current.poster.width, liveRef.current.poster.height) / 3))
+  }
+
+  /** The layer the next stroke lands on: the selected paint layer, or null for "new layer". */
+  function brushTarget(): FabricObject | null {
+    const active = activeObject()
+    if (!active || active.type === 'activeselection') return null
+    return active
+  }
+
+  function handleStrokeStart(sample: BrushInputSample) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const settings = brushRef.current
+    const target = brushTarget()
+    // Eraser on a non-paint layer paints its mask (non-destructive), like a layer mask in Photoshop.
+    if (settings.erase && target && !isPaintLayer(target)) {
+      strokeRef.current = { session: null, createdLayer: false, maskFallback: true }
+      handleMaskPaint('down', sample, false)
+      return
+    }
+    if (settings.erase && !target) {
+      setStatus('Pick a layer to erase')
+      strokeRef.current = null
+      return
+    }
+    let layer = target && isPaintLayer(target) && !target.group ? target : null
+    let createdLayer = false
+    if (!layer) {
+      layer = createPaintLayer(poster.width, poster.height)
+      tagObject(layer, 'image', 'Paint')
+      const anchor = target ? topLevelLayer(target) : null
+      const index = anchor ? canvas.getObjects().indexOf(anchor) : -1
+      if (index >= 0) canvas.insertAt(index + 1, layer)
+      else canvas.add(layer)
+      canvas.setActiveObject(layer)
+      createdLayer = true
+    }
+    const session = new StrokeSession(layer, settings)
+    strokeRef.current = { session, createdLayer, maskFallback: false }
+    const point = posterToPaintPixel(layer, sample.x, sample.y)
+    session.addSamples([{ ...point, pressure: sample.pressure }])
+    canvas.requestRenderAll()
+  }
+
+  function handleStrokeMove(samples: BrushInputSample[]) {
+    const stroke = strokeRef.current
+    const canvas = canvasRef.current
+    if (!stroke || !canvas) return
+    if (stroke.maskFallback) {
+      const last = samples[samples.length - 1]
+      if (last) handleMaskPaint('move', last, false)
+      return
+    }
+    const session = stroke.session
+    if (!session) return
+    const mapped = samples.map((sample) => ({ ...posterToPaintPixel(session.layer, sample.x, sample.y), pressure: sample.pressure }))
+    if (session.addSamples(mapped)) canvas.requestRenderAll()
+  }
+
+  function handleStrokeEnd() {
+    const stroke = strokeRef.current
+    strokeRef.current = null
+    const canvas = canvasRef.current
+    if (!stroke || !canvas) return
+    if (stroke.maskFallback) {
+      handleMaskPaint('up', { x: 0, y: 0 }, false)
+      return
+    }
+    const session = stroke.session
+    if (!session) return
+    const result = session.end()
+    const layer = session.layer
+    const objectId = String(readObjectProp(layer, 'id') ?? '')
+    bumpPaintVersion(layer)
+    invalidateLayerThumbnail(objectId)
+    canvas.requestRenderAll()
+    const label = brushRef.current.erase ? 'Erased paint' : 'Brush stroke'
+    if (stroke.createdLayer) {
+      commitHistory('Painted on a new layer')
+    } else if (result) {
+      commitPixelsHistory(objectId, label, result.rect, storePixels(result.before), storePixels(result.after))
+      scheduleAutosave()
+    }
+    scheduleSyncLayers()
+    syncSelected()
+    setStatus(stroke.createdLayer ? 'Painted on a new layer' : label)
   }
 
   /** Map a poster-space selection into a mask region on `object`. */
@@ -3246,6 +3366,7 @@ function App() {
     if (!savedCleanRef.current && historyLogRef.current.cursor > 0) {
       const { poster: currentPoster, projectName: currentName } = liveRef.current
       try {
+        if (canvasRef.current) await preparePaintSources(canvasRef.current.getObjects() as never)
         const snapshot = await persistOpenPosterSnapshot({
           name: currentName.trim() || 'Untitled poster',
           savedAt: new Date().toISOString(),
@@ -4389,6 +4510,7 @@ function App() {
     try {
       const now = new Date().toISOString()
       const thumbnail = await captureOpenPosterThumbnail()
+      await preparePaintSources(canvas.getObjects() as never)
       await persistProject({
         id,
         name,
@@ -5156,6 +5278,8 @@ function App() {
           onWhiteScrapes={() => addWhiteScrapes()}
           selectMode={selectMode}
           onSelectModeChange={setSelectMode}
+          brushErase={brush.erase}
+          onBrushModeChange={(erase) => setBrush((current) => ({ ...current, erase }))}
         />
         {editorTool === 'instruments' ? (
           <InstrumentsPalette
@@ -5265,8 +5389,33 @@ function App() {
               onRemoveLayerTreatment={removeLayerTreatment}
             />
           }
+          toolBar={
+            editorTool === 'brush' ? (
+              <BrushBar
+                brush={brush}
+                maxSize={brushMaxSize()}
+                targetName={
+                  brush.erase
+                    ? (selected?.name ?? null)
+                    : selected && selectedLayerIds.length <= 1 && selected.name && isPaintLayer(activeObject())
+                      ? selected.name
+                      : null
+                }
+                onChange={(patch) => setBrush((current) => ({ ...current, ...patch }))}
+              />
+            ) : null
+          }
           hud={
             <>
+            <BrushOverlay
+              active={editorTool === 'brush' && !isPanMode}
+              displayScale={displayScale}
+              size={brush.size}
+              erase={brush.erase}
+              onStrokeStart={handleStrokeStart}
+              onStrokeMove={handleStrokeMove}
+              onStrokeEnd={handleStrokeEnd}
+            />
             <SelectionOverlay
               posterWidth={poster.width}
               posterHeight={poster.height}
@@ -5281,7 +5430,7 @@ function App() {
               onLayerViaCopy={() => void liftSelectionToLayer(false)}
               onLayerViaCut={() => void liftSelectionToLayer(true)}
             />
-            {selected && editorTool !== 'select' ? (
+            {selected && editorTool !== 'select' && editorTool !== 'brush' ? (
               <LiveSelectionHud
                 canvasRef={canvasRef}
                 selected={selected}

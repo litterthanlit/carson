@@ -78,6 +78,7 @@ Stable handles:
 - `Select tool` (L) with menuitemradios `Rectangle marquee` / `Ellipse marquee` / `Lasso`; after a drag, toolbar `Selection actions` with `Mask out`, `Keep only`, `Layer via copy`, `Cut`, `Invert`, spinbutton `Feather`, `Deselect`
 - Inspect card `Layer style` with checkboxes `Drop shadow`, `Outer glow`, `Outline`
 - Layers tab combobox `Add adjustment layer` (Levels, Hue/Saturation, Brightness/Contrast, Gradient map, Threshold, Posterize, Invert); adjustment layers are not canvas-clickable — select them in Layers
+- `Brush tool` (B; E = eraser) with menuitemradios `Brush` / `Eraser`; toolbar `Brush options` with sliders `Size`, `Hardness`, `Opacity`, `Flow`, `Smoothing`, radios `Brush`/`Eraser`, pressure toggles `Size`/`Opacity`. First stroke creates layer `Paint`; the eraser masks non-paint layers
 - Dev builds expose `window.__carsonCanvas` (the Fabric canvas) for assertions
 
 `window.prompt` during Save selection is accepted as `Mark` by the driver.

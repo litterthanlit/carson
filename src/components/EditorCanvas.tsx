@@ -23,6 +23,8 @@ type EditorCanvasProps = {
   scrollRef: RefObject<HTMLDivElement | null>
   hud?: ReactNode
   stackBar?: ReactNode
+  /** Floating options for the active tool (e.g. the brush bar). */
+  toolBar?: ReactNode
   coach?: ReactNode
   onPresetChange: (presetId: PosterPresetId) => void
   onCustomSizeChange: (size: { width: number; height: number }) => void
@@ -67,6 +69,7 @@ export const EditorCanvas = memo(function EditorCanvas({
   scrollRef,
   hud,
   stackBar,
+  toolBar,
   coach,
   onPresetChange,
   onCustomSizeChange,
@@ -211,7 +214,7 @@ export const EditorCanvas = memo(function EditorCanvas({
         ) : null}
       </div>
       <div className="canvas-viewport">
-      {stackBar ? <div className="canvas-stack-float">{stackBar}</div> : null}
+      {toolBar ? <div className="canvas-tool-float">{toolBar}</div> : stackBar ? <div className="canvas-stack-float">{stackBar}</div> : null}
       <ViewportRulers
         scrollRef={scrollRef}
         displayScale={displayScale}

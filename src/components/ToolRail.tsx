@@ -1,6 +1,8 @@
 import { memo, useEffect, useRef, useState, type RefObject } from 'react'
 import {
   Brush,
+  Eraser as EraserIcon,
+  Paintbrush,
   Circle,
   CircleDashed,
   Lasso,
@@ -20,7 +22,7 @@ import {
 import type { EditorTool, PenKind } from '../types/editor'
 import type { SelectionMode } from '../lib/selection'
 
-type Flyout = 'shape' | 'select' | 'mask' | null
+type Flyout = 'shape' | 'select' | 'brush' | 'mask' | null
 
 type ToolRailProps = {
   tool: EditorTool
@@ -40,6 +42,8 @@ type ToolRailProps = {
   onWhiteScrapes: () => void
   selectMode?: SelectionMode
   onSelectModeChange?: (mode: SelectionMode) => void
+  brushErase?: boolean
+  onBrushModeChange?: (erase: boolean) => void
 }
 
 export const ToolRail = memo(function ToolRail({
@@ -60,6 +64,8 @@ export const ToolRail = memo(function ToolRail({
   onWhiteScrapes,
   selectMode = 'rect',
   onSelectModeChange,
+  brushErase = false,
+  onBrushModeChange,
 }: ToolRailProps) {
   const SelectIcon = selectMode === 'ellipse' ? CircleDashed : selectMode === 'lasso' ? Lasso : SquareDashed
   const [flyout, setFlyout] = useState<Flyout>(null)
@@ -119,7 +125,7 @@ export const ToolRail = memo(function ToolRail({
         </button>
         {flyout === 'shape' ? (
           <div className="tool-flyout" role="menu" aria-label="Shape tools">
-            <button type="button" role="menuitem" title="Add a solid block (B)" onClick={() => { onAddShape(); setFlyout(null) }}>
+            <button type="button" role="menuitem" title="Add a solid block" onClick={() => { onAddShape(); setFlyout(null) }}>
               <Square size={14} /> Block
             </button>
             <button type="button" role="menuitem" title="Add an ellipse" onClick={() => { onAddEllipse(); setFlyout(null) }}>
@@ -214,6 +220,34 @@ export const ToolRail = memo(function ToolRail({
                   <Icon size={14} /> {label}
                 </button>
               ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {onBrushModeChange ? (
+        <div className="tool-rail-flyout-wrap">
+          <button
+            type="button"
+            className={tool === 'brush' ? 'active' : undefined}
+            title="Brush (B) · Eraser (E) — pressure-sensitive paint on its own layer"
+            aria-label="Brush tool"
+            aria-pressed={tool === 'brush'}
+            aria-expanded={flyout === 'brush'}
+            onClick={() => {
+              onToolChange('brush')
+              setFlyout((current) => (current === 'brush' ? null : 'brush'))
+            }}
+          >
+            {brushErase ? <EraserIcon size={16} /> : <Paintbrush size={16} />}
+          </button>
+          {flyout === 'brush' ? (
+            <div className="tool-flyout" role="menu" aria-label="Brush tools">
+              <button type="button" role="menuitemradio" aria-checked={!brushErase} onClick={() => { onBrushModeChange(false); selectTool('brush') }}>
+                <Paintbrush size={14} /> Brush
+              </button>
+              <button type="button" role="menuitemradio" aria-checked={brushErase} onClick={() => { onBrushModeChange(true); selectTool('brush') }}>
+                <EraserIcon size={14} /> Eraser
+              </button>
             </div>
           ) : null}
         </div>

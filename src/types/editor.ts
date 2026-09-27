@@ -1,6 +1,6 @@
 import type { LayerStyle } from '../lib/layerStyles'
 import type { Adjustment } from '../lib/adjustments'
-export type EditorTool = 'move' | 'text' | 'shape' | 'image' | 'select' | 'mask' | 'instruments'
+export type EditorTool = 'move' | 'text' | 'shape' | 'image' | 'select' | 'brush' | 'mask' | 'instruments'
 export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'star' | 'pen'
 export type MaskKind = 'clip' | 'brush' | 'scrape'
 export type PenKind = 'bezier' | 'freehand'

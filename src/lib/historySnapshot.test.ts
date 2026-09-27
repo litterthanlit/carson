@@ -52,3 +52,12 @@ describe('history snapshot interning', () => {
     expect(input.objects[0].src).toBe(bigImage)
   })
 })
+
+describe('paint layer references in snapshots', () => {
+  it('turns paint refs into a placeholder plus paintRef on parse', () => {
+    const snapshot = JSON.stringify({ objects: [{ type: 'Image', src: 'carson-paint:image-9@3', paintLayer: true }] })
+    const parsed = parseHistorySnapshot(snapshot) as { objects: Array<{ src: string; paintRef?: string }> }
+    expect(parsed.objects[0].src.startsWith('data:image/png')).toBe(true)
+    expect(parsed.objects[0].paintRef).toBe('carson-paint:image-9@3')
+  })
+})
