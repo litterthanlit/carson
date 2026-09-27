@@ -5641,6 +5641,8 @@ function App() {
           canGroupLayers={canGroupLayers}
           canUngroupLayers={canUngroupLayers}
           onGroupLayers={() => void groupSelection()}
+          onDuplicateLayer={() => void duplicateSelected()}
+          onDeleteLayer={deleteSelected}
           onUngroupLayers={() => void ungroupSelection()}
           onDetachInstance={detachSelectedInstance}
           onResetInstance={() => void resetSelectedInstance()}

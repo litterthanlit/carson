@@ -415,7 +415,6 @@ textarea {
 .brand p,
 .stage-toolbar,
 .empty,
-.layer-row small,
 .saved-list small {
   color: var(--text-muted);
 }
@@ -787,95 +786,71 @@ input[type='color'] {
   gap: 8px;
 }
 
+/* Slider — label + value on one line, a hairline track below (Photoshop/Figma hybrid). */
 .dial {
   --dial-p: 0;
-  position: relative;
+  --dial-from: 0;
+  --dial-to: 0;
+  --dial-thumb-size: 12px;
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+}
+
+.dial-head {
   display: flex;
   align-items: center;
-  min-height: 32px;
-  margin-top: 8px;
-  padding: 0 10px 0 12px;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  border-radius: 999px;
-  background: #242424;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
-}
-
-.dial-ticks {
-  position: absolute;
-  z-index: 1;
-  inset: 10px 14px;
-  background: repeating-linear-gradient(
-    to right,
-    rgb(255 255 255 / 0.14) 0 1px,
-    transparent 1px 11px
-  );
-  pointer-events: none;
-}
-
-.dial-fill {
-  position: absolute;
-  z-index: 0;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc(6px + (100% - 18px) * var(--dial-p));
-  border-radius: 999px;
-  background: #454545;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
-  pointer-events: none;
-}
-
-.dial-thumb {
-  position: absolute;
-  z-index: 2;
-  top: 50%;
-  left: calc(9px + (100% - 18px) * var(--dial-p));
-  width: 2px;
-  height: 16px;
-  border-radius: 999px;
-  background: #fff;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.18);
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
 }
 
 .dial-label {
-  position: relative;
-  z-index: 4;
   flex: 1;
   min-width: 0;
-  margin-right: 8px;
   overflow: hidden;
-  font: 500 11px/1 var(--font);
-  color: #fff;
+  font: 500 11px/1.2 var(--font);
+  color: var(--dial-label);
   text-overflow: ellipsis;
   white-space: nowrap;
-  pointer-events: none;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+  transition: color 120ms ease;
 }
 
-.dial-value {
-  font: 400 11px/1 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--dial-value);
+.dial-label:hover,
+.dial.scrubbing .dial-label {
+  color: var(--text);
 }
 
 .dial-value-input {
-  position: relative;
-  z-index: 5;
-  width: 5.5ch;
+  width: 56px;
   flex: 0 0 auto;
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
   font: 500 11px/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
-  color: #fff;
+  color: var(--dial-value);
   text-align: right;
+  box-shadow: none;
   -moz-appearance: textfield;
   appearance: textfield;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.dial-value-input:hover {
+  border-color: var(--border-strong);
+}
+
+.dial-value-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #1e1e1e;
+  color: var(--text);
 }
 
 .dial-value-input::-webkit-outer-spin-button,
@@ -884,23 +859,93 @@ input[type='color'] {
   margin: 0;
 }
 
-.dial-value-input:focus {
-  outline: none;
-  color: var(--accent);
+.dial-track {
+  position: relative;
+  height: 14px;
+  /* Keep the thumb's centre on the track ends at min / max. */
+  margin: 0 calc(var(--dial-thumb-size) / 2);
+}
+
+.dial-rail,
+.dial-fill {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  border-radius: 1px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.dial-rail {
+  left: 0;
+  right: 0;
+  background: var(--dial-track);
+}
+
+.dial-fill {
+  left: calc(var(--dial-from) * 100%);
+  width: calc((var(--dial-to) - var(--dial-from)) * 100%);
+  background: var(--text-muted);
+  transition: background-color 120ms ease;
+}
+
+.dial-origin {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--dial-from) * 100%);
+  width: 1px;
+  height: 8px;
+  background: var(--text-faint);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+
+.dial-thumb {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--dial-p) * 100%);
+  width: var(--dial-thumb-size);
+  height: var(--dial-thumb-size);
+  border-radius: 50%;
+  background: var(--dial-thumb);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.dial:hover .dial-fill,
+.dial:focus-within .dial-fill,
+.dial.scrubbing .dial-fill {
+  background: var(--dial-fill);
+}
+
+.dial:hover .dial-thumb,
+.dial.scrubbing .dial-thumb {
+  background: #fff;
+}
+
+.dial-track:active .dial-thumb,
+.dial.scrubbing .dial-thumb {
+  transform: translate(-50%, -50%) scale(1.15);
 }
 
 .dial-input {
   -webkit-appearance: none;
   appearance: none;
   position: absolute;
-  inset: 0;
-  z-index: 3;
-  width: 100%;
+  top: 0;
+  bottom: 0;
+  /* Widen the hit area back over the thumb overhang so the ends stay grabbable. */
+  left: calc(var(--dial-thumb-size) / -2);
+  width: calc(100% + var(--dial-thumb-size));
   height: 100%;
   margin: 0;
   padding: 0;
   background: transparent;
   border: 0;
+  box-shadow: none;
   cursor: pointer;
 }
 
@@ -908,13 +953,8 @@ input[type='color'] {
   outline: none;
 }
 
-.dial:focus-within {
-  border-color: rgb(255 255 255 / 0.28);
-}
-
-.dial:focus-within .dial-value,
-.dial:focus-within .dial-value-input {
-  color: var(--accent);
+.dial-track:has(.dial-input:focus-visible) .dial-thumb {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
 }
 
 .dial-input::-webkit-slider-runnable-track {
@@ -925,8 +965,8 @@ input[type='color'] {
 
 .dial-input::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 20px;
-  height: 28px;
+  width: var(--dial-thumb-size);
+  height: 14px;
   margin: 0;
   background: transparent;
   border: 0;
@@ -940,18 +980,26 @@ input[type='color'] {
 }
 
 .dial-input::-moz-range-thumb {
-  width: 20px;
-  height: 28px;
+  width: var(--dial-thumb-size);
+  height: 14px;
   background: transparent;
   border: 0;
   box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dial-label,
+  .dial-value-input,
+  .dial-fill,
+  .dial-thumb {
+    transition: none;
+  }
 }
 
 .layer-section {
   padding-bottom: 10px;
 }
 
-.layer-list,
 .saved-list,
 .asset-list {
   display: grid;
@@ -959,7 +1007,6 @@ input[type='color'] {
   margin-top: 8px;
 }
 
-.layer-row,
 .saved-list button {
   position: relative;
   width: 100%;
@@ -974,56 +1021,16 @@ input[type='color'] {
   padding-left: 16px;
 }
 
-.layer-thumb {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  border-radius: 2px;
-  object-fit: contain;
-  background: rgb(0 0 0 / 0.28);
-  border: 1px solid var(--border);
-}
 
-.layer-thumb-empty {
-  display: inline-block;
-}
 
-.layer-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  padding-right: 4px;
-}
 
-.layer-select {
-  flex: 1;
-  min-width: 0;
-  min-height: 24px;
-  justify-content: space-between;
-  text-align: left;
-  font-weight: 400;
-  font-size: 12px;
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  padding-left: 0;
-}
 
-.layer-select:hover:not(:disabled) {
-  background: transparent;
-  border-color: transparent;
-}
 
-.layer-row:hover:not(:disabled),
 .saved-list button:hover:not(:disabled) {
   background: var(--bg-muted);
   border-color: transparent;
 }
 
-.layer-row span,
-.layer-select span,
 .saved-list span,
 .asset-list li {
   overflow: hidden;
@@ -1031,33 +1038,9 @@ input[type='color'] {
   white-space: nowrap;
 }
 
-.layer-controls,
-.layer-row .scope-badge {
-  white-space: nowrap;
-  overflow: visible;
-}
 
-.layer-row.active {
-  background: #3d3d3d;
-  border-color: transparent;
-  color: var(--text);
-}
 
-.layer-row.active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 2px;
-  height: 12px;
-  border-radius: 0;
-  background: var(--accent);
-  transform: translateY(-50%);
-}
 
-.layer-row.active small {
-  color: var(--text-muted);
-}
 
 .canvas-stage {
   position: relative;
@@ -1293,29 +1276,9 @@ input[type='color'] {
   background: rgb(196 98 16 / 0.35);
 }
 
-.layer-controls {
-  display: inline-flex;
-  gap: 1px;
-  flex-shrink: 0;
-}
 
-.layer-toggle {
-  width: 24px;
-  min-height: 24px;
-  opacity: 0.45;
-}
 
-.layer-row:hover .layer-toggle,
-.layer-toggle:focus-visible {
-  opacity: 1;
-}
 
-.layer-rename {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 8px;
-  font-size: 12px;
-}
 
 .color-row {
   display: flex;
@@ -2051,13 +2014,7 @@ input[type='color'] {
   border-radius: 6px;
 }
 
-.layer-row.nested {
-  opacity: 0.92;
-}
 
-.layer-row.nested .layer-select small {
-  color: var(--text-muted);
-}
 
 .instance-card {
   display: grid;
@@ -3437,13 +3394,7 @@ label:has(> input[type='radio']) {
   outline: 1px solid rgb(255 255 255 / 0.08);
 }
 
-.add-adjustment {
-  margin: 0 0 6px;
-}
 
-.add-adjustment select {
-  font-size: 12px;
-}
 
 /* ── Brush ──────────────────────────────────────────────────────────────── */
 .brush-overlay {
@@ -3553,4 +3504,359 @@ label:has(> input[type='radio']) {
   padding-left: 6px;
   border-left: 1px solid var(--border-strong);
   color: var(--text-faint);
+}
+
+/* ── Layers panel ────────────────────────────────────────────────────────
+   Photoshop anatomy, quieter chrome: blend + opacity strip on top, a dense
+   single-line list (eye · thumb · name · lock), and an icon footer pinned
+   to the bottom of the panel. */
+.layers-section {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 40px - 34px);
+  padding: 0;
+  border-bottom: 0;
+}
+
+.layers-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+.layers-header h2 {
+  margin: 0;
+}
+
+.layers-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  font: 500 10px/1.4 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.layers-props {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 124px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.layers-props.is-disabled {
+  opacity: 0.55;
+}
+
+.layers-blend .blend-picker,
+.layers-blend .font-picker-trigger,
+.layers-blend-placeholder {
+  width: 100%;
+}
+
+.layers-blend .font-picker-trigger,
+.layers-blend-placeholder {
+  height: 26px;
+  min-height: 26px;
+  justify-content: flex-start;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.layers-props .dial-field {
+  margin-top: 0;
+}
+
+.dial-field .dial-head {
+  min-height: 26px;
+}
+
+.dial-field .dial-value-input {
+  width: 58px;
+  height: 26px;
+  font-size: 12px;
+}
+
+.dial.disabled .dial-label {
+  cursor: default;
+}
+
+.layer-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  overflow-y: auto;
+}
+
+.layer-row {
+  --row-h: 40px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--row-h);
+  padding: 0 8px 0 0;
+  border-bottom: 1px solid rgb(0 0 0 / 0.18);
+  font-size: 12px;
+  color: var(--text);
+  cursor: default;
+  user-select: none;
+  transition: background-color 80ms ease;
+}
+
+.layer-row:hover {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.layer-row.active {
+  background: var(--accent-soft);
+}
+
+.layer-row.active:hover {
+  background: rgb(20 115 230 / 0.3);
+}
+
+.layer-row.active::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--accent);
+}
+
+.layer-row.dragging {
+  opacity: 0.4;
+}
+
+.layer-row.is-hidden .layer-thumb-wrap,
+.layer-row.is-hidden .layer-name {
+  opacity: 0.45;
+}
+
+.layer-vis,
+.layer-lock {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.layer-vis:hover:not(:disabled),
+.layer-lock:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.08);
+  border: 0;
+  color: var(--text);
+}
+
+.layer-vis {
+  align-self: stretch;
+  width: 32px;
+  border-right: 1px solid rgb(0 0 0 / 0.22);
+  border-radius: 0;
+}
+
+.layer-vis[aria-pressed='false'] {
+  color: var(--text-faint);
+  opacity: 0.55;
+}
+
+.layer-indent {
+  flex: 0 0 auto;
+  margin-right: -8px;
+}
+
+.layer-row.nested .layer-indent {
+  /* A faint guide ties children to their group. */
+  align-self: stretch;
+  background: linear-gradient(to right, transparent calc(100% - 7px), rgb(255 255 255 / 0.1) calc(100% - 7px) calc(100% - 6px), transparent calc(100% - 6px));
+}
+
+.layer-thumb-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+}
+
+.layer-thumb {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  border-radius: 2px;
+  /* Transparency checkerboard, as in every pixel editor. */
+  background:
+    repeating-conic-gradient(#4a4a4a 0% 25%, #3a3a3a 0% 50%) 50% / 8px 8px;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
+  color: var(--text-muted);
+}
+
+.layer-thumb-empty {
+  background: var(--bg-subtle);
+}
+
+.layer-row.active .layer-thumb {
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45), 0 0 0 2px rgb(255 255 255 / 0.55);
+}
+
+.layer-kind {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: #1e1e1e;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
+  color: var(--text-muted);
+}
+
+.layer-select {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  justify-content: flex-start;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  font: 400 12px/1.2 var(--font);
+  text-align: left;
+  color: inherit;
+  cursor: default;
+}
+
+.layer-select:hover:not(:disabled) {
+  border: 0;
+  background: transparent;
+}
+
+.layer-select:focus-visible {
+  outline-offset: -1px;
+}
+
+.layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-row.active .layer-name {
+  font-weight: 500;
+}
+
+.layer-rename {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border-color: var(--accent);
+  background: #1e1e1e;
+  font: 400 12px/1 var(--font);
+}
+
+.layer-lock {
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+}
+
+.layer-row:hover .layer-lock,
+.layer-lock:focus-visible,
+.layer-lock[aria-pressed='true'] {
+  opacity: 1;
+}
+
+.layer-lock[aria-pressed='true'] {
+  color: var(--text);
+}
+
+.layers-empty {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.layers-empty p {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.layers-empty span {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.layers-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.layers-footer-spacer {
+  flex: 1;
+}
+
+.layers-footer-button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.layers-footer-button:hover:not(:disabled),
+.layers-adjustment:hover {
+  border: 0;
+  background: rgb(255 255 255 / 0.08);
+  color: var(--text);
+}
+
+/* The native select sits invisibly over the icon so it keeps keyboard + screen-reader behaviour. */
+.layers-adjustment select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.layers-adjustment:has(select:focus-visible) {
+  outline: 1px solid var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-row {
+    transition: none;
+  }
 }

@@ -4,6 +4,8 @@ import {
   Blend,
   BookmarkPlus,
   BringToFront,
+  Contrast,
+  Copy,
   ChevronDown,
   ChevronUp,
   Dices,
@@ -184,6 +186,8 @@ export type InspectorPanelProps = {
   canGroupLayers: boolean
   canUngroupLayers: boolean
   onGroupLayers: () => void
+  onDuplicateLayer?: () => void
+  onDeleteLayer?: () => void
   onUngroupLayers: () => void
   onDetachInstance: () => void
   onResetInstance: () => void
@@ -365,6 +369,8 @@ export function InspectorPanel({
   canUngroupLayers,
   onGroupLayers,
   onUngroupLayers,
+  onDuplicateLayer,
+  onDeleteLayer,
   onDetachInstance,
   onResetInstance,
   onUpdateComponent,
@@ -868,37 +874,38 @@ export function InspectorPanel({
       ) : null}
 
       {inspectorTab === 'layers' ? (
-        <div className="panel-section">
-          <h2>Layers</h2>
-          {onAddAdjustment ? (
-            <label className="add-adjustment">
-              <span className="visually-hidden">Add adjustment layer</span>
-              <select
-                aria-label="Add adjustment layer"
-                value=""
-                onChange={(event) => {
-                  const type = event.target.value as AdjustmentType
-                  if (type) onAddAdjustment(type)
-                }}
-              >
-                <option value="">＋ Adjustment layer…</option>
-                {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
-                  <option key={type} value={type}>
-                    {ADJUSTMENT_LABELS[type]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <div className="button-row">
-            <button type="button" title="Group selected layers (Cmd+G)" disabled={!canGroupLayers} onClick={onGroupLayers}>
-              <Group size={14} />
-              Group
-            </button>
-            <button type="button" title="Ungroup (Cmd+Shift+G)" disabled={!canUngroupLayers} onClick={onUngroupLayers}>
-              <Ungroup size={14} />
-              Ungroup
-            </button>
+        <div className="panel-section layers-section">
+          <div className="layers-header">
+            <h2>Layers</h2>
+            <span className="layers-count" aria-label={`${layers.length} layers`}>
+              {layers.length}
+            </span>
+          </div>
+          <div className={selected ? 'layers-props' : 'layers-props is-disabled'}>
+            <div className="layers-blend" title="Blend mode">
+              {selected ? (
+                <BlendModePicker
+                  value={selected.blendMode ?? 'source-over'}
+                  onPreview={onPreviewBlendMode}
+                  onChange={onApplyBlendMode}
+                />
+              ) : (
+                <button type="button" className="layers-blend-placeholder" disabled>
+                  Normal
+                </button>
+              )}
+            </div>
+            <Slider
+              variant="field"
+              label="Opacity"
+              disabled={!selected}
+              value={selected ? Math.round(selected.opacity * 100) : 100}
+              min={5}
+              max={100}
+              format={formatPercent}
+              onChange={(value) => onUpdateActive({ opacity: value / 100 })}
+              onCommit={() => onFinalizeActive('Changed opacity')}
+            />
           </div>
           <LayersPanel
             layers={layers}
@@ -915,6 +922,75 @@ export function InspectorPanel({
             onDragEnd={onDragLayerEnd}
             onZoomToLayer={onZoomToLayer}
           />
+          <div className="layers-footer" role="toolbar" aria-label="Layer actions">
+            {onAddAdjustment ? (
+              <label className="layers-footer-button layers-adjustment" title="New adjustment layer">
+                <Contrast size={15} aria-hidden="true" />
+                <select
+                  aria-label="Add adjustment layer"
+                  value=""
+                  onChange={(event) => {
+                    const type = event.target.value as AdjustmentType
+                    if (type) onAddAdjustment(type)
+                  }}
+                >
+                  <option value="" disabled>
+                    Adjustment layer
+                  </option>
+                  {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
+                    <option key={type} value={type}>
+                      {ADJUSTMENT_LABELS[type]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <button
+              type="button"
+              className="layers-footer-button"
+              title="Group layers (⌘G)"
+              aria-label="Group layers"
+              disabled={!canGroupLayers}
+              onClick={onGroupLayers}
+            >
+              <Group size={15} />
+            </button>
+            <button
+              type="button"
+              className="layers-footer-button"
+              title="Ungroup (⇧⌘G)"
+              aria-label="Ungroup"
+              disabled={!canUngroupLayers}
+              onClick={onUngroupLayers}
+            >
+              <Ungroup size={15} />
+            </button>
+            <span className="layers-footer-spacer" />
+            {onDuplicateLayer ? (
+              <button
+                type="button"
+                className="layers-footer-button"
+                title="Duplicate layer (⌘D)"
+                aria-label="Duplicate layer"
+                disabled={!selected}
+                onClick={onDuplicateLayer}
+              >
+                <Copy size={15} />
+              </button>
+            ) : null}
+            {onDeleteLayer ? (
+              <button
+                type="button"
+                className="layers-footer-button"
+                title="Delete layer (⌫)"
+                aria-label="Delete layer"
+                disabled={!selected}
+                onClick={onDeleteLayer}
+              >
+                <Trash2 size={15} />
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
