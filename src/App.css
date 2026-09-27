@@ -7,7 +7,7 @@
 .glass-bar,
 .glass-panel {
   color: var(--text);
-  color-scheme: dark;
+  color-scheme: var(--color-scheme);
   background: var(--panel);
   border: 1px solid var(--border);
   box-shadow: none;
@@ -725,7 +725,7 @@ textarea:focus-visible {
 .tool-grid button.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--text);
   box-shadow: none;
 }
 
@@ -786,67 +786,175 @@ input[type='color'] {
   gap: 8px;
 }
 
-/* Slider — label + value on one line, a hairline track below (Photoshop/Figma hybrid). */
+/* ── Slider ──────────────────────────────────────────────────────────────
+   Rectangle slider (basement-style): one solid bar is the control. The fill
+   is a flat block; label + readout sit inside and flip colour over it via a
+   clipped duplicate text layer, so both states keep full contrast. */
 .dial {
   --dial-p: 0;
   --dial-from: 0;
   --dial-to: 0;
-  --dial-thumb-size: 12px;
-  display: grid;
-  gap: 2px;
-  margin-top: 10px;
+  --dial-h: 28px;
+  margin-top: 6px;
 }
 
-.dial-head {
+.dial-bar {
+  position: relative;
+  height: var(--dial-h);
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--slider-track);
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.dial.disabled .dial-bar {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.dial-ticks,
+.dial-fill,
+.dial-origin,
+.dial-text {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Quarter marks: quiet rhythm on the empty part of the bar. */
+.dial-ticks {
+  inset: 0;
+  background:
+    linear-gradient(var(--slider-tick), var(--slider-tick)) 25% 100% / 1px 6px no-repeat,
+    linear-gradient(var(--slider-tick), var(--slider-tick)) 50% 100% / 1px 9px no-repeat,
+    linear-gradient(var(--slider-tick), var(--slider-tick)) 75% 100% / 1px 6px no-repeat;
+}
+
+.dial-fill {
+  top: 0;
+  bottom: 0;
+  left: calc(var(--dial-from) * 100%);
+  width: calc((var(--dial-to) - var(--dial-from)) * 100%);
+  background: var(--slider-fill);
+  transition: background-color 120ms ease;
+}
+
+/* The live edge of the fill: a hairline that thickens while dragging. */
+.dial-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 0;
+  background: var(--accent);
+  transition: width 120ms ease;
+}
+
+.dial.scrubbing .dial-fill::after {
+  width: 2px;
+}
+
+.dial-bar:hover .dial-fill,
+.dial.scrubbing .dial-fill {
+  background: var(--slider-fill-hover);
+}
+
+.dial-origin {
+  top: 0;
+  bottom: 0;
+  left: calc(var(--dial-from) * 100%);
+  width: 1px;
+  background: var(--slider-text);
+  opacity: 0.35;
+}
+
+.dial-text {
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 22px;
+  padding: 0 9px;
+  font: 500 10.5px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--slider-text);
 }
 
-.dial-label {
-  flex: 1;
+.dial-text-inverse {
+  color: var(--slider-text-on-fill);
+  clip-path: inset(0 calc((1 - var(--dial-to)) * 100%) 0 calc(var(--dial-from) * 100%));
+}
+
+.dial-text .dial-label {
   min-width: 0;
   overflow: hidden;
-  font: 500 11px/1.2 var(--font);
-  color: var(--dial-label);
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: ew-resize;
-  user-select: none;
-  touch-action: none;
-  transition: color 120ms ease;
 }
 
-.dial-label:hover,
-.dial.scrubbing .dial-label {
-  color: var(--text);
-}
-
-.dial-value-input {
-  width: 56px;
+.dial-readout {
   flex: 0 0 auto;
-  height: 22px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.dial.editing .dial-readout {
+  visibility: hidden;
+}
+
+/* Native range stays for keyboard + assistive tech; pointer input is handled by the bar. */
+.dial-input {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.dial-bar:has(.dial-input:focus-visible) {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Readout doubles as an inline number field: invisible until clicked or Enter. */
+.dial-bar .dial-value-input {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  width: 64px;
+  height: auto;
   padding: 0 6px;
   border: 1px solid transparent;
   border-radius: var(--radius);
-  background: var(--bg-subtle);
-  font: 500 11px/1 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--dial-value);
-  text-align: right;
+  background: transparent;
   box-shadow: none;
+  font: 500 10.5px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: transparent;
+  caret-color: var(--text);
+  cursor: text;
   -moz-appearance: textfield;
   appearance: textfield;
-  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.dial-value-input:hover {
+.dial-bar .dial-value-input:hover {
   border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--slider-text) 35%, transparent);
 }
 
-.dial-value-input:focus {
+.dial-bar .dial-value-input:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--field-bg);
@@ -859,139 +967,56 @@ input[type='color'] {
   margin: 0;
 }
 
-.dial-track {
-  position: relative;
-  height: 14px;
-  /* Keep the thumb's centre on the track ends at min / max. */
-  margin: 0 calc(var(--dial-thumb-size) / 2);
+/* Field variant: scrubbable label + boxed number (Layers opacity). */
+.dial-field .dial-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.dial-rail,
-.dial-fill {
-  position: absolute;
-  top: 50%;
-  height: 2px;
-  border-radius: 1px;
-  transform: translateY(-50%);
-  pointer-events: none;
+.dial-field .dial-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: 500 10.5px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
 }
 
-.dial-rail {
-  left: 0;
-  right: 0;
-  background: var(--dial-track);
+.dial-field .dial-label:hover,
+.dial-field.scrubbing .dial-label {
+  color: var(--text);
 }
 
-.dial-fill {
-  left: calc(var(--dial-from) * 100%);
-  width: calc((var(--dial-to) - var(--dial-from)) * 100%);
-  background: var(--text-muted);
-  transition: background-color 120ms ease;
-}
-
-.dial-origin {
-  position: absolute;
-  top: 50%;
-  left: calc(var(--dial-from) * 100%);
-  width: 1px;
-  height: 8px;
-  background: var(--text-faint);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-
-.dial-thumb {
-  position: absolute;
-  top: 50%;
-  left: calc(var(--dial-p) * 100%);
-  width: var(--dial-thumb-size);
-  height: var(--dial-thumb-size);
-  border-radius: 50%;
-  background: var(--dial-thumb);
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.4);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  transition: transform 120ms ease, background-color 120ms ease;
-}
-
-.dial:hover .dial-fill,
-.dial:focus-within .dial-fill,
-.dial.scrubbing .dial-fill {
-  background: var(--dial-fill);
-}
-
-.dial:hover .dial-thumb,
-.dial.scrubbing .dial-thumb {
-  background: #fff;
-}
-
-.dial-track:active .dial-thumb,
-.dial.scrubbing .dial-thumb {
-  transform: translate(-50%, -50%) scale(1.15);
-}
-
-.dial-input {
-  -webkit-appearance: none;
-  appearance: none;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  /* Widen the hit area back over the thumb overhang so the ends stay grabbable. */
-  left: calc(var(--dial-thumb-size) / -2);
-  width: calc(100% + var(--dial-thumb-size));
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  border: 0;
+.dial-field .dial-value-input {
+  width: 58px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+  background: var(--field-bg);
   box-shadow: none;
-  cursor: pointer;
+  font: 500 11px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
 }
 
-.dial-input:focus-visible {
+.dial-field .dial-value-input:focus {
   outline: none;
-}
-
-.dial-track:has(.dial-input:focus-visible) .dial-thumb {
-  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
-}
-
-.dial-input::-webkit-slider-runnable-track {
-  height: 100%;
-  background: transparent;
-  border: 0;
-}
-
-.dial-input::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: var(--dial-thumb-size);
-  height: 14px;
-  margin: 0;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-}
-
-.dial-input::-moz-range-track {
-  height: 100%;
-  background: transparent;
-  border: 0;
-}
-
-.dial-input::-moz-range-thumb {
-  width: var(--dial-thumb-size);
-  height: 14px;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
+  border-color: var(--accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dial-label,
-  .dial-value-input,
   .dial-fill,
-  .dial-thumb {
+  .dial-fill::after {
     transition: none;
   }
 }
@@ -1703,7 +1728,7 @@ input[type='color'] {
 .inspector-tabs button.active {
   background: var(--panel);
   border-bottom-color: var(--accent);
-  color: #fff;
+  color: var(--text);
 }
 
 .treatment-stack {
@@ -2061,7 +2086,7 @@ input[type='color'] {
 .artboard-tabs button.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--text);
 }
 
 .legibility-readout {
@@ -2319,7 +2344,7 @@ input[type='color'] {
 .filter-gallery-categories button.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--text);
 }
 
 .filter-gallery-thumbs {
@@ -2431,7 +2456,7 @@ input[type='color'] {
 .texture-gallery-modal .filter-gallery-params .preset-row button.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--text);
 }
 
 .typography-face.nested {
@@ -2861,7 +2886,7 @@ label:has(> input[type='radio']) {
 .home-topbar {
   height: 48px;
   padding: 0 20px;
-  background: rgb(45 45 45 / 0.85);
+  background: var(--home-bar);
   backdrop-filter: blur(12px);
 }
 
@@ -2905,7 +2930,7 @@ label:has(> input[type='radio']) {
   margin: 18px 0 20px;
   font: 400 clamp(40px, 4.8vw, 68px) / 0.92 'Archivo Black', 'Arial Black', var(--font);
   letter-spacing: -0.03em;
-  color: #f4f1ea;
+  color: var(--home-display);
   text-wrap: balance;
 }
 
@@ -2957,8 +2982,8 @@ label:has(> input[type='radio']) {
   padding: 14px;
   text-align: left;
   color: var(--text);
-  background: rgb(50 50 50 / 0.72);
-  border: 1px solid rgb(255 255 255 / 0.06);
+  background: var(--home-card);
+  border: 1px solid var(--home-card-border);
   border-radius: 10px;
   box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 10px 30px rgb(0 0 0 / 0.18);
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
@@ -2967,7 +2992,7 @@ label:has(> input[type='radio']) {
 .home-start:hover:not(:disabled),
 .home-start:focus-visible {
   transform: translateY(-2px);
-  background: rgb(58 58 58 / 0.9);
+  background: var(--home-card-hover);
   border-color: rgb(20 115 230 / 0.7);
 }
 
@@ -3029,9 +3054,9 @@ label:has(> input[type='radio']) {
   display: block;
   height: 38px;
   max-width: 100%;
-  border: 1.5px solid rgb(244 241 234 / 0.7);
+  border: 1.5px solid var(--home-frame);
   border-radius: 2px;
-  background: rgb(244 241 234 / 0.06);
+  background: var(--home-frame-fill);
 }
 
 .home-start-image {
@@ -3040,8 +3065,8 @@ label:has(> input[type='radio']) {
   justify-content: flex-start;
   min-height: 72px;
   border-style: dashed;
-  border-color: rgb(255 255 255 / 0.16);
-  background: rgb(50 50 50 / 0.4);
+  border-color: var(--home-dashed);
+  background: var(--home-card-soft);
 }
 
 .home-start-image svg {
@@ -3063,7 +3088,7 @@ label:has(> input[type='radio']) {
   gap: 8px;
   padding-bottom: 12px;
   margin-bottom: 16px;
-  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  border-bottom: 1px solid var(--home-hairline);
 }
 
 .home-count {
@@ -3576,12 +3601,6 @@ label:has(> input[type='radio']) {
   min-height: 26px;
 }
 
-.dial-field .dial-value-input {
-  width: 58px;
-  height: 26px;
-  font-size: 12px;
-}
-
 .dial.disabled .dial-label {
   cursor: default;
 }
@@ -3997,6 +4016,69 @@ label:has(> input[type='radio']) {
 
 @media (prefers-reduced-motion: reduce) {
   .property-section-caret {
+    transition: none;
+  }
+}
+
+/* ── Switches ────────────────────────────────────────────────────────────
+   Every checkbox renders as a rectangle switch: a flat bar with a square
+   knob that slides across and inverts when on. Native input underneath,
+   so keyboard, forms and screen readers work unchanged. */
+input[type='checkbox'] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--switch-off);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+input[type='checkbox']::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--switch-knob-off);
+  transition: transform 160ms cubic-bezier(0.3, 0.7, 0.4, 1), background-color 140ms ease;
+}
+
+input[type='checkbox']:checked {
+  background: var(--switch-on);
+}
+
+input[type='checkbox']:checked::before {
+  transform: translateX(14px);
+  background: var(--switch-knob-on);
+}
+
+input[type='checkbox']:hover:not(:disabled)::before {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type='checkbox'],
+  input[type='checkbox']::before {
     transition: none;
   }
 }

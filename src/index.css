@@ -48,6 +48,37 @@
   /* Transparency checkerboard behind thumbnails. */
   --checker-light: #4a4a4a;
   --checker-dark: #3a3a3a;
+  /* Rectangle sliders: a solid fill block over a dark well; text flips colour over the fill. */
+  --slider-track: #1c1c1c;
+  --slider-fill: #b3b3b3;
+  --slider-fill-hover: #cfcfcf;
+  --slider-text: #d9d9d9;
+  --slider-text-on-fill: #0a0a0a;
+  --slider-tick: rgb(255 255 255 / 0.08);
+  /* Rectangle switches. */
+  --switch-off: #1c1c1c;
+  --switch-on: #b3b3b3;
+  --switch-knob-off: #6b6b6b;
+  --switch-knob-on: #0a0a0a;
+  /* Canvas-drawn rulers (ViewportRulers reads these). */
+  --ruler-bg: #2a2a2a;
+  --ruler-poster: #343434;
+  --ruler-tick: rgb(255 255 255 / 0.28);
+  --ruler-major: rgb(255 255 255 / 0.5);
+  --ruler-edge: #1f1f1f;
+  --scrim: rgb(0 0 0 / 0.5);
+  /* Home screen surfaces. */
+  --home-bar: rgb(45 45 45 / 0.85);
+  --home-card: rgb(50 50 50 / 0.72);
+  --home-card-hover: rgb(58 58 58 / 0.9);
+  --home-card-soft: rgb(50 50 50 / 0.4);
+  --home-card-border: rgb(255 255 255 / 0.06);
+  --home-dashed: rgb(255 255 255 / 0.16);
+  --home-hairline: rgb(255 255 255 / 0.06);
+  --home-display: #f4f1ea;
+  --home-frame: rgb(244 241 234 / 0.7);
+  --home-frame-fill: rgb(244 241 234 / 0.06);
+  --color-scheme: dark;
   --radius: 2px;
   --radius-lg: 3px;
   --radius-xl: 4px;
@@ -79,4 +110,86 @@ body,
 
 body {
   margin: 0;
+}
+
+/* ── Light theme ───────────────────────────────────────────────────────────
+   Basement-style light grey: a mid-grey pasteboard (#b3b3b3) framing the
+   poster, pale grey panels, near-black ink and solid black controls. */
+:root[data-theme='light'] {
+  --canvas-bg: #b3b3b3;
+  --canvas-dot: #b3b3b3;
+  --panel: #d9d9d9;
+  --panel-raised: #cfcfcf;
+  --glass-bg: #d9d9d9;
+  --glass-bg-strong: #cfcfcf;
+  --glass-border: #a6a6a6;
+  --glass-edge: #a6a6a6;
+  --bg: #d9d9d9;
+  --bg-subtle: #d0d0d0;
+  --bg-muted: #cacaca;
+  --bg-hover: #c2c2c2;
+  --border: #a9a9a9;
+  --border-strong: #9c9c9c;
+  --text: #0a0a0a;
+  --text-muted: #383838;
+  --text-faint: #575757;
+  --accent: #1466d6;
+  --accent-hover: #0f58bb;
+  --accent-soft: rgb(20 102 214 / 0.16);
+  --dial-track: #a6a6a6;
+  --dial-fill: #0a0a0a;
+  --dial-thumb: #0a0a0a;
+  --dial-label: #383838;
+  --dial-value: #0a0a0a;
+  --surface: #cfcfcf;
+  --surface-muted: #d0d0d0;
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 0.18);
+
+  --field-bg: #ebebeb;
+  --field-border: #a6a6a6;
+  --surface-sunken: #cbcbcb;
+  --chrome-strip: #cecece;
+  --chrome-bar: #d2d2d2;
+  --tool-active: #0a0a0a;
+  --divider: #a6a6a6;
+  --border-subtle: #bcbcbc;
+  --border-hover: #7d7d7d;
+  --accent-border: #0f58bb;
+  --accent-border-hover: #0b4a9e;
+  --accent-text: #0b3d7a;
+  --wash-faint: rgb(0 0 0 / 0.03);
+  --wash: rgb(0 0 0 / 0.05);
+  --wash-strong: rgb(0 0 0 / 0.08);
+  --hairline-dark: rgb(0 0 0 / 0.1);
+  --checker-light: #ededed;
+  --checker-dark: #d6d6d6;
+
+  --slider-track: #c4c4c4;
+  --slider-fill: #0a0a0a;
+  --slider-fill-hover: #2b2b2b;
+  --slider-text: #1a1a1a;
+  --slider-text-on-fill: #f2f2f2;
+  --slider-tick: rgb(0 0 0 / 0.1);
+  --switch-off: #bdbdbd;
+  --switch-on: #0a0a0a;
+  --switch-knob-off: #f2f2f2;
+  --switch-knob-on: #f2f2f2;
+
+  --ruler-bg: #cecece;
+  --ruler-poster: #c2c2c2;
+  --ruler-tick: rgb(0 0 0 / 0.28);
+  --ruler-major: rgb(0 0 0 / 0.55);
+  --ruler-edge: #a6a6a6;
+  --scrim: rgb(40 40 40 / 0.35);
+  --home-bar: rgb(217 217 217 / 0.88);
+  --home-card: #cfcfcf;
+  --home-card-hover: #d9d9d9;
+  --home-card-soft: rgb(255 255 255 / 0.22);
+  --home-card-border: rgb(0 0 0 / 0.08);
+  --home-dashed: rgb(0 0 0 / 0.28);
+  --home-hairline: rgb(0 0 0 / 0.12);
+  --home-display: #0a0a0a;
+  --home-frame: rgb(10 10 10 / 0.6);
+  --home-frame-fill: rgb(10 10 10 / 0.04);
+  --color-scheme: light;
 }
