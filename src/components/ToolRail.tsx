@@ -2,6 +2,9 @@ import { memo, useEffect, useRef, useState, type RefObject } from 'react'
 import {
   BoxSelect,
   Circle,
+  CircleDashed,
+  Lasso,
+  SquareDashed,
   Crop,
   Eraser,
   ImagePlus,
@@ -15,8 +18,9 @@ import {
   Wand2,
 } from 'lucide-react'
 import type { EditorTool, PenKind } from '../types/editor'
+import type { SelectionMode } from '../lib/selection'
 
-type Flyout = 'shape' | 'mask' | null
+type Flyout = 'shape' | 'select' | 'mask' | null
 
 type ToolRailProps = {
   tool: EditorTool
@@ -34,6 +38,8 @@ type ToolRailProps = {
   onClipToShape: () => void
   onBrushMask: () => void
   onWhiteScrapes: () => void
+  selectMode?: SelectionMode
+  onSelectModeChange?: (mode: SelectionMode) => void
 }
 
 export const ToolRail = memo(function ToolRail({
@@ -52,7 +58,10 @@ export const ToolRail = memo(function ToolRail({
   onClipToShape,
   onBrushMask,
   onWhiteScrapes,
+  selectMode = 'rect',
+  onSelectModeChange,
 }: ToolRailProps) {
+  const SelectIcon = selectMode === 'ellipse' ? CircleDashed : selectMode === 'lasso' ? Lasso : SquareDashed
   const [flyout, setFlyout] = useState<Flyout>(null)
   const rootRef = useRef<HTMLElement | null>(null)
 
@@ -167,6 +176,48 @@ export const ToolRail = memo(function ToolRail({
         <ImagePlus size={16} />
       </button>
       <span className="tool-rail-rule" aria-hidden="true" />
+      {onSelectModeChange ? (
+        <div className="tool-rail-flyout-wrap">
+          <button
+            type="button"
+            className={tool === 'select' ? 'active' : undefined}
+            title="Select (L) — marquee or lasso a region, then mask it or lift it to a new layer"
+            aria-label="Select tool"
+            aria-pressed={tool === 'select'}
+            aria-expanded={flyout === 'select'}
+            onClick={() => {
+              onToolChange('select')
+              setFlyout((current) => (current === 'select' ? null : 'select'))
+            }}
+          >
+            <SelectIcon size={16} />
+          </button>
+          {flyout === 'select' ? (
+            <div className="tool-flyout" role="menu" aria-label="Selection tools">
+              {(
+                [
+                  ['rect', 'Rectangle marquee', SquareDashed],
+                  ['ellipse', 'Ellipse marquee', CircleDashed],
+                  ['lasso', 'Lasso', Lasso],
+                ] as const
+              ).map(([mode, label, Icon]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selectMode === mode}
+                  onClick={() => {
+                    onSelectModeChange(mode)
+                    selectTool('select')
+                  }}
+                >
+                  <Icon size={14} /> {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="tool-rail-flyout-wrap">
         <button
           type="button"

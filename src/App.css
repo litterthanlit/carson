@@ -3258,3 +3258,144 @@ label:has(> input[type='radio']) {
   color: var(--text-muted);
   text-transform: none;
 }
+
+/* ── Pixel selection (marquee / lasso) ──────────────────────────────────── */
+.selection-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.selection-overlay.is-active {
+  pointer-events: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.selection-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.selection-tint {
+  fill: rgb(20 115 230 / 0.1);
+}
+
+.selection-ants-base,
+.selection-ants {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1px;
+}
+
+.selection-ants-base {
+  stroke: #fff;
+}
+
+.selection-ants {
+  stroke: #111;
+  stroke-dasharray: 5 5;
+  animation: marching-ants 0.6s linear infinite;
+}
+
+@keyframes marching-ants {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+.selection-bar {
+  position: absolute;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  white-space: nowrap;
+  cursor: default;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  pointer-events: auto;
+}
+
+.selection-bar button {
+  min-height: 26px;
+  font-size: 11px;
+}
+
+.selection-bar button[aria-pressed='true'] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.selection-bar-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 160px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 500 11px/1 var(--font);
+  color: var(--text-muted);
+}
+
+.selection-bar-rule {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--border-strong);
+}
+
+.selection-feather {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font: 500 11px/1 var(--font);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.selection-feather input {
+  width: 52px;
+  height: 26px;
+  padding: 2px 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selection-ants {
+    animation: none;
+  }
+}
+
+/* Treatment chips float over the pasteboard so selecting a treated layer never
+   shifts the canvas under the cursor. */
+.canvas-stack-float {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  right: 16px;
+  z-index: 7;
+  display: flex;
+  pointer-events: none;
+}
+
+.canvas-stack-float > .treatment-chips {
+  max-width: 100%;
+  pointer-events: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: rgb(42 42 42 / 0.92);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-md);
+}

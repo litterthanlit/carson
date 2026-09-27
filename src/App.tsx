@@ -30,6 +30,8 @@ import {
 import { createSeededRandom, newSeed } from './lib/random'
 import { serializeHistorySnapshot } from './lib/historySnapshot'
 import { runWhenIdle } from './lib/idle'
+import type { PixelSelection, SelectionMode } from './lib/selection'
+import { SelectionOverlay } from './components/SelectionOverlay'
 import { layerStyleScale, readLayerStyle, scaledLayerStyleDefaults, writeLayerStyle, type LayerStyle, type LayerStyleKind } from './lib/layerStyles'
 import { applyBackstore, backstoreScale, installDynamicBackstore } from './lib/backstoreScale'
 import {
@@ -103,9 +105,11 @@ import {
   captureClipGeom,
   emptyLayerMask,
   hasMaskContent,
+  objectUnscaledSize,
   readLayerMask,
   stampsAlongSegment,
   writeLayerMask,
+  type MaskRegion,
 } from './lib/layerMask'
 import type { PathEditActions } from './hooks/usePathEditing'
 import { applyPathData, isPathClosed, type PathData } from './lib/pathEditing'
@@ -384,6 +388,10 @@ function App() {
   const [penKind, setPenKind] = useState<PenKind>('bezier')
   const [maskBrushSize, setMaskBrushSize] = useState(36)
   const [maskHardness, setMaskHardness] = useState(35)
+  const [selectMode, setSelectMode] = useState<SelectionMode>('rect')
+  const [pixelSelection, setPixelSelection] = useState<PixelSelection | null>(null)
+  const pixelSelectionRef = useRef<PixelSelection | null>(null)
+  pixelSelectionRef.current = pixelSelection
   const [pathEditMode, setPathEditMode] = useState(false)
   const [pathAddPointMode, setPathAddPointMode] = useState(false)
   const [pathGeometryTick, setPathGeometryTick] = useState(0)
@@ -642,6 +650,7 @@ function App() {
     return Math.min(1, 660 / poster.width, 780 / poster.height)
   }, [poster.height, poster.width, stageSize])
   const displayScale = zoom ?? fitScale
+  const selectionTargetName = selected && selectedLayerIds.length <= 1 ? selected.name : null
   displayScaleRef.current = displayScale
   const pasteboard = useMemo(
     () =>
@@ -680,6 +689,8 @@ function App() {
 
     // Size the backing store to what the screen shows instead of poster × DPR.
     installDynamicBackstore(canvas, () => backstoreScaleRef.current)
+    // Dev-only handle for debugging and browser-driven verification.
+    if (import.meta.env.DEV) (window as unknown as { __carsonCanvas?: Canvas }).__carsonCanvas = canvas
     canvasRef.current = canvas
     registerCanvasEvents(canvas)
 
@@ -902,6 +913,17 @@ function App() {
       setPenMode(false)
       setEditorTool('shape')
     },
+    selectTool: () => {
+      setPenMode(false)
+      setEditorTool('select')
+      setStatus('Select — drag a marquee (Shift square, Alt from center), then mask or lift it')
+    },
+    selectionMaskOut: () => void applySelectionRegion('conceal', 'Masked out selection'),
+    selectionViaCopy: () => void liftSelectionToLayer(false),
+    selectionViaCut: () => void liftSelectionToLayer(true),
+    selectionInvert: () =>
+      setPixelSelection((current) => (current ? { ...current, inverted: !current.inverted } : current)),
+    selectionClear: () => setPixelSelection(null),
     maskTool: () => {
       setPenMode(false)
       setEditorTool('mask')
@@ -1029,6 +1051,13 @@ function App() {
         } else if (key === 'f') {
           event.preventDefault()
           actions.filterGallery()
+        } else if (key === 'j' && pixelSelectionRef.current) {
+          event.preventDefault()
+          if (event.shiftKey) actions.selectionViaCut()
+          else actions.selectionViaCopy()
+        } else if (key === 'i' && event.shiftKey && pixelSelectionRef.current) {
+          event.preventDefault()
+          actions.selectionInvert()
         }
         return
       }
@@ -1057,10 +1086,16 @@ function App() {
           return
         }
         event.preventDefault()
-        actions.delete()
+        // With a pixel selection, Delete masks the area out (Photoshop) instead of deleting the layer.
+        if (pixelSelectionRef.current) actions.selectionMaskOut()
+        else actions.delete()
       } else if (event.key === 'Escape') {
         if (bezierPenActionsRef.current.cancel()) {
           event.preventDefault()
+          return
+        }
+        if (pixelSelectionRef.current) {
+          actions.selectionClear()
           return
         }
         actions.deselect()
@@ -1080,6 +1115,9 @@ function App() {
       } else if (event.key.toLowerCase() === 's') {
         event.preventDefault()
         actions.shapeTool()
+      } else if (event.key.toLowerCase() === 'l') {
+        event.preventDefault()
+        actions.selectTool()
       } else if (event.key.toLowerCase() === 'm') {
         event.preventDefault()
         actions.maskTool()
@@ -1946,6 +1984,80 @@ function App() {
       return
     }
     setStatus('Paint mask — drag to conceal, Alt-drag to reveal · [ ] brush size')
+  }
+
+  /** Map a poster-space selection into a mask region on `object`. */
+  function selectionRegionFor(object: FabricObject, selection: PixelSelection, op: MaskRegion['op']): MaskRegion {
+    const size = objectUnscaledSize(object)
+    const shortSide = Math.min(size.width * Math.abs(object.scaleX ?? 1), size.height * Math.abs(object.scaleY ?? 1))
+    const mask = readLayerMask(object) ?? emptyLayerMask()
+    return {
+      points: selection.points.map((point) => canvasPointToMaskLocal(object, point.x, point.y)),
+      op,
+      feather: selection.feather / Math.max(1, shortSide),
+      inverted: selection.inverted || undefined,
+      at: mask.strokes.length,
+    }
+  }
+
+  function pushMaskRegion(object: FabricObject, region: MaskRegion) {
+    const mask = readLayerMask(object) ?? emptyLayerMask()
+    writeLayerMask(object, { ...mask, enabled: true, regions: [...(mask.regions ?? []), region] })
+  }
+
+  async function applySelectionRegion(op: MaskRegion['op'], label: string) {
+    const canvas = canvasRef.current
+    const selection = pixelSelectionRef.current
+    const object = resolveMaskTarget()
+    if (!canvas || !selection) return
+    if (!object) {
+      setStatus('Pick a layer first — the selection masks the active layer')
+      return
+    }
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    pushMaskRegion(object, selectionRegionFor(object, selection, op))
+    await applyLayerMask(object)
+    canvas.requestRenderAll()
+    invalidateLayerThumbnail(objectId)
+    commitObjectPatchHistoryRef.current(objectId, label, before, captureObjectPatch(object))
+    scheduleSyncLayers()
+    setStatus(`${label} on ${String(readObjectProp(object, 'name') ?? 'layer')}`)
+  }
+
+  /** Photoshop's Layer via Copy / Cut: lift the selected area onto a new layer above. */
+  async function liftSelectionToLayer(cut: boolean) {
+    const canvas = canvasRef.current
+    const selection = pixelSelectionRef.current
+    const object = resolveMaskTarget()
+    if (!canvas || !selection) return
+    if (!object) {
+      setStatus('Pick a layer first — the selection lifts from the active layer')
+      return
+    }
+    if (object.group) {
+      setStatus('Ungroup first — lifting works on top-level layers')
+      return
+    }
+    const clone = await object.clone()
+    retargetObjectIds(clone, nextIdForKind)
+    const baseName = String(readObjectProp(object, 'name') ?? 'Layer')
+    tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'image', `${baseName} ${cut ? 'cut' : 'piece'}`)
+    pushMaskRegion(clone, selectionRegionFor(object, selection, 'intersect'))
+    await applyLayerMask(clone)
+    if (cut) {
+      pushMaskRegion(object, selectionRegionFor(object, selection, 'conceal'))
+      await applyLayerMask(object)
+      invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
+    }
+    const index = canvas.getObjects().indexOf(object)
+    if (index >= 0) canvas.insertAt(index + 1, clone)
+    else canvas.add(clone)
+    setPixelSelection(null)
+    setEditorTool('move')
+    canvas.setActiveObject(clone)
+    canvas.requestRenderAll()
+    commitHistory(cut ? 'Cut selection to a new layer' : 'Copied selection to a new layer')
   }
 
   function stampMaskStrokes(
@@ -2949,6 +3061,7 @@ function App() {
   }
 
   function applyEditorIntent(intent: EditorIntent) {
+    setPixelSelection(null)
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
@@ -4962,6 +5075,8 @@ function App() {
           onClipToShape={() => void clipSelectionToShape()}
           onBrushMask={() => void paintBrushMask()}
           onWhiteScrapes={() => addWhiteScrapes()}
+          selectMode={selectMode}
+          onSelectModeChange={setSelectMode}
         />
         {editorTool === 'instruments' ? (
           <InstrumentsPalette
@@ -5072,7 +5187,22 @@ function App() {
             />
           }
           hud={
-            selected ? (
+            <>
+            <SelectionOverlay
+              posterWidth={poster.width}
+              posterHeight={poster.height}
+              displayScale={displayScale}
+              active={editorTool === 'select' && !isPanMode}
+              mode={selectMode}
+              selection={pixelSelection}
+              onSelectionChange={setPixelSelection}
+              targetName={selectionTargetName}
+              onMaskOut={() => void applySelectionRegion('conceal', 'Masked out selection')}
+              onKeepOnly={() => void applySelectionRegion('intersect', 'Kept only selection')}
+              onLayerViaCopy={() => void liftSelectionToLayer(false)}
+              onLayerViaCut={() => void liftSelectionToLayer(true)}
+            />
+            {selected && editorTool !== 'select' ? (
               <LiveSelectionHud
                 canvasRef={canvasRef}
                 selected={selected}
@@ -5082,7 +5212,8 @@ function App() {
                 onUpdateActive={updateActive}
                 onFinalizeActive={finalizeActive}
               />
-            ) : null
+            ) : null}
+            </>
           }
           coach={
             walkthroughStep ? (

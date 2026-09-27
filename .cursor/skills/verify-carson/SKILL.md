@@ -75,6 +75,9 @@ Stable handles:
 - Dialog `Comps`, dialog `Compare variations`
 - Shape tool, then `Pen` (click-to-place bezier) or `Pencil` (freehand)
 - Print tab, then `Export CMYK plates`
+- `Select tool` (L) with menuitemradios `Rectangle marquee` / `Ellipse marquee` / `Lasso`; after a drag, toolbar `Selection actions` with `Mask out`, `Keep only`, `Layer via copy`, `Cut`, `Invert`, spinbutton `Feather`, `Deselect`
+- Inspect card `Layer style` with checkboxes `Drop shadow`, `Outer glow`, `Outline`
+- Dev builds expose `window.__carsonCanvas` (the Fabric canvas) for assertions
 
 `window.prompt` during Save selection is accepted as `Mark` by the driver.
 

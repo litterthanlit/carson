@@ -25,12 +25,30 @@ export type ClipGeom = {
   points?: { x: number; y: number }[]
 }
 
+/**
+ * A selection applied to the mask (marquee, lasso). Points are in the layer's local
+ * normalized space (0–1), like strokes, so regions follow the layer when it moves,
+ * scales, or rotates.
+ */
+export type MaskRegion = {
+  points: { x: number; y: number }[]
+  /** conceal = mask out, reveal = paint back, intersect = keep only this area. */
+  op: 'conceal' | 'reveal' | 'intersect'
+  /** Feather radius as a fraction of the layer's shorter side. */
+  feather: number
+  /** Apply to everything outside the polygon instead. */
+  inverted?: boolean
+  /** Number of strokes painted before this region, so strokes and regions replay in order. */
+  at: number
+}
+
 export type LayerMask = {
   enabled: boolean
   inverted: boolean
   clipJson?: Record<string, unknown> | null
   clipGeom?: ClipGeom | null
   strokes: MaskStroke[]
+  regions?: MaskRegion[]
 }
 
 const MAX_RASTER = 512
@@ -50,6 +68,7 @@ export function readLayerMask(object: FabricObject | null): LayerMask | null {
     clipJson: record.clipJson ?? null,
     clipGeom: record.clipGeom ?? null,
     strokes: Array.isArray(record.strokes) ? record.strokes : [],
+    regions: Array.isArray(record.regions) ? record.regions : [],
   }
 }
 
@@ -59,10 +78,14 @@ export function writeLayerMask(object: FabricObject, mask: LayerMask | null) {
 
 export function hasMaskContent(mask: LayerMask | null): mask is LayerMask {
   if (!mask) return false
-  return Boolean(mask.clipJson || mask.clipGeom || mask.strokes.length > 0)
+  return Boolean(mask.clipJson || mask.clipGeom || mask.strokes.length > 0 || (mask.regions?.length ?? 0) > 0)
 }
 
 export function layerMaskLabel(mask: LayerMask): string {
+  const regions = mask.regions?.length ?? 0
+  if (regions > 0 && !mask.clipGeom && !mask.clipJson && mask.strokes.length === 0) {
+    return regions === 1 ? 'Mask·selection' : `Mask·${regions} selections`
+  }
   if (mask.clipGeom || mask.clipJson) {
     return mask.strokes.length > 0 ? `Mask·clip·${mask.strokes.length}` : 'Mask·clip'
   }
@@ -221,6 +244,81 @@ function stampStroke(image: ImageData, stroke: MaskStroke) {
   }
 }
 
+/** Per-pixel polygon coverage (0–1) via even-odd scanline fill. */
+export function regionCoverage(width: number, height: number, region: MaskRegion): Float32Array {
+  const coverage = new Float32Array(width * height)
+  const points = region.points.map((point) => ({ x: point.x * width, y: point.y * height }))
+  if (points.length >= 3) {
+    const crossings: number[] = []
+    for (let y = 0; y < height; y += 1) {
+      const sy = y + 0.5
+      crossings.length = 0
+      for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+        const a = points[i]
+        const b = points[j]
+        if (a.y > sy !== b.y > sy) crossings.push(a.x + ((sy - a.y) / (b.y - a.y)) * (b.x - a.x))
+      }
+      crossings.sort((m, n) => m - n)
+      for (let k = 0; k + 1 < crossings.length; k += 2) {
+        const x0 = Math.max(0, Math.ceil(crossings[k] - 0.5))
+        const x1 = Math.min(width - 1, Math.floor(crossings[k + 1] - 0.5))
+        for (let x = x0; x <= x1; x += 1) coverage[y * width + x] = 1
+      }
+    }
+  }
+  const radius = Math.round(Math.max(0, region.feather) * Math.min(width, height))
+  if (radius > 0) featherCoverage(coverage, width, height, radius)
+  if (region.inverted) for (let i = 0; i < coverage.length; i += 1) coverage[i] = 1 - coverage[i]
+  return coverage
+}
+
+/** Three box-blur passes per axis ≈ gaussian feather. */
+function featherCoverage(buffer: Float32Array, width: number, height: number, radius: number) {
+  const r = Math.max(1, Math.round(radius / 1.7))
+  const temp = new Float32Array(buffer.length)
+  const blur = (src: Float32Array, dst: Float32Array, horizontal: boolean) => {
+    const outer = horizontal ? height : width
+    const inner = horizontal ? width : height
+    for (let o = 0; o < outer; o += 1) {
+      let sum = 0
+      const at = (i: number) => {
+        const c = Math.min(inner - 1, Math.max(0, i))
+        return horizontal ? src[o * width + c] : src[c * width + o]
+      }
+      for (let i = -r; i <= r; i += 1) sum += at(i)
+      for (let i = 0; i < inner; i += 1) {
+        const value = sum / (2 * r + 1)
+        if (horizontal) dst[o * width + i] = value
+        else dst[i * width + o] = value
+        sum += at(i + r + 1) - at(i - r)
+      }
+    }
+  }
+  for (let pass = 0; pass < 3; pass += 1) {
+    blur(buffer, temp, true)
+    blur(temp, buffer, false)
+  }
+}
+
+function applyRegion(image: ImageData, region: MaskRegion) {
+  const coverage = regionCoverage(image.width, image.height, region)
+  const { data } = image
+  for (let p = 0, i = 0; p < coverage.length; p += 1, i += 4) {
+    const c = coverage[p]
+    const alpha = data[i + 3]
+    if (region.op === 'conceal') {
+      data[i + 3] = alpha * (1 - c)
+    } else if (region.op === 'intersect') {
+      data[i + 3] = alpha * c
+    } else {
+      data[i] = 255
+      data[i + 1] = 255
+      data[i + 2] = 255
+      data[i + 3] = alpha + (255 - alpha) * c
+    }
+  }
+}
+
 function invertAlpha(image: ImageData) {
   const { data } = image
   for (let i = 3; i < data.length; i += 4) {
@@ -232,7 +330,13 @@ export function rasterizeLayerMask(mask: LayerMask, width: number, height: numbe
   const image = createMaskImageData(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)))
   if (mask.clipGeom) applyClipShape(image, mask.clipGeom)
   else fillOpaque(image)
-  for (const stroke of mask.strokes) stampStroke(image, stroke)
+  const regions = [...(mask.regions ?? [])].sort((a, b) => a.at - b.at)
+  let next = 0
+  mask.strokes.forEach((stroke, index) => {
+    while (next < regions.length && regions[next].at <= index) applyRegion(image, regions[next++])
+    stampStroke(image, stroke)
+  })
+  while (next < regions.length) applyRegion(image, regions[next++])
   if (mask.inverted) invertAlpha(image)
   return image
 }
@@ -301,7 +405,7 @@ export async function applyLayerMask(object: FabricObject): Promise<void> {
     return
   }
 
-  if (mask.strokes.length === 0 && mask.clipJson) {
+  if (mask.strokes.length === 0 && !(mask.regions?.length) && mask.clipJson) {
     const clip = await reviveClipObject(mask.clipJson)
     if (clip) {
       clip.set({

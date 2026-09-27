@@ -210,8 +210,8 @@ export const EditorCanvas = memo(function EditorCanvas({
           </button>
         ) : null}
       </div>
-      {stackBar}
       <div className="canvas-viewport">
+      {stackBar ? <div className="canvas-stack-float">{stackBar}</div> : null}
       <ViewportRulers
         scrollRef={scrollRef}
         displayScale={displayScale}
