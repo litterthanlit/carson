@@ -4,9 +4,11 @@ import { installTextTypographyRenderPatch } from './lib/textTypography'
 import { installFabricDefaults } from './lib/fabricDefaults'
 import { installLayerStyleRenderPatch } from './lib/layerStyles'
 import { installImageSrcCache } from './lib/historySnapshot'
+import { applyTheme, resolveInitialTheme } from './lib/theme'
 import './index.css'
 import App from './App.tsx'
 
+applyTheme(resolveInitialTheme())
 installFabricDefaults()
 installLayerStyleRenderPatch()
 installImageSrcCache()

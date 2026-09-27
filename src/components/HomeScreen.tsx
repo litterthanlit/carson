@@ -3,6 +3,7 @@ import { ArrowUpRight, FolderOpen, ImagePlus, Plus } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { formatProjectTimestamp, posterAspectRatio } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
+import { ThemeToggle } from './ThemeToggle'
 
 export type HomeStartPreset = 'a3' | 'instagram' | 'square'
 
@@ -119,6 +120,7 @@ export function HomeScreen({
           </div>
         </div>
         <div className="home-top-actions">
+          <ThemeToggle className="home-ghost-button theme-toggle" />
           {onOpenPoster ? (
             <button type="button" className="home-ghost-button" onClick={onOpenPoster} title="Open a saved poster (⌘O)">
               <FolderOpen size={14} aria-hidden />

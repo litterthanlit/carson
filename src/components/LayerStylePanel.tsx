@@ -46,7 +46,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
         return (
           <div key={kind} className={active ? 'layer-style-row active' : 'layer-style-row'}>
             <label className="toggle-row" title={hint}>
-              <input type="checkbox" checked={active} onChange={(event) => toggle(kind, label, event.target.checked)} />
+              <input type="checkbox" role="switch" checked={active} onChange={(event) => toggle(kind, label, event.target.checked)} />
               {label}
             </label>
             {kind === 'dropShadow' && current.dropShadow ? (

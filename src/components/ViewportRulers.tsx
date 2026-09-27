@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { rulerTicks, type RulerUnit } from '../lib/rulerTicks'
+import { THEME_CHANGE_EVENT } from '../lib/theme'
 
 const RULER_SIZE = 20
 
@@ -57,13 +58,13 @@ export function ViewportRulers({ scrollRef, displayScale, posterWidth, posterHei
     const dpr = window.devicePixelRatio || 1
     const scale = displayScale > 0 ? displayScale : 1
     const colors = {
-      bg: '#2a2a2a',
-      poster: '#343434',
-      tick: 'rgba(255,255,255,0.28)',
-      major: 'rgba(255,255,255,0.5)',
+      bg: readCss('--ruler-bg', '#2a2a2a'),
+      poster: readCss('--ruler-poster', '#343434'),
+      tick: readCss('--ruler-tick', 'rgba(255,255,255,0.28)'),
+      major: readCss('--ruler-major', 'rgba(255,255,255,0.5)'),
       label: readCss('--text-faint', '#a3a3a3'),
       cursor: readCss('--accent', '#1473e6'),
-      edge: '#1f1f1f',
+      edge: readCss('--ruler-edge', '#1f1f1f'),
     }
     const font = `500 10px ${readCss('--font', 'system-ui, sans-serif')}`
 
@@ -188,7 +189,9 @@ export function ViewportRulers({ scrollRef, displayScale, posterWidth, posterHei
     scroller.addEventListener('scroll', schedule, { passive: true })
     scroller.addEventListener('pointermove', onPointer, { passive: true })
     scroller.addEventListener('pointerleave', onLeave)
+    window.addEventListener(THEME_CHANGE_EVENT, schedule)
     return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, schedule)
       observer.disconnect()
       scroller.removeEventListener('scroll', schedule)
       scroller.removeEventListener('pointermove', onPointer)

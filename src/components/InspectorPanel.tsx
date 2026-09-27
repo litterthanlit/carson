@@ -1208,7 +1208,7 @@ export function InspectorPanel({
                     <p className="property-kicker">OpenType</p>
                     <label className="toggle-row">
                       <input
-                        type="checkbox"
+                        type="checkbox" role="switch"
                         checked={openTypeFeatures.kern}
                         onChange={(event) => onOpenTypeChange({ kern: event.target.checked })}
                       />
@@ -1216,7 +1216,7 @@ export function InspectorPanel({
                     </label>
                     <label className="toggle-row">
                       <input
-                        type="checkbox"
+                        type="checkbox" role="switch"
                         checked={openTypeFeatures.liga}
                         onChange={(event) => onOpenTypeChange({ liga: event.target.checked })}
                       />
@@ -1224,7 +1224,7 @@ export function InspectorPanel({
                     </label>
                     <label className="toggle-row">
                       <input
-                        type="checkbox"
+                        type="checkbox" role="switch"
                         checked={openTypeFeatures.smcp}
                         onChange={(event) => onOpenTypeChange({ smcp: event.target.checked })}
                       />
@@ -1835,7 +1835,7 @@ export function InspectorPanel({
             </button>
           </div>
           <label className="toggle-row">
-            <input type="checkbox" checked={snapToGrid} onChange={onToggleSnapToGrid} />
+            <input type="checkbox" role="switch" checked={snapToGrid} onChange={onToggleSnapToGrid} />
             Snap to grid
           </label>
           <span className="layout-field-label">Columns</span>
@@ -2034,7 +2034,7 @@ export function InspectorPanel({
           </button>
           <PrintGamutReadout hex={typeof selected?.fill === 'string' ? selected.fill : undefined} />
           <label className="toggle-row">
-            <input type="checkbox" checked={pdfRegistrationMarks} onChange={(event) => onPdfRegistrationMarksChange(event.target.checked)} />
+            <input type="checkbox" role="switch" checked={pdfRegistrationMarks} onChange={(event) => onPdfRegistrationMarksChange(event.target.checked)} />
             Printer’s marks in PDF export
           </label>
           <button type="button" onClick={onAddArtboard}>

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { TensionDial } from './TensionDial'
+import { ThemeToggle } from './ThemeToggle'
 
 type TopBarProps = {
   projectName: string
@@ -188,6 +189,7 @@ export const TopBar = memo(function TopBar({
             <Redo2 size={15} />
           </button>
         </div>
+        <ThemeToggle />
         <button type="button" className="command-button" title="Search every action (⌘K)" aria-label="Commands" onClick={onOpenCommands}>
           <Command size={13} aria-hidden />
           <span>K</span>
