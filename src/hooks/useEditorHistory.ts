@@ -13,6 +13,7 @@ import {
   pushHistoryOp,
   restoreActionForRedo,
   restoreActionForUndo,
+  restoreActionsForUndo,
   shouldSnapshot,
   type HistoryOp,
   type HistoryState,
@@ -269,13 +270,22 @@ export function useEditorHistory({
   )
 
   const undoAsync = useCallback(async () => {
-    const action = restoreActionForUndo(historyLogRef.current)
-    if (!action) return
+    const actions = restoreActionsForUndo(historyLogRef.current)
+    if (actions.length === 0) return
     historyLogRef.current = {
       ...historyLogRef.current,
       cursor: historyLogRef.current.cursor - 1,
     }
-    await applyRestoreAction(action)
+    restoringRef.current = true
+    try {
+      for (const action of actions) {
+        if (!action) continue
+        await applyRestoreAction(action)
+        restoringRef.current = true
+      }
+    } finally {
+      restoringRef.current = false
+    }
     notifyCursor()
   }, [applyRestoreAction, notifyCursor])
 

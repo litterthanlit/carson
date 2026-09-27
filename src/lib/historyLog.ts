@@ -184,6 +184,23 @@ export function restoreActionForUndo(state: HistoryState): HistoryRestoreAction 
   return { kind: 'snapshot', data: snapshot, label: `Undo: ${op.label}` }
 }
 
+/**
+ * Everything needed to step back one op. Undoing a snapshot op must rebuild the
+ * previous state as "nearest earlier snapshot + every lighter op after it";
+ * restoring the earlier snapshot alone silently dropped those ops (a nudge or
+ * mask edit made before an "Added block" vanished when the block was undone).
+ */
+export function restoreActionsForUndo(state: HistoryState): HistoryRestoreAction[] {
+  if (!canUndo(state)) return []
+  const op = state.ops[state.cursor]
+  if (!op) return []
+  if (op.type !== 'snapshot') return [restoreActionForUndo(state)]
+  const actions = jumpRestoreActions(state, state.cursor - 1)
+  const last = actions[actions.length - 1]
+  if (last) actions[actions.length - 1] = { ...last, label: `Undo: ${op.label}` }
+  return actions
+}
+
 export function restoreActionForRedo(state: HistoryState): HistoryRestoreAction {
   if (!canRedo(state)) return null
   const op = state.ops[state.cursor + 1]
