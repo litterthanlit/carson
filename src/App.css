@@ -3211,3 +3211,50 @@ label:has(> input[type='radio']) {
     transform: none;
   }
 }
+
+/* ── Layer style panel ───────────────────────────────────────────────────── */
+.layer-style-panel {
+  display: grid;
+  gap: 2px;
+}
+
+.layer-style-row {
+  display: grid;
+  gap: 6px;
+  padding: 4px 0;
+  border-top: 1px solid rgb(255 255 255 / 0.04);
+}
+
+.layer-style-row:first-of-type {
+  border-top: 0;
+}
+
+.layer-style-row .toggle-row {
+  margin-top: 0;
+}
+
+.layer-style-controls {
+  display: grid;
+  gap: 6px;
+  padding: 2px 0 6px 22px;
+}
+
+.layer-style-color {
+  display: grid;
+  grid-template-columns: auto 28px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.layer-style-color input[type='color'] {
+  width: 28px;
+  height: 22px;
+  padding: 1px;
+}
+
+.layer-style-color code {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--text-muted);
+  text-transform: none;
+}

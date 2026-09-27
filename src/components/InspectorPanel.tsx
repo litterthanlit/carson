@@ -53,6 +53,8 @@ import { LayersPanel } from './LayersPanel'
 import { FontPicker } from './FontPicker'
 import { BlendModePicker } from './BlendModePicker'
 import { Slider } from './Slider'
+import { LayerStylePanel } from './LayerStylePanel'
+import { layerStyleScale, type LayerStyle } from '../lib/layerStyles'
 import { ScopeSel } from './ScopeBadge'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
 
@@ -133,6 +135,7 @@ export type InspectorPanelProps = {
   textContrast: number | null
   onUpdateActive: (values: Partial<SelectedState>) => void
   onFinalizeActive: (message: string) => void
+  onLayerStyleChange: (style: LayerStyle) => void
   onPreviewBlendMode: (mode: string | null) => void
   onApplyBlendMode: (mode: string) => void
   onLoadGoogleFont: (family: string) => Promise<void>
@@ -310,6 +313,7 @@ export function InspectorPanel({
   textContrast,
   onUpdateActive,
   onFinalizeActive,
+  onLayerStyleChange,
   onPreviewBlendMode,
   onApplyBlendMode,
   onLoadGoogleFont,
@@ -1294,6 +1298,14 @@ export function InspectorPanel({
                       Dotted
                     </button>
                   </div>
+                ) : null}
+                {selected && selectedLayerIds.length <= 1 ? (
+                  <LayerStylePanel
+                    style={selected.layerStyle ?? null}
+                    onChange={onLayerStyleChange}
+                    onCommit={onFinalizeActive}
+                    scale={layerStyleScale(posterWidth, posterHeight)}
+                  />
                 ) : null}
                 {selected ? (
                   <div className="property-card">

@@ -28,6 +28,7 @@ import {
   type PosterPresetId,
 } from './lib/editorModel'
 import { createSeededRandom, newSeed } from './lib/random'
+import { layerStyleScale, readLayerStyle, scaledLayerStyleDefaults, writeLayerStyle, type LayerStyle, type LayerStyleKind } from './lib/layerStyles'
 import { applyBackstore, backstoreScale, installDynamicBackstore } from './lib/backstoreScale'
 import {
   clearAutosave,
@@ -1534,6 +1535,7 @@ function App() {
       openTypeFeatures: readOpenTypeFeatures(object),
       componentId: readComponentId(object) ?? undefined,
       overrideCount: overrideCount(readComponentOverrides(object)),
+      layerStyle: readLayerStyle(object),
     }
   }
 
@@ -1643,6 +1645,33 @@ function App() {
     syncSelected()
     invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
     scheduleSyncLayers()
+  }
+
+  function updateLayerStyle(style: LayerStyle) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') return
+    beginObjectEditSession(object)
+    writeLayerStyle(object, style)
+    canvas.requestRenderAll()
+    syncSelected()
+    invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
+    scheduleSyncLayers()
+  }
+
+  function toggleLayerStyleEffect(kind: LayerStyleKind, label: string) {
+    const object = activeObject()
+    if (!object || object.type === 'activeselection') return
+    const current = readLayerStyle(object) ?? {}
+    const next: LayerStyle = { ...current }
+    if (next[kind]) {
+      delete next[kind]
+    } else {
+      const defaults = scaledLayerStyleDefaults(layerStyleScale(poster.width, poster.height))
+      Object.assign(next, { [kind]: defaults[kind] })
+    }
+    updateLayerStyle(next)
+    finalizeActive(`${current[kind] ? 'Removed' : 'Added'} ${label.toLowerCase()}`)
   }
 
   function finalizeActive(message: string) {
@@ -4569,6 +4598,18 @@ function App() {
   const commands: CommandAction[] = [
     { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
     { id: 'open-poster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
+    ...(['dropShadow', 'outerGlow', 'outline'] as const).map((kind) => {
+      const label = kind === 'dropShadow' ? 'Drop shadow' : kind === 'outerGlow' ? 'Outer glow' : 'Outline'
+      const on = Boolean(selected?.layerStyle?.[kind])
+      return {
+        id: `layer-style-${kind}`,
+        label: `${on ? 'Remove' : 'Add'} ${label.toLowerCase()}`,
+        keywords: ['layer style', 'effect', 'fx', 'shadow', 'glow', 'stroke', 'outline', label.toLowerCase()],
+        scope: 'selection' as const,
+        disabled: !selected || selectedLayerIds.length > 1,
+        run: () => toggleLayerStyleEffect(kind, label),
+      }
+    }),
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
@@ -5172,6 +5213,7 @@ function App() {
           textContrast={textContrast}
           onUpdateActive={updateActive}
           onFinalizeActive={finalizeActive}
+          onLayerStyleChange={updateLayerStyle}
           onPreviewBlendMode={previewBlendMode}
           onApplyBlendMode={applyBlendMode}
           onLoadGoogleFont={loadGoogleFont}

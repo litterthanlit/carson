@@ -6,6 +6,7 @@ import type { Canvas, FabricObject } from 'fabric'
 import { applyLayerMask, readLayerMask, writeLayerMask, type LayerMask } from './layerMask'
 import { applyPathData, type PathData } from './pathEditing'
 import { readObjectProp } from './canvasUtils'
+import { readLayerStyle, writeLayerStyle, type LayerStyle } from './layerStyles'
 
 export type ObjectPatch = {
   left: number
@@ -21,6 +22,7 @@ export type ObjectPatch = {
   evented: boolean
   pathData?: PathData
   layerMask?: LayerMask | null
+  layerStyle?: LayerStyle | null
 }
 
 export function captureObjectPatch(object: FabricObject): string {
@@ -37,6 +39,7 @@ export function captureObjectPatch(object: FabricObject): string {
     selectable: object.selectable !== false,
     evented: object.evented !== false,
     layerMask: readLayerMask(object),
+    layerStyle: readLayerStyle(object),
   }
   return JSON.stringify(patch)
 }
@@ -72,6 +75,9 @@ export function applyObjectPatch(object: FabricObject, patchJson: string): void 
     selectable: patch.selectable,
     evented: patch.evented,
   } as Partial<FabricObject>)
+  if (Object.prototype.hasOwnProperty.call(patch, 'layerStyle')) {
+    writeLayerStyle(object, patch.layerStyle ?? null)
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'layerMask')) {
     writeLayerMask(object, patch.layerMask ?? null)
     void applyLayerMask(object)
