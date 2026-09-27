@@ -2878,87 +2878,103 @@ label:has(> input[type='radio']) {
   width: 1px;
 }
 
-/* ── Home (editorial hero + start cards) ─────────────────────────────────── */
+/* ── Home (quiet) ────────────────────────────────────────────────────────
+   One centred column: a short title, a tidy grid of start cards, recents.
+   Flat background, hairline-bordered cards, no lift or glow on hover. */
 .home-shell {
   position: relative;
-  background:
-    radial-gradient(1200px 600px at 85% -10%, rgb(20 115 230 / 0.10), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgb(225 29 72 / 0.08), transparent 60%),
-    var(--canvas-bg);
+  background: var(--home-bg);
 }
 
 .home-topbar {
-  height: 48px;
-  padding: 0 20px;
-  background: var(--home-bar);
-  backdrop-filter: blur(12px);
+  height: 52px;
+  padding: 0 24px;
+  background: var(--home-bg);
+  border-bottom: 1px solid var(--home-hairline);
 }
 
 .home-ghost-button {
-  min-height: 30px;
+  min-height: 32px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-muted);
   background: transparent;
   border-color: transparent;
 }
 
+.home-ghost-button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--wash);
+  border-color: transparent;
+}
+
 .home-topbar .primary-button {
-  min-height: 30px;
-  padding: 0 12px;
-  font-size: 12px;
+  min-height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
 }
 
 .home-body {
-  max-width: 1200px;
-  padding: clamp(32px, 6vw, 72px) clamp(16px, 4vw, 48px) 64px;
+  max-width: 960px;
+  padding: clamp(40px, 8vw, 88px) clamp(16px, 4vw, 32px) 80px;
 }
 
 .home-hero {
   display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 7fr);
-  gap: clamp(28px, 5vw, 64px);
-  align-items: start;
-}
-
-.home-kicker,
-.home-section-head h2 {
-  margin: 0;
-  font: 600 11px/1.3 var(--font);
-  color: var(--text-faint);
+  gap: 10px;
+  margin-bottom: clamp(36px, 6vw, 56px);
 }
 
 .home-display {
-  margin: 18px 0 20px;
-  font: 400 clamp(40px, 4.8vw, 68px) / 0.92 'Archivo Black', 'Arial Black', var(--font);
-  letter-spacing: -0.03em;
+  margin: 0;
+  font: 600 clamp(28px, 3.4vw, 36px) / 1.1 var(--font);
+  letter-spacing: -0.025em;
   color: var(--home-display);
   text-wrap: balance;
 }
 
-.home-display::after {
-  content: '';
-  display: block;
-  width: 72px;
-  height: 6px;
-  margin-top: 22px;
-  background: #e11d48;
-  transform: rotate(-3deg);
-  transform-origin: left center;
-}
-
 .home-lede {
-  max-width: 38ch;
+  max-width: 52ch;
   margin: 0;
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--text-muted);
 }
 
+.home-section + .home-section {
+  margin-top: clamp(40px, 6vw, 56px);
+}
+
+.home-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.home-section-head h2 {
+  margin: 0;
+  font: 600 13px/1.3 var(--font);
+  color: var(--text);
+}
+
+.home-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--wash-strong);
+  font: 500 11px/1.5 var(--font);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* Four columns: the wreck card takes a 2×2 block; Vertical + Horizontal sit side by side, "from image" spans below them. */
 .home-starts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-auto-rows: minmax(96px, auto);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(120px, auto);
   gap: 12px;
 }
 
@@ -2968,34 +2984,32 @@ label:has(> input[type='radio']) {
 }
 
 .home-start-image-item {
-  grid-column: span 3;
+  grid-column: span 2;
 }
 
 .home-start {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 96px;
+  min-height: 120px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px;
+  padding: 16px;
   text-align: left;
   color: var(--text);
   background: var(--home-card);
   border: 1px solid var(--home-card-border);
-  border-radius: 10px;
-  box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 10px 30px rgb(0 0 0 / 0.18);
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+  border-radius: var(--radius-xl);
+  box-shadow: none;
+  transition: border-color 140ms ease, background-color 140ms ease;
 }
 
-.home-start:hover:not(:disabled),
-.home-start:focus-visible {
-  transform: translateY(-2px);
+.home-start:hover:not(:disabled) {
   background: var(--home-card-hover);
-  border-color: rgb(20 115 230 / 0.7);
+  border-color: var(--border-hover);
 }
 
 .home-start:focus-visible {
@@ -3005,13 +3019,12 @@ label:has(> input[type='radio']) {
 
 .home-start-copy {
   display: grid;
-  gap: 3px;
+  gap: 2px;
 }
 
 .home-start-copy strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 
 .home-start-copy small {
@@ -3020,58 +3033,44 @@ label:has(> input[type='radio']) {
   color: var(--text-muted);
 }
 
-.home-start-wreck {
-  padding: 16px;
-}
-
 .home-start-art {
   display: grid;
   place-items: center;
   width: 100%;
   flex: 1;
-  padding: 12px 0 4px;
+  padding: 8px 0;
 }
 
 .home-wreck-art {
-  width: min(62%, 240px);
+  width: min(56%, 200px);
   height: auto;
-  box-shadow: 0 18px 40px rgb(0 0 0 / 0.45);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 8px 24px rgb(0 0 0 / 0.12);
   transform: rotate(-2deg);
-  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .home-start-wreck:hover .home-wreck-art,
 .home-start-wreck:focus-visible .home-wreck-art {
-  transform: rotate(1.5deg) scale(1.03);
-}
-
-.home-start-arrow {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  color: var(--text-faint);
+  transform: rotate(0deg);
 }
 
 .home-start-frame {
   display: block;
-  height: 38px;
+  height: 36px;
   max-width: 100%;
-  border: 1.5px solid var(--home-frame);
-  border-radius: 2px;
+  border: 1px solid var(--home-frame);
+  border-radius: 3px;
   background: var(--home-frame-fill);
 }
 
-.home-start-image {
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 72px;
-  border-style: dashed;
-  border-color: var(--home-dashed);
-  background: var(--home-card-soft);
-}
-
-.home-start-image svg {
+.home-start-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-lg);
+  background: var(--wash);
   color: var(--text-muted);
 }
 
@@ -3080,37 +3079,32 @@ label:has(> input[type='radio']) {
   background: var(--accent-soft);
 }
 
-.home-recents {
-  margin-top: clamp(40px, 7vw, 80px);
-}
-
-.home-section-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding-bottom: 12px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--home-hairline);
-}
-
-.home-count {
-  font: 500 11px/1 var(--font);
-  color: var(--text-faint);
-}
-
 .home-empty {
-  padding: 8px 0;
-  gap: 4px;
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  max-width: none;
+  padding: 20px;
+  border: 1px solid var(--home-card-border);
+  border-radius: var(--radius-xl);
+  background: var(--home-card);
+}
+
+.home-empty .empty {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
 }
 
 .home-grid {
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 20px 16px;
 }
 
 .home-card {
   padding: 0;
-  gap: 10px;
+  gap: 8px;
   border: 0;
   background: transparent;
 }
@@ -3118,19 +3112,19 @@ label:has(> input[type='radio']) {
 .home-card:hover:not(:disabled),
 .home-card:focus-visible {
   background: transparent;
+  border: 0;
 }
 
 .home-card .home-card-thumb {
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
-  outline: 1px solid rgb(255 255 255 / 0.06);
-  transition: transform 160ms ease, outline-color 160ms ease;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  outline: 1px solid var(--home-card-border);
+  transition: outline-color 140ms ease;
 }
 
 .home-card:hover .home-card-thumb,
 .home-card:focus-visible .home-card-thumb {
-  transform: translateY(-3px);
-  outline-color: var(--accent);
+  outline-color: var(--border-hover);
 }
 
 .home-card-recovered {
@@ -3150,35 +3144,46 @@ label:has(> input[type='radio']) {
   justify-items: center;
   gap: 12px;
   pointer-events: none;
-  color: #fff;
+  color: var(--text);
   font-size: 15px;
-  background: rgb(20 115 230 / 0.16);
-  border: 2px dashed var(--accent);
-  border-radius: 16px;
+  background: var(--accent-soft);
+  border: 1.5px dashed var(--accent);
+  border-radius: var(--radius-xl);
   backdrop-filter: blur(2px);
 }
 
-@media (max-width: 920px) {
-  .home-hero {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 760px) {
   .home-starts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.home-top-actions button {
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .home-topbar {
+    padding: 0 16px;
   }
 
-  .home-start-wreck-item,
-  .home-start-image-item {
-    grid-column: span 3;
-    grid-row: auto;
+  .home-topbar .brand-copy p {
+    display: none;
   }
 
-  .home-start-preset {
-    padding: 12px;
+  /* Icon-only on phones; the label stays in the accessibility tree. */
+  .home-ghost-button .home-button-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
-  .home-start-preset .home-start-copy small {
-    font-size: 11px;
+  .home-start {
+    min-height: 104px;
+    padding: 14px;
   }
 }
 
@@ -3189,10 +3194,8 @@ label:has(> input[type='radio']) {
     transition: none;
   }
 
-  .home-start:hover:not(:disabled),
-  .home-card:hover .home-card-thumb,
   .home-start-wreck:hover .home-wreck-art {
-    transform: none;
+    transform: rotate(-2deg);
   }
 }
 
