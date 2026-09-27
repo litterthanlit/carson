@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent } from 'react'
-import { ArrowUpRight, FolderOpen, ImagePlus, Plus } from 'lucide-react'
+import { FolderOpen, ImagePlus, Plus } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { formatProjectTimestamp, posterAspectRatio } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
@@ -124,7 +124,7 @@ export function HomeScreen({
           {onOpenPoster ? (
             <button type="button" className="home-ghost-button" onClick={onOpenPoster} title="Open a saved poster (⌘O)">
               <FolderOpen size={14} aria-hidden />
-              Open poster
+              <span className="home-button-label">Open poster</span>
             </button>
           ) : null}
           <button type="button" className="primary-button" onClick={onNewPoster} title="Pick any size (⌘N)">
@@ -136,17 +136,16 @@ export function HomeScreen({
 
       <section className="home-body" aria-label="Home">
         <div className="home-hero">
-          <div className="home-hero-copy">
-            <p className="home-kicker">Start something</p>
-            <h2 className="home-display">
-              Make a mess on&nbsp;purpose.
-            </h2>
-            <p className="home-lede">
-              Type, image, and accident as materials. Every treatment stays editable, every roll of the dice has a seed, and
-              everything prints.
-            </p>
-          </div>
+          <h2 className="home-display">Make a mess on&nbsp;purpose.</h2>
+          <p className="home-lede">
+            Type, image, and accident as materials. Every treatment stays editable, and everything prints.
+          </p>
+        </div>
 
+        <div className="home-section">
+          <div className="home-section-head">
+            <h2>New poster</h2>
+          </div>
           <div className="home-starts" role="list" aria-label="Start a poster">
             <div role="listitem" className="home-start-wreck-item">
               <button type="button" className="home-start home-start-wreck" aria-label="Start from wreck" onClick={onStartFromWreck}>
@@ -157,7 +156,6 @@ export function HomeScreen({
                   <strong>Wreck this poster</strong>
                   <small>A finished layout to take apart</small>
                 </span>
-                <ArrowUpRight className="home-start-arrow" size={16} aria-hidden />
               </button>
             </div>
             {onStartPreset
@@ -186,7 +184,9 @@ export function HomeScreen({
                   aria-label="Start from an image"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <ImagePlus size={18} aria-hidden />
+                  <span className="home-start-icon" aria-hidden>
+                    <ImagePlus size={18} />
+                  </span>
                   <span className="home-start-copy">
                     <strong>Start from an image</strong>
                     <small>Drop a photo anywhere, or browse</small>
@@ -210,7 +210,7 @@ export function HomeScreen({
           </div>
         </div>
 
-        <div className="home-recents">
+        <div className="home-section home-recents">
           <div className="home-section-head">
             <h2>Recent</h2>
             {!loading && projects.length ? <span className="home-count">{projects.length}</span> : null}
