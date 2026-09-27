@@ -59,7 +59,7 @@ Stable handles:
 - Region `Poster canvas`, heading `Carson`
 - Button `Carson home` in the editor top bar (Home is also in the `File` menu)
 - Tabs `Inspect`, `Treatments`, `Layers`, `Assets`, `Layout`, `Print`
-- Layer rows: the control titled `Select layer · double-click to zoom to layer`
+- Layer rows: the `button.layer-select` control (title `<name> · <kind>`)
 - Seed layer names `Oversized headline`, `Red interruption`
 - Buttons `Group`, `Ungroup`, `Save selection as component`, `Detach`, `Scramble layout`, banner `Export`
 - Instruments tool, then `Copy selected`

@@ -73,7 +73,7 @@ async function openTab(page, name) {
 }
 
 function layerSelect(page, name) {
-  return page.getByTitle('Select layer · double-click to zoom to layer').filter({ hasText: name })
+  return page.locator('button.layer-select').filter({ hasText: name })
 }
 
 function inspectorName(page) {
@@ -176,11 +176,11 @@ const FEATURES = {
     const group = page.getByRole('button', { name: 'Group' }).first()
     if (await group.isDisabled()) fail('Group stayed disabled after a two-layer selection')
     await group.click()
-    await page.getByRole('button', { name: /Group group/ }).waitFor()
+    await page.locator('button.layer-select').filter({ hasText: /^Group\b/ }).waitFor()
     await capture(page, outDir, 'grouped')
     await page.getByRole('button', { name: 'Ungroup' }).first().click()
     await layerSelect(page, 'Oversized headline').waitFor()
-    const grouped = await page.getByRole('button', { name: /Group group/ }).count()
+    const grouped = await page.locator('button.layer-select').filter({ hasText: /^Group\b/ }).count()
     if (grouped !== 0) fail('Group row remained after Ungroup')
     await capture(page, outDir, 'ungrouped')
   },
@@ -190,7 +190,7 @@ const FEATURES = {
     await layerSelect(page, 'Oversized headline').click()
     await layerSelect(page, 'Red interruption').click({ modifiers: ['Shift'] })
     await page.getByRole('button', { name: 'Group' }).first().click()
-    await page.getByRole('button', { name: /Group group/ }).waitFor()
+    await page.locator('button.layer-select').filter({ hasText: /^Group\b/ }).waitFor()
     await openTab(page, 'Assets')
     await page.getByRole('button', { name: 'Save selection as component' }).click()
     await page.getByRole('button', { name: /^Mark$/ }).waitFor()
@@ -413,7 +413,7 @@ const FEATURES = {
     await openTab(page, 'Treatments')
     const inspector = page.getByRole('complementary', { name: 'Inspector' })
     await inspector.getByText('Press Check', { exact: true }).waitFor()
-    const body = await page.locator('body').innerText()
+    const body = (await page.locator('body').textContent()) ?? ''
     if (!body.includes('Ink spread')) fail('Ink spread slider missing')
     if (!body.includes('Misregistration')) fail('Misregistration slider missing')
     if (!body.includes('Paper tooth')) fail('Paper tooth slider missing')
