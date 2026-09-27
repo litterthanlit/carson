@@ -1,9 +1,10 @@
 import { useRef, useState, type DragEvent } from 'react'
-import { ArrowUpRight, FolderOpen, ImagePlus, Plus } from 'lucide-react'
+import { FolderOpen, ImagePlus, Plus } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { formatProjectTimestamp, posterAspectRatio } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
 import { ThemeToggle } from './ThemeToggle'
+import { buildCarsonPoster, CARSON_PAPER, type CarsonTextSpec } from '../lib/carsonPoster'
 
 export type HomeStartPreset = 'a3' | 'instagram' | 'square'
 
@@ -41,26 +42,105 @@ function PosterThumb({ project, recovered }: { project: StoredProject; recovered
   )
 }
 
-/** A tiny vector echo of the wreck poster, so the card shows what it starts. */
+// Rough average glyph widths (em) per face, for wrapping text in the SVG preview.
+const GLYPH_EM: Record<string, number> = {
+  'IBM Plex Mono': 0.6,
+  'Special Elite': 0.6,
+  'Archivo Black': 0.78,
+  Archivo: 0.56,
+}
+
+function wrapLines(spec: CarsonTextSpec): string[] {
+  const perChar = spec.fontSize * (GLYPH_EM[spec.fontFamily] ?? 0.6) + (spec.charSpacing / 1000) * spec.fontSize
+  const maxChars = Math.max(1, Math.floor(spec.width / Math.max(perChar, 0.01)))
+  const lines: string[] = []
+  for (const hard of spec.text.split('\n')) {
+    let current = ''
+    for (const word of hard.split(' ')) {
+      const next = current ? `${current} ${word}` : word
+      if (next.length > maxChars && current) {
+        lines.push(current)
+        current = word
+      } else {
+        current = next
+      }
+    }
+    lines.push(current)
+  }
+  return lines
+}
+
+/**
+ * The seed poster (lib/carsonPoster) drawn as SVG at A3 millimetres — built from
+ * the same layer specs as the editor, so the card always shows what it opens.
+ */
 function WreckArt() {
+  const W = 297
+  const H = 420
+  const specs = buildCarsonPoster(W, H)
   return (
-    <svg className="home-wreck-art" viewBox="0 0 297 420" aria-hidden="true" focusable="false">
-      <rect width="297" height="420" fill="#f6f1e6" />
-      <rect x="172" y="143" width="48" height="100" fill="#05b6d4" opacity="0.42" transform="rotate(4 196 193)" />
-      <rect x="18" y="130" width="220" height="1.2" fill="#a3e635" transform="rotate(-11 128 130)" />
-      <g transform="rotate(-6 140 80)" fill="#161616" fontFamily="'Archivo Black', Impact, sans-serif" fontSize="40" letterSpacing="-1.5">
-        <text x="26" y="78">RAY GUN</text>
-        <text x="30" y="112">CUT TYPE</text>
-      </g>
-      <rect x="38" y="200" width="214" height="19" fill="#e11d48" opacity="0.92" transform="rotate(3 145 210)" />
-      <g transform="rotate(8 110 250)" fill="#27272a" fontFamily="'Courier New', monospace" fontSize="8.5" letterSpacing="1.8">
-        <text x="50" y="246">manual fragments / image</text>
-        <text x="50" y="258">noise / broken grids</text>
-      </g>
-      <g transform="rotate(90 250 190)" fill="#111" fontFamily="'Archivo Black', sans-serif" fontSize="11">
-        <text x="232" y="190">legibility is not neutral</text>
-      </g>
-      <rect x="20" y="327" width="232" height="11" fill="#111" transform="rotate(-1 136 332)" />
+    <svg className="home-wreck-art" viewBox={`0 0 ${W} ${H}`} aria-hidden="true" focusable="false">
+      <rect width={W} height={H} fill={CARSON_PAPER} />
+      {specs.map((spec) => {
+        const style = { mixBlendMode: spec.blend === 'multiply' ? 'multiply' : 'normal' } as const
+        const opacity = spec.opacity ?? 1
+        if (spec.type === 'line') {
+          return (
+            <line key={spec.name} x1={spec.x1} y1={spec.y1} x2={spec.x2} y2={spec.y2} stroke={spec.stroke} strokeWidth={spec.strokeWidth} opacity={opacity} />
+          )
+        }
+        if (spec.type === 'rect') {
+          return (
+            <rect
+              key={spec.name}
+              x={spec.left}
+              y={spec.top}
+              width={spec.width}
+              height={spec.height}
+              fill={spec.fill}
+              opacity={opacity}
+              style={style}
+              transform={spec.angle ? `rotate(${spec.angle} ${spec.left} ${spec.top})` : undefined}
+            />
+          )
+        }
+        if (spec.type === 'polygon') {
+          const pivotX = Math.min(...spec.points.map((point) => point.x))
+          const pivotY = Math.min(...spec.points.map((point) => point.y))
+          return (
+            <polygon
+              key={spec.name}
+              points={spec.points.map((point) => `${point.x},${point.y}`).join(' ')}
+              fill={spec.fill}
+              opacity={opacity}
+              style={style}
+              transform={spec.angle ? `rotate(${spec.angle} ${pivotX} ${pivotY})` : undefined}
+            />
+          )
+        }
+        // Fabric puts the first baseline ~0.88em below the box top and steps lines by 1.13 × lineHeight.
+        const step = spec.fontSize * 1.13 * spec.lineHeight
+        const first = spec.top + spec.fontSize * 0.88
+        return (
+          <text
+            key={spec.name}
+            fill={spec.fill}
+            opacity={opacity}
+            style={style}
+            fontFamily={spec.fontFamily}
+            fontSize={spec.fontSize}
+            fontWeight={spec.fontWeight}
+            letterSpacing={(spec.charSpacing / 1000) * spec.fontSize}
+            transform={spec.angle ? `rotate(${spec.angle} ${spec.left} ${spec.top})` : undefined}
+          >
+            {wrapLines(spec).map((textLine, index) => (
+              <tspan key={index} x={spec.left} y={first + index * step}>
+                {textLine}
+              </tspan>
+            ))}
+          </text>
+        )
+      })}
     </svg>
   )
 }
@@ -124,7 +204,7 @@ export function HomeScreen({
           {onOpenPoster ? (
             <button type="button" className="home-ghost-button" onClick={onOpenPoster} title="Open a saved poster (⌘O)">
               <FolderOpen size={14} aria-hidden />
-              Open poster
+              <span className="home-button-label">Open poster</span>
             </button>
           ) : null}
           <button type="button" className="primary-button" onClick={onNewPoster} title="Pick any size (⌘N)">
@@ -136,17 +216,16 @@ export function HomeScreen({
 
       <section className="home-body" aria-label="Home">
         <div className="home-hero">
-          <div className="home-hero-copy">
-            <p className="home-kicker">Start something</p>
-            <h2 className="home-display">
-              Make a mess on&nbsp;purpose.
-            </h2>
-            <p className="home-lede">
-              Type, image, and accident as materials. Every treatment stays editable, every roll of the dice has a seed, and
-              everything prints.
-            </p>
-          </div>
+          <h2 className="home-display">Make a mess on&nbsp;purpose.</h2>
+          <p className="home-lede">
+            Type, image, and accident as materials. Every treatment stays editable, and everything prints.
+          </p>
+        </div>
 
+        <div className="home-section">
+          <div className="home-section-head">
+            <h2>New poster</h2>
+          </div>
           <div className="home-starts" role="list" aria-label="Start a poster">
             <div role="listitem" className="home-start-wreck-item">
               <button type="button" className="home-start home-start-wreck" aria-label="Start from wreck" onClick={onStartFromWreck}>
@@ -157,7 +236,6 @@ export function HomeScreen({
                   <strong>Wreck this poster</strong>
                   <small>A finished layout to take apart</small>
                 </span>
-                <ArrowUpRight className="home-start-arrow" size={16} aria-hidden />
               </button>
             </div>
             {onStartPreset
@@ -186,7 +264,9 @@ export function HomeScreen({
                   aria-label="Start from an image"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <ImagePlus size={18} aria-hidden />
+                  <span className="home-start-icon" aria-hidden>
+                    <ImagePlus size={18} />
+                  </span>
                   <span className="home-start-copy">
                     <strong>Start from an image</strong>
                     <small>Drop a photo anywhere, or browse</small>
@@ -210,7 +290,7 @@ export function HomeScreen({
           </div>
         </div>
 
-        <div className="home-recents">
+        <div className="home-section home-recents">
           <div className="home-section-head">
             <h2>Recent</h2>
             {!loading && projects.length ? <span className="home-count">{projects.length}</span> : null}

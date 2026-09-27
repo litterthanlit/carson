@@ -231,6 +231,7 @@ import {
   writeComponentOverrides,
 } from './lib/components'
 import { reviveSerializedObject } from './lib/fabricRevive'
+import { buildCarsonPoster, CARSON_PAPER, CARSON_POSTER_FONTS } from './lib/carsonPoster'
 import {
   applyCharacterStyleToText,
   applyParagraphStyleToText,
@@ -737,6 +738,8 @@ function App() {
           if (intent.image) await handleImageFile(intent.image, { fill: true })
           return
         }
+        await ensureLibraryFonts(CARSON_POSTER_FONTS)
+        if (cancelled || canvasRef.current !== canvas) return
         seedPoster(canvas, poster)
         if (cancelled || canvasRef.current !== canvas) return
         setDocumentMeta(createDefaultDocument(poster, canvas.toObject(HISTORY_PROPS as unknown as string[])))
@@ -1392,105 +1395,64 @@ function App() {
   tagObjectRef.current = tagObject
 
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
-    const headline = new Textbox('RAY GUN\nCUT TYPE', {
-      left: currentPoster.width * 0.09,
-      top: currentPoster.height * 0.11,
-      width: currentPoster.width * 0.78,
-      fontFamily: 'Impact',
-      fontSize: Math.round(currentPoster.width * 0.13),
-      fontWeight: 900,
-      lineHeight: 0.78,
-      charSpacing: -35,
-      fill: '#161616',
-      angle: -6,
-    })
-    tagObject(headline, 'text', 'Oversized headline')
+    // A layered David Carson-style collage (see lib/carsonPoster) — the finished
+    // poster the walkthrough then wrecks further. Layer names "Oversized headline"
+    // and "Red interruption" are load-bearing for the walkthrough and verify scripts.
+    const specs = buildCarsonPoster(currentPoster.width, currentPoster.height)
+    const objects: FabricObject[] = []
+    let headline: FabricObject | null = null
+    for (const spec of specs) {
+      const shared = {
+        angle: spec.angle ?? 0,
+        opacity: spec.opacity ?? 1,
+        globalCompositeOperation: spec.blend ?? 'source-over',
+      }
+      if (spec.type === 'text') {
+        const object = new Textbox(spec.text, {
+          ...shared,
+          left: spec.left,
+          top: spec.top,
+          width: spec.width,
+          fontFamily: spec.fontFamily,
+          fontSize: spec.fontSize,
+          fontWeight: spec.fontWeight,
+          lineHeight: spec.lineHeight,
+          charSpacing: spec.charSpacing,
+          fill: spec.fill,
+        })
+        tagObject(object, 'text', spec.name)
+        if (spec.name === 'Oversized headline') headline = object
+        objects.push(object)
+      } else if (spec.type === 'rect') {
+        const object = new Rect({
+          ...shared,
+          left: spec.left,
+          top: spec.top,
+          width: spec.width,
+          height: spec.height,
+          fill: spec.fill,
+          strokeWidth: 0,
+        })
+        tagObject(object, 'shape', spec.name)
+        objects.push(object)
+      } else if (spec.type === 'polygon') {
+        const object = new Polygon(spec.points, { ...shared, fill: spec.fill, strokeWidth: 0 })
+        tagObject(object, 'shape', spec.name)
+        objects.push(object)
+      } else {
+        const object = new Line([spec.x1, spec.y1, spec.x2, spec.y2], {
+          ...shared,
+          stroke: spec.stroke,
+          strokeWidth: spec.strokeWidth,
+        })
+        tagObject(object, 'shape', spec.name)
+        objects.push(object)
+      }
+    }
 
-    const bar = new Rect({
-      left: currentPoster.width * 0.13,
-      top: currentPoster.height * 0.48,
-      width: currentPoster.width * 0.72,
-      height: Math.max(18, currentPoster.height * 0.045),
-      fill: '#e11d48',
-      angle: 3,
-      opacity: 0.92,
-    })
-    tagObject(bar, 'shape', 'Red interruption')
-
-    const deck = new Textbox('manual fragments / image noise / broken grids', {
-      left: currentPoster.width * 0.17,
-      top: currentPoster.height * 0.57,
-      width: currentPoster.width * 0.48,
-      fontFamily: 'Courier New',
-      fontSize: Math.round(currentPoster.width * 0.028),
-      lineHeight: 1.1,
-      charSpacing: 80,
-      fill: '#27272a',
-      angle: 8,
-    })
-    tagObject(deck, 'text', 'Small mono deck')
-
-    const labelBand = new Rect({
-      left: currentPoster.width * 0.07,
-      top: currentPoster.height * 0.78,
-      width: currentPoster.width * 0.78,
-      height: Math.max(22, currentPoster.height * 0.025),
-      fill: '#111111',
-      angle: -1,
-    })
-    tagObject(labelBand, 'shape', 'Black label band')
-
-    const label = new Textbox('CONNWAX MANIAC / LOW VELOCITY SOUNDSYSTEM / CONNWAX MANIAC', {
-      left: currentPoster.width * 0.08,
-      top: currentPoster.height * 0.785,
-      width: currentPoster.width * 0.76,
-      fontFamily: 'Arial Black',
-      fontSize: Math.round(currentPoster.width * 0.018),
-      fontWeight: 900,
-      charSpacing: -25,
-      fill: '#f8f6ef',
-      angle: -1,
-    })
-    tagObject(label, 'text', 'Repeated label')
-
-    const cyanScrap = new Rect({
-      left: currentPoster.width * 0.58,
-      top: currentPoster.height * 0.34,
-      width: currentPoster.width * 0.16,
-      height: currentPoster.height * 0.24,
-      fill: ACCENTS[0],
-      opacity: 0.42,
-      angle: 4,
-      globalCompositeOperation: 'multiply',
-    })
-    tagObject(cyanScrap, 'shape', 'Cyan scan scrap')
-
-    const limeRule = new Rect({
-      left: currentPoster.width * 0.06,
-      top: currentPoster.height * 0.31,
-      width: currentPoster.width * 0.74,
-      height: 2,
-      fill: ACCENTS[2],
-      opacity: 0.65,
-      angle: -11,
-    })
-    tagObject(limeRule, 'shape', 'Acid rule')
-
-    const sideType = new Textbox('legibility\nis not\nneutral', {
-      left: currentPoster.width * 0.79,
-      top: currentPoster.height * 0.4,
-      width: currentPoster.width * 0.16,
-      fontFamily: 'Arial Black',
-      fontSize: Math.round(currentPoster.width * 0.035),
-      fontWeight: 900,
-      lineHeight: 0.82,
-      fill: '#111111',
-      angle: 90,
-    })
-    tagObject(sideType, 'text', 'Rotated side type')
-
-    canvas.add(headline, cyanScrap, bar, deck, limeRule, labelBand, label, sideType)
-    canvas.setActiveObject(headline)
+    canvas.backgroundColor = CARSON_PAPER
+    canvas.add(...objects)
+    if (headline) canvas.setActiveObject(headline)
     captureStyleBaseline()
     syncSelected()
     syncLayers()
