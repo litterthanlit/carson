@@ -231,6 +231,7 @@ import {
   writeComponentOverrides,
 } from './lib/components'
 import { reviveSerializedObject } from './lib/fabricRevive'
+import { buildSwissPoster, SWISS } from './lib/swissPoster'
 import {
   applyCharacterStyleToText,
   applyParagraphStyleToText,
@@ -1392,105 +1393,66 @@ function App() {
   tagObjectRef.current = tagObject
 
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
-    const headline = new Textbox('RAY GUN\nCUT TYPE', {
-      left: currentPoster.width * 0.09,
-      top: currentPoster.height * 0.11,
-      width: currentPoster.width * 0.78,
-      fontFamily: 'Impact',
-      fontSize: Math.round(currentPoster.width * 0.13),
-      fontWeight: 900,
-      lineHeight: 0.78,
-      charSpacing: -35,
-      fill: '#161616',
-      angle: -6,
-    })
-    tagObject(headline, 'text', 'Oversized headline')
+    // A clean Swiss grid poster (see lib/swissPoster) — the finished layout the
+    // walkthrough then wrecks. Layer names "Oversized headline" and
+    // "Red interruption" are load-bearing for the walkthrough and verify scripts.
+    const measureHeadline = (text: string, fontSize: number) => {
+      const probe = new Textbox(text, {
+        width: currentPoster.width * 4,
+        fontFamily: SWISS.font,
+        fontSize,
+        fontWeight: 700,
+        charSpacing: -30,
+      })
+      return probe.getLineWidth(0)
+    }
+    const specs = buildSwissPoster(currentPoster.width, currentPoster.height, measureHeadline)
+    const objects: FabricObject[] = []
+    let headline: FabricObject | null = null
+    for (const spec of specs) {
+      if (spec.type === 'text') {
+        const object = new Textbox(spec.text, {
+          left: spec.left,
+          top: spec.top,
+          width: spec.width,
+          fontFamily: SWISS.font,
+          fontSize: spec.fontSize,
+          fontWeight: spec.fontWeight,
+          lineHeight: spec.lineHeight,
+          charSpacing: spec.charSpacing,
+          fill: spec.fill,
+          textAlign: spec.textAlign,
+          styles: spec.styles ?? {},
+        })
+        tagObject(object, 'text', spec.name)
+        if (spec.name === 'Oversized headline') headline = object
+        objects.push(object)
+      } else if (spec.type === 'rect') {
+        const object = new Rect({
+          left: spec.left,
+          top: spec.top,
+          width: spec.width,
+          height: spec.height,
+          fill: spec.fill,
+          strokeWidth: 0,
+        })
+        tagObject(object, 'shape', spec.name)
+        objects.push(object)
+      } else {
+        const object = new Path(spec.d, {
+          fill: spec.fill,
+          stroke: spec.stroke,
+          strokeWidth: spec.strokeWidth,
+          strokeLineCap: 'butt',
+        })
+        tagObject(object, 'shape', spec.name)
+        objects.push(object)
+      }
+    }
 
-    const bar = new Rect({
-      left: currentPoster.width * 0.13,
-      top: currentPoster.height * 0.48,
-      width: currentPoster.width * 0.72,
-      height: Math.max(18, currentPoster.height * 0.045),
-      fill: '#e11d48',
-      angle: 3,
-      opacity: 0.92,
-    })
-    tagObject(bar, 'shape', 'Red interruption')
-
-    const deck = new Textbox('manual fragments / image noise / broken grids', {
-      left: currentPoster.width * 0.17,
-      top: currentPoster.height * 0.57,
-      width: currentPoster.width * 0.48,
-      fontFamily: 'Courier New',
-      fontSize: Math.round(currentPoster.width * 0.028),
-      lineHeight: 1.1,
-      charSpacing: 80,
-      fill: '#27272a',
-      angle: 8,
-    })
-    tagObject(deck, 'text', 'Small mono deck')
-
-    const labelBand = new Rect({
-      left: currentPoster.width * 0.07,
-      top: currentPoster.height * 0.78,
-      width: currentPoster.width * 0.78,
-      height: Math.max(22, currentPoster.height * 0.025),
-      fill: '#111111',
-      angle: -1,
-    })
-    tagObject(labelBand, 'shape', 'Black label band')
-
-    const label = new Textbox('CONNWAX MANIAC / LOW VELOCITY SOUNDSYSTEM / CONNWAX MANIAC', {
-      left: currentPoster.width * 0.08,
-      top: currentPoster.height * 0.785,
-      width: currentPoster.width * 0.76,
-      fontFamily: 'Arial Black',
-      fontSize: Math.round(currentPoster.width * 0.018),
-      fontWeight: 900,
-      charSpacing: -25,
-      fill: '#f8f6ef',
-      angle: -1,
-    })
-    tagObject(label, 'text', 'Repeated label')
-
-    const cyanScrap = new Rect({
-      left: currentPoster.width * 0.58,
-      top: currentPoster.height * 0.34,
-      width: currentPoster.width * 0.16,
-      height: currentPoster.height * 0.24,
-      fill: ACCENTS[0],
-      opacity: 0.42,
-      angle: 4,
-      globalCompositeOperation: 'multiply',
-    })
-    tagObject(cyanScrap, 'shape', 'Cyan scan scrap')
-
-    const limeRule = new Rect({
-      left: currentPoster.width * 0.06,
-      top: currentPoster.height * 0.31,
-      width: currentPoster.width * 0.74,
-      height: 2,
-      fill: ACCENTS[2],
-      opacity: 0.65,
-      angle: -11,
-    })
-    tagObject(limeRule, 'shape', 'Acid rule')
-
-    const sideType = new Textbox('legibility\nis not\nneutral', {
-      left: currentPoster.width * 0.79,
-      top: currentPoster.height * 0.4,
-      width: currentPoster.width * 0.16,
-      fontFamily: 'Arial Black',
-      fontSize: Math.round(currentPoster.width * 0.035),
-      fontWeight: 900,
-      lineHeight: 0.82,
-      fill: '#111111',
-      angle: 90,
-    })
-    tagObject(sideType, 'text', 'Rotated side type')
-
-    canvas.add(headline, cyanScrap, bar, deck, limeRule, labelBand, label, sideType)
-    canvas.setActiveObject(headline)
+    canvas.backgroundColor = SWISS.paper
+    canvas.add(...objects)
+    if (headline) canvas.setActiveObject(headline)
     captureStyleBaseline()
     syncSelected()
     syncLayers()

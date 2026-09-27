@@ -41,26 +41,79 @@ function PosterThumb({ project, recovered }: { project: StoredProject; recovered
   )
 }
 
-/** A tiny vector echo of the wreck poster, so the card shows what it starts. */
+/**
+ * A vector echo of the seed poster (lib/swissPoster) at A3 millimetres: the
+ * same 12-column grid, folio, RAY GUN masthead with its red full stop,
+ * numerals band and transit line.
+ */
 function WreckArt() {
+  const ink = '#0a0a0a'
+  const soft = '#5b6066'
+  const font = "Helvetica, 'Helvetica Neue', Arial, sans-serif"
+  const stations: [number, string, string][] = [
+    [20.8, 'Scatter', 'Throw it'],
+    [86.2, 'Xerox', 'Copy it'],
+    [151.6, 'Re-roll', 'Roll again'],
+    [217, 'Undo', 'Walk it back'],
+  ]
+  const materials: [number, string, string][] = [
+    [20.8, '01', 'Type'],
+    [108, '02', 'Grid'],
+    [195.2, '03', 'Accident'],
+  ]
   return (
     <svg className="home-wreck-art" viewBox="0 0 297 420" aria-hidden="true" focusable="false">
-      <rect width="297" height="420" fill="#f6f1e6" />
-      <rect x="172" y="143" width="48" height="100" fill="#05b6d4" opacity="0.42" transform="rotate(4 196 193)" />
-      <rect x="18" y="130" width="220" height="1.2" fill="#a3e635" transform="rotate(-11 128 130)" />
-      <g transform="rotate(-6 140 80)" fill="#161616" fontFamily="'Archivo Black', Impact, sans-serif" fontSize="40" letterSpacing="-1.5">
-        <text x="26" y="78">RAY GUN</text>
-        <text x="30" y="112">CUT TYPE</text>
+      <rect width="297" height="420" fill="#ffffff" />
+      <g fontFamily={font} fontSize="3.9">
+        <text x="20.8" y="24.2" fill={ink}>Issue 01</text>
+        <text x="108" y="24.2" fill={soft}>A poster made to be taken apart</text>
+        <text x="276.2" y="24.2" fill={soft} textAnchor="end">Autumn 2026</text>
       </g>
-      <rect x="38" y="200" width="214" height="19" fill="#e11d48" opacity="0.92" transform="rotate(3 145 210)" />
-      <g transform="rotate(8 110 250)" fill="#27272a" fontFamily="'Courier New', monospace" fontSize="8.5" letterSpacing="1.8">
-        <text x="50" y="246">manual fragments / image</text>
-        <text x="50" y="258">noise / broken grids</text>
+      <rect x="20.8" y="28.8" width="255.4" height="0.7" fill={ink} />
+      {/* textLength pins the masthead to its measured width so the red stop lands after the N in any fallback font. */}
+      <text
+        x="20.8"
+        y="92"
+        fill={ink}
+        fontFamily={font}
+        fontSize="55"
+        fontWeight="700"
+        textLength="210"
+        lengthAdjust="spacingAndGlyphs"
+      >
+        RAY GUN
+      </text>
+      <rect x="236.5" y="83.7" width="8.3" height="8.3" fill="#e4002b" />
+      <text fill={ink} fontFamily={font} fontSize="5.9">
+        <tspan x="20.8" y="124">Legibility is not neutral. A clean Swiss layout on a</tspan>
+        <tspan x="20.8" y="131.7">twelve-column grid, built to be taken apart one accident</tspan>
+        <tspan x="20.8" y="139.4">at a time.</tspan>
+      </text>
+      <g fontFamily={font} fill={ink}>
+        {materials.map(([x, numeral, title]) => (
+          <g key={numeral}>
+            <text x={x} y="290" fontSize="17.8" fontWeight="700">{numeral}</text>
+            <text x={x} y="300.5" fontSize="5" fontWeight="700">{title}</text>
+            <rect x={x} y="304" width="44" height="1.4" fill={soft} opacity="0.5" />
+            <rect x={x} y="309" width="34" height="1.4" fill={soft} opacity="0.5" />
+          </g>
+        ))}
       </g>
-      <g transform="rotate(90 250 190)" fill="#111" fontFamily="'Archivo Black', sans-serif" fontSize="11">
-        <text x="232" y="190">legibility is not neutral</text>
+      <rect x="20.8" y="344.4" width="255.4" height="0.8" fill={ink} />
+      <g fontFamily={font} fontSize="5">
+        {stations.map(([x, label, verb]) => (
+          <g key={label}>
+            <circle cx={x + 2.5} cy="344.8" r="2.5" fill={ink} />
+            <text x={x} y="358.1" fill={ink} fontWeight="700">{label}</text>
+            <text x={x} y="364.3" fill={soft}>{verb}</text>
+          </g>
+        ))}
       </g>
-      <rect x="20" y="327" width="232" height="11" fill="#111" transform="rotate(-1 136 332)" />
+      <rect x="20.8" y="389.3" width="255.4" height="0.35" fill={ink} />
+      <g fontFamily={font} fontSize="5" fill={soft}>
+        <text x="20.8" y="397.9">Set in Helvetica on a twelve-column grid. One red full stop.</text>
+        <text x="276.2" y="397.9" textAnchor="end">Made in Carson</text>
+      </g>
     </svg>
   )
 }
