@@ -28,6 +28,8 @@ import {
   type PosterPresetId,
 } from './lib/editorModel'
 import { createSeededRandom, newSeed } from './lib/random'
+import { serializeHistorySnapshot } from './lib/historySnapshot'
+import { runWhenIdle } from './lib/idle'
 import { layerStyleScale, readLayerStyle, scaledLayerStyleDefaults, writeLayerStyle, type LayerStyle, type LayerStyleKind } from './lib/layerStyles'
 import { applyBackstore, backstoreScale, installDynamicBackstore } from './lib/backstoreScale'
 import {
@@ -697,7 +699,7 @@ function App() {
           captureStyleBaseline()
           syncSelected()
           syncLayers()
-          resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
+          resetHistory(serializeHistorySnapshot(canvas, HISTORY_PROPS), 'Started a new poster')
           markSavedClean(true)
           setStatus('Started a new poster')
           if (intent.image) await handleImageFile(intent.image, { fill: true })
@@ -709,7 +711,7 @@ function App() {
         captureStyleBaseline()
         syncSelected()
         syncLayers()
-        resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
+        resetHistory(serializeHistorySnapshot(canvas, HISTORY_PROPS), 'Started a new poster')
         markSavedClean(true)
         setStatus('Started a new poster')
         if (intent.walkthrough) startWalkthrough()
@@ -1159,8 +1161,28 @@ function App() {
       const next = clampZoom(current * Math.exp(-event.deltaY * 0.0015))
       zoomAround(next, { x: event.clientX, y: event.clientY })
     }
+    // WebKit (Safari, the macOS WKWebView shell) reports trackpad pinch as gesture
+    // events rather than ctrl+wheel.
+    let gestureStart = 1
+    const onGestureStart = (event: Event) => {
+      event.preventDefault()
+      gestureStart = liveRef.current.zoom ?? liveRef.current.fitScale
+    }
+    const onGestureChange = (event: Event) => {
+      event.preventDefault()
+      const gesture = event as Event & { scale?: number; clientX?: number; clientY?: number }
+      if (!gesture.scale) return
+      const point = gesture.clientX != null && gesture.clientY != null ? { x: gesture.clientX, y: gesture.clientY } : undefined
+      zoomAround(clampZoom(gestureStart * gesture.scale), point)
+    }
     scroller.addEventListener('wheel', onWheel, { passive: false })
-    return () => scroller.removeEventListener('wheel', onWheel)
+    scroller.addEventListener('gesturestart', onGestureStart)
+    scroller.addEventListener('gesturechange', onGestureChange)
+    return () => {
+      scroller.removeEventListener('wheel', onWheel)
+      scroller.removeEventListener('gesturestart', onGestureStart)
+      scroller.removeEventListener('gesturechange', onGestureChange)
+    }
   }, [screen])
 
   function applyZoomAnchor(scale: number) {
@@ -1431,7 +1453,7 @@ function App() {
     if (screenRef.current !== 'editor') return
     markSavedClean(false)
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
-    autosaveTimerRef.current = window.setTimeout(() => {
+    autosaveTimerRef.current = window.setTimeout(() => runWhenIdle(() => {
       const canvas = canvasRef.current
       if (!canvas || screenRef.current !== 'editor') return
       const { poster: currentPoster, projectName: currentName } = liveRef.current
@@ -1445,7 +1467,7 @@ function App() {
         })
         await saveAutosave(snapshot)
       })().catch(() => setStatus('Autosave failed — storage may be full'))
-    }, 2500)
+    }), 2500)
   }
 
   function scheduleSyncLayers() {
@@ -2993,8 +3015,8 @@ function App() {
       setStatus('That file is not an image')
       return
     }
-    let width = 1200
-    let height = 1600
+    let width: number
+    let height: number
     try {
       const bitmap = await createImageBitmap(file)
       width = bitmap.width
@@ -4295,7 +4317,7 @@ function App() {
     await reconcileArtifactTreatments()
     await refreshPosterTreatments()
     canvas.requestRenderAll()
-    resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), `Loaded ${project.name}`)
+    resetHistory(serializeHistorySnapshot(canvas, HISTORY_PROPS), `Loaded ${project.name}`)
     lastChaosRef.current = null
     setLastChaos(null)
     captureStyleBaseline()

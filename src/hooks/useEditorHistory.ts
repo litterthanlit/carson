@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { parseHistorySnapshot, serializeHistorySnapshot } from '../lib/historySnapshot'
 import type { Canvas } from 'fabric'
 import type { MutableRefObject, RefObject } from 'react'
 import { HISTORY_PROPS } from '../lib/editorConstants'
@@ -90,7 +91,7 @@ export function useEditorHistory({
       const canvas = canvasRef.current
       if (!canvas) return
       restoringRef.current = true
-      const parsed = JSON.parse(snapshot) as Record<string, unknown>
+      const parsed = parseHistorySnapshot(snapshot)
       await ensureLibraryFonts(collectFontFamilies(parsed))
       await withLayerSyncSuppressed(async () => {
         await canvas.loadFromJSON(parsed)
@@ -174,7 +175,7 @@ export function useEditorHistory({
     (message: string) => {
       const canvas = canvasRef.current
       if (!canvas || restoringRef.current) return
-      const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
+      const snapshot = serializeHistorySnapshot(canvas, HISTORY_PROPS)
       const lastOp = historyLogRef.current.ops[historyLogRef.current.cursor]
       if (lastOp?.type === 'snapshot' && lastOp.data === snapshot) {
         syncSelected()
@@ -204,7 +205,7 @@ export function useEditorHistory({
       if ('before' in op && 'after' in op && op.before === op.after) return
 
       if (shouldSnapshot(historyLogRef.current)) {
-        const snapshot = JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[]))
+        const snapshot = serializeHistorySnapshot(canvas, HISTORY_PROPS)
         historyLogRef.current = pushHistoryOp(historyLogRef.current, {
           type: 'snapshot',
           label,
