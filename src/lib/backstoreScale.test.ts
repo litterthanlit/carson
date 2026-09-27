@@ -29,3 +29,28 @@ describe('backstoreScale', () => {
     expect(backstoreScale(Number.NaN, 0, 1000, 1000)).toBeGreaterThan(0)
   })
 })
+
+describe('installDynamicBackstore', () => {
+  it('reports 1× while Fabric has retina scaling disabled (export path)', async () => {
+    const { installDynamicBackstore } = await import('./backstoreScale')
+    const fake = {
+      enableRetinaScaling: true,
+      width: 1000,
+      height: 1000,
+      getWidth() {
+        return this.width
+      },
+      getHeight() {
+        return this.height
+      },
+      setDimensions() {},
+      getRetinaScaling: () => 2,
+      lowerCanvasEl: { width: 0, height: 0 } as HTMLCanvasElement,
+      getContext: () => ({ setTransform() {} }) as unknown as CanvasRenderingContext2D,
+    }
+    installDynamicBackstore(fake, () => 0.25)
+    expect(fake.getRetinaScaling()).toBe(0.25)
+    fake.enableRetinaScaling = false
+    expect(fake.getRetinaScaling()).toBe(1)
+  })
+})

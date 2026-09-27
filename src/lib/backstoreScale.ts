@@ -37,6 +37,7 @@ export function backstoreScale(
 }
 
 type BackstoreCanvas = {
+  enableRetinaScaling?: boolean
   getWidth(): number
   getHeight(): number
   setDimensions(size: { width: number; height: number }): void
@@ -57,7 +58,10 @@ type BackstoreCanvas = {
  * `element.width / cssWidth`; text-edit textarea placement uses the same ratio.
  */
 export function installDynamicBackstore(canvas: BackstoreCanvas, readScale: () => number) {
-  canvas.getRetinaScaling = readScale
+  // Honor `enableRetinaScaling`: Fabric turns it off while exporting
+  // (`toCanvasElement`), and object caches must then size to the export multiplier
+  // alone, not to the on-screen backing store.
+  canvas.getRetinaScaling = () => (canvas.enableRetinaScaling === false ? 1 : readScale())
   applyBackstore(canvas)
 }
 
