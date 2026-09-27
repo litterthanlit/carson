@@ -13,10 +13,10 @@ describe('NewPosterDialog', () => {
     render(<NewPosterDialog open onCreate={onCreate} onClose={vi.fn()} />)
 
     expect(screen.getByRole('dialog', { name: 'New poster' })).toBeTruthy()
-    await user.click(screen.getByRole('option', { name: /Instagram portrait/ }))
+    await user.click(screen.getByRole('option', { name: /Horizontal/ }))
     await user.click(screen.getByRole('button', { name: 'Create poster' }))
 
-    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 'instagram', width: 1080, height: 1350 }))
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ id: 'horizontal', width: 4961, height: 3508 }))
   })
 
   it('accepts a custom size', async () => {

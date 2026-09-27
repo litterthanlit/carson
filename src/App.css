@@ -2970,7 +2970,7 @@ label:has(> input[type='radio']) {
   color: var(--text-muted);
 }
 
-/* Four columns: the wreck card takes a 2×2 block, presets and "from image" fill the rest. */
+/* Four columns: the wreck card takes a 2×2 block; Vertical + Horizontal sit side by side, "from image" spans below them. */
 .home-starts {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2981,6 +2981,10 @@ label:has(> input[type='radio']) {
 .home-start-wreck-item {
   grid-column: span 2;
   grid-row: span 2;
+}
+
+.home-start-image-item {
+  grid-column: span 2;
 }
 
 .home-start {
@@ -4100,4 +4104,40 @@ input[type='checkbox']:disabled {
   background: var(--accent);
   outline: 2px solid #fff;
   outline-offset: 1px;
+}
+
+.canvas-drop-overlay {
+  position: absolute;
+  inset: 12px;
+  z-index: 40;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  pointer-events: none;
+  color: var(--text);
+  font-size: 14px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1.5px dashed var(--accent);
+  border-radius: 14px;
+  backdrop-filter: blur(2px);
+  animation: canvas-drop-in 140ms ease-out;
+}
+
+.canvas-drop-overlay small {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+@keyframes canvas-drop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-drop-overlay {
+    animation: none;
+  }
 }

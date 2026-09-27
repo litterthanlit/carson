@@ -134,8 +134,8 @@ describe('HomeScreen start cards', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: /^Instagram/ }))
-    expect(onStartPreset).toHaveBeenCalledWith('instagram')
+    await user.click(screen.getByRole('button', { name: /^Horizontal/ }))
+    expect(onStartPreset).toHaveBeenCalledWith('horizontal')
 
     const file = new File(['x'], 'photo.png', { type: 'image/png' })
     const input = container.querySelector('input[type="file"]') as HTMLInputElement

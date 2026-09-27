@@ -21,10 +21,8 @@ export function blankPosterCanvas(background = '#f6f1e6'): Record<string, unknow
 
 export function newPosterChoices(): NewPosterChoice[] {
   return [
-    { id: 'a3', label: 'A3 portrait', intent: 'Print', detail: '297 × 420 mm · 300 dpi' },
-    { id: 'a2', label: 'A2 portrait', intent: 'Print', detail: '420 × 594 mm · 300 dpi' },
-    { id: 'instagram', label: 'Instagram portrait', intent: 'Screen', detail: '1080 × 1350 px' },
-    { id: 'square', label: 'Square', intent: 'Screen', detail: '1600 × 1600 px' },
+    { id: 'vertical', label: 'Vertical', intent: 'Print', detail: '297 × 420 mm · 300 dpi' },
+    { id: 'horizontal', label: 'Horizontal', intent: 'Print', detail: '420 × 297 mm · 300 dpi' },
     { id: 'custom', label: 'Custom', intent: 'Custom', detail: 'Choose width and height' },
   ]
 }

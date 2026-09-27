@@ -1,9 +1,10 @@
-import { memo, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from 'react'
+import { memo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import { LayoutGuidesOverlay } from './LayoutGuidesOverlay'
 import { ViewportRulers } from './ViewportRulers'
 import type { LayoutGuide } from '../lib/grid'
-import { Dices, Grid3x3, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
-import type { PosterPreset, PosterPresetId } from '../lib/editorModel'
+import { Dices, Grid3x3, ImagePlus, Maximize, RotateCcw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react'
+import { getPosterPreset, type PosterPreset, type PosterPresetId } from '../lib/editorModel'
+import { POSTER_PRESET_OPTIONS } from '../lib/editorConstants'
 import type { DocumentMeta } from '../lib/document'
 import { ExplorationTrail } from './ExplorationTrail'
 import type { TrailFrame } from '../lib/explorationTrail'
@@ -39,6 +40,10 @@ type EditorCanvasProps = {
   onPanMouseUp: () => void
   onAssetDrop: (assetId: string) => void
   onComponentDrop: (componentId: string) => void
+  /** Image files dropped from the desktop; `point` is in poster pixels (null if off-canvas). */
+  onImageFilesDrop: (files: File[], point: { x: number; y: number } | null) => void
+  /** Rotate the whole poster (page + every layer) a quarter turn. */
+  onRotatePoster: (direction: 1 | -1) => void
   trailFrames: TrailFrame[]
   trailOpIds: string[]
   trailCursor: number
@@ -53,6 +58,22 @@ type EditorCanvasProps = {
   onAddLayoutGuide: (axis: 'v' | 'h', position: number) => void
   onMoveLayoutGuide: (id: string, position: number) => void
   onRemoveLayoutGuide: (id: string) => void
+}
+
+/** Vertical / Horizontal (+ Custom), plus the current size when it is a legacy named preset. */
+function PresetOptions({ current, includeCustom = true }: { current: PosterPresetId; includeCustom?: boolean }) {
+  const options = POSTER_PRESET_OPTIONS.filter((option) => includeCustom || option.id !== 'custom')
+  const legacy = options.some((option) => option.id === current) ? null : getPosterPreset(current)
+  return (
+    <>
+      {options.map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.label}
+        </option>
+      ))}
+      {legacy ? <option value={legacy.id}>{legacy.name}</option> : null}
+    </>
+  )
 }
 
 export const EditorCanvas = memo(function EditorCanvas({
@@ -84,6 +105,8 @@ export const EditorCanvas = memo(function EditorCanvas({
   onPanMouseUp,
   onAssetDrop,
   onComponentDrop,
+  onImageFilesDrop,
+  onRotatePoster,
   trailFrames,
   trailOpIds,
   trailCursor,
@@ -99,8 +122,28 @@ export const EditorCanvas = memo(function EditorCanvas({
   onMoveLayoutGuide,
   onRemoveLayoutGuide,
 }: EditorCanvasProps) {
+  const dragDepth = useRef(0)
+  const [fileDropActive, setFileDropActive] = useState(false)
+  const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files')
+
+  const dropPoint = (event: DragEvent) => {
+    const rect = canvasEl.current?.getBoundingClientRect()
+    if (!rect || rect.width === 0 || rect.height === 0) return null
+    const x = ((event.clientX - rect.left) / rect.width) * poster.width
+    const y = ((event.clientY - rect.top) / rect.height) * poster.height
+    if (x < 0 || y < 0 || x > poster.width || y > poster.height) return null
+    return { x, y }
+  }
+
   const handleDrop = (event: DragEvent) => {
     event.preventDefault()
+    dragDepth.current = 0
+    setFileDropActive(false)
+    if (hasFiles(event)) {
+      const images = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'))
+      if (images.length) onImageFilesDrop(images, dropPoint(event))
+      return
+    }
     const assetId = event.dataTransfer.getData('text/carson-asset')
     if (assetId) onAssetDrop(assetId)
     const componentId = event.dataTransfer.getData('text/carson-component')
@@ -113,11 +156,7 @@ export const EditorCanvas = memo(function EditorCanvas({
         <label className="stage-size">
           <span className="visually-hidden">Poster size</span>
           <select value={presetId} aria-label="Poster size" onChange={(event) => onPresetChange(event.target.value as PosterPresetId)}>
-            <option value="a3">A3</option>
-            <option value="a2">A2</option>
-            <option value="instagram">IG</option>
-            <option value="square">Square</option>
-            <option value="custom">Custom</option>
+            <PresetOptions current={presetId} />
           </select>
         </label>
         {presetId === 'custom' ? (
@@ -165,10 +204,7 @@ export const EditorCanvas = memo(function EditorCanvas({
                     onChange={(event) => onChangeArtboardPreset(board.id, event.target.value)}
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <option value="a3">A3</option>
-                    <option value="a2">A2</option>
-                    <option value="instagram">IG</option>
-                    <option value="square">Square</option>
+                    <PresetOptions current={board.preset.id} includeCustom={false} />
                   </select>
                 ) : null}
               </span>
@@ -187,6 +223,12 @@ export const EditorCanvas = memo(function EditorCanvas({
           </button>
           <button type="button" className="icon-button" aria-label="Fit poster to view" title="Fit to view (Cmd+0)" onClick={onZoomFit}>
             <Maximize size={15} />
+          </button>
+          <button type="button" className="icon-button" aria-label="Rotate poster left" title="Rotate poster 90° left (Shift+Alt+R)" onClick={() => onRotatePoster(-1)}>
+            <RotateCcw size={15} />
+          </button>
+          <button type="button" className="icon-button" aria-label="Rotate poster right" title="Rotate poster 90° right (Alt+R)" onClick={() => onRotatePoster(1)}>
+            <RotateCw size={15} />
           </button>
           <button
             type="button"
@@ -236,7 +278,20 @@ export const EditorCanvas = memo(function EditorCanvas({
         onMouseMove={onPanMouseMove}
         onMouseUp={onPanMouseUp}
         onMouseLeave={onPanMouseUp}
-        onDragOver={(event) => event.preventDefault()}
+        onDragEnter={(event) => {
+          if (!hasFiles(event)) return
+          dragDepth.current += 1
+          setFileDropActive(true)
+        }}
+        onDragOver={(event) => {
+          event.preventDefault()
+          if (hasFiles(event)) event.dataTransfer.dropEffect = 'copy'
+        }}
+        onDragLeave={(event) => {
+          if (!hasFiles(event)) return
+          dragDepth.current = Math.max(0, dragDepth.current - 1)
+          if (dragDepth.current === 0) setFileDropActive(false)
+        }}
         onDrop={handleDrop}
       >
         <div
@@ -264,6 +319,13 @@ export const EditorCanvas = memo(function EditorCanvas({
           {hud}
         </div>
       </div>
+      {fileDropActive ? (
+        <div className="canvas-drop-overlay" aria-hidden="true">
+          <ImagePlus size={24} strokeWidth={1.5} />
+          <strong>Drop to place on the poster</strong>
+          <small>Images land where you let go</small>
+        </div>
+      ) : null}
       </div>
       <ExplorationTrail
         frames={trailFrames}
