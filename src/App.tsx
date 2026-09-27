@@ -277,7 +277,7 @@ type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 
 type EditorIntent =
   | { kind: 'seed'; walkthrough?: boolean }
-  | { kind: 'blank'; preset: PosterPreset }
+  | { kind: 'blank'; preset: PosterPreset; image?: File }
   | { kind: 'project'; project: StoredProject }
   | { kind: 'autosave'; project: StoredProject }
 
@@ -699,6 +699,7 @@ function App() {
           resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
           markSavedClean(true)
           setStatus('Started a new poster')
+          if (intent.image) await handleImageFile(intent.image, { fill: true })
           return
         }
         seedPoster(canvas, poster)
@@ -2951,10 +2952,32 @@ function App() {
     else setScreen('editor')
   }
 
-  async function requestNewPoster(preset: PosterPreset) {
+  async function requestNewPoster(preset: PosterPreset, image?: File) {
     const allowed = await confirmIfDirty('new')
     if (!allowed) return
-    applyEditorIntent({ kind: 'blank', preset })
+    applyEditorIntent({ kind: 'blank', preset, image })
+  }
+
+  /** New poster sized to an image (long edge capped at 4000px) with the image placed full bleed. */
+  async function startFromImage(file: File) {
+    if (!file.type.startsWith('image/')) {
+      setStatus('That file is not an image')
+      return
+    }
+    let width = 1200
+    let height = 1600
+    try {
+      const bitmap = await createImageBitmap(file)
+      width = bitmap.width
+      height = bitmap.height
+      bitmap.close()
+    } catch {
+      setStatus('Could not read that image')
+      return
+    }
+    const fit = Math.min(1, 4000 / Math.max(width, height))
+    const preset = { ...applyPosterPreset('custom', { width: width * fit, height: height * fit }), dpi: 72 }
+    await requestNewPoster(preset, file)
   }
 
   async function requestOpenProject(project: StoredProject) {
@@ -3282,11 +3305,26 @@ function App() {
     }
   }
 
-  async function handleImageFile(file: File) {
+  async function handleImageFile(file: File, options: { fill?: boolean } = {}) {
     const canvas = canvasRef.current
     if (!canvas) return
     const url = await readFileAsDataUrl(file)
     const image = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
+    if (options.fill) {
+      const scale = coverScale(image.width ?? 1, image.height ?? 1, poster.width, poster.height)
+      image.set({
+        left: (poster.width - (image.width ?? 1) * scale) / 2,
+        top: (poster.height - (image.height ?? 1) * scale) / 2,
+        scaleX: scale,
+        scaleY: scale,
+      })
+      tagObject(image, 'image', file.name)
+      canvas.add(image)
+      canvas.setActiveObject(image)
+      await persistAssetFromFile(file)
+      commitHistory('Placed image')
+      return
+    }
     const maxWidth = poster.width * 0.72
     const maxHeight = poster.height * 0.6
     image.scaleToWidth(Math.min(maxWidth, image.width ?? maxWidth))
@@ -4810,6 +4848,9 @@ function App() {
           onRecoverSession={(project) => void requestRecoverSession(project)}
           onNewPoster={openNewPosterDialog}
           onStartFromWreck={() => void requestStartFromWreck()}
+          onStartPreset={(presetId) => void requestNewPoster(applyPosterPreset(presetId))}
+          onStartFromImage={(file) => void startFromImage(file)}
+          onOpenPoster={openOpenPosterDialog}
         />
       ) : (
         <>

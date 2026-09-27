@@ -113,3 +113,33 @@ describe('HomeScreen', () => {
     expect(onRecoverSession).toHaveBeenCalledWith(recovered)
   })
 })
+
+describe('HomeScreen start cards', () => {
+  it('starts presets directly and starts from a chosen image', async () => {
+    const user = userEvent.setup()
+    const onStartPreset = vi.fn()
+    const onStartFromImage = vi.fn()
+    const { container } = render(
+      <HomeScreen
+        loading={false}
+        storageError={false}
+        projects={[]}
+        recovered={undefined}
+        onOpenProject={vi.fn()}
+        onRecoverSession={vi.fn()}
+        onNewPoster={vi.fn()}
+        onStartFromWreck={vi.fn()}
+        onStartPreset={onStartPreset}
+        onStartFromImage={onStartFromImage}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^Instagram/ }))
+    expect(onStartPreset).toHaveBeenCalledWith('instagram')
+
+    const file = new File(['x'], 'photo.png', { type: 'image/png' })
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, file)
+    expect(onStartFromImage).toHaveBeenCalledWith(file)
+  })
+})
