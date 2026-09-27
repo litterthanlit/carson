@@ -1431,7 +1431,7 @@ input[type='color'] {
 }
 
 .canvas-shell .canvas-container,
-.canvas-shell canvas {
+.canvas-shell canvas:not(.detail-overlay) {
   width: var(--poster-display-width) !important;
   height: var(--poster-display-height) !important;
 }

@@ -36,6 +36,7 @@ import { AdjustmentLayer, readAdjustment } from './lib/adjustmentLayer'
 import { ADJUSTMENT_LABELS, defaultAdjustment, type Adjustment, type AdjustmentType } from './lib/adjustments'
 import { layerStyleScale, readLayerStyle, scaledLayerStyleDefaults, writeLayerStyle, type LayerStyle, type LayerStyleKind } from './lib/layerStyles'
 import { applyBackstore, backstoreScale, installDynamicBackstore } from './lib/backstoreScale'
+import { installDetailOverlay, type DetailOverlay } from './lib/detailOverlay'
 import {
   clearAutosave,
   deleteProject,
@@ -300,6 +301,7 @@ function App() {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const displayScaleRef = useRef(1)
   const backstoreScaleRef = useRef(0)
+  const detailOverlayRef = useRef<DetailOverlay | null>(null)
   const zoomAnchorRef = useRef<{ clientX: number; clientY: number; posterX: number; posterY: number } | null>(null)
   const guidesRef = useRef<{ v: number[]; h: number[] }>({ v: [], h: [] })
   const lastChaosRef = useRef<ChaosRun | null>(null)
@@ -695,6 +697,7 @@ function App() {
     if (import.meta.env.DEV) (window as unknown as { __carsonCanvas?: Canvas }).__carsonCanvas = canvas
     canvasRef.current = canvas
     registerCanvasEvents(canvas)
+    detailOverlayRef.current = installDetailOverlay(canvas, visibleDetailViewport)
 
     const intent = editorIntentRef.current ?? { kind: 'seed' as const }
     let cancelled = false
@@ -735,6 +738,8 @@ function App() {
 
     return () => {
       cancelled = true
+      detailOverlayRef.current?.dispose()
+      detailOverlayRef.current = null
       canvas.dispose()
       canvasRef.current = null
     }
@@ -792,6 +797,10 @@ function App() {
   }, [editorTool, penMode, isPanMode])
 
   useEffect(() => {
+    detailOverlayRef.current?.invalidate()
+  }, [displayScale, poster.width, poster.height])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const next = backstoreScale(displayScale, window.devicePixelRatio || 1, poster.width, poster.height)
@@ -799,6 +808,7 @@ function App() {
     backstoreScaleRef.current = next
     applyBackstore(canvas)
     canvas.requestRenderAll()
+    detailOverlayRef.current?.invalidate()
   }, [displayScale, poster.width, poster.height, screen, editorSession])
 
   useEffect(() => {
@@ -1215,10 +1225,13 @@ function App() {
       const point = gesture.clientX != null && gesture.clientY != null ? { x: gesture.clientX, y: gesture.clientY } : undefined
       zoomAround(clampZoom(gestureStart * gesture.scale), point)
     }
+    const onScroll = () => detailOverlayRef.current?.invalidate()
+    scroller.addEventListener('scroll', onScroll, { passive: true })
     scroller.addEventListener('wheel', onWheel, { passive: false })
     scroller.addEventListener('gesturestart', onGestureStart)
     scroller.addEventListener('gesturechange', onGestureChange)
     return () => {
+      scroller.removeEventListener('scroll', onScroll)
       scroller.removeEventListener('wheel', onWheel)
       scroller.removeEventListener('gesturestart', onGestureStart)
       scroller.removeEventListener('gesturechange', onGestureChange)
@@ -1239,6 +1252,29 @@ function App() {
   useLayoutEffect(() => {
     applyZoomAnchor(displayScale)
   }, [displayScale, pasteboard])
+
+  /** Visible part of the poster, in poster px, for the deep-zoom detail layer. */
+  function visibleDetailViewport() {
+    const scroller = scrollRef.current
+    const shell = scroller?.querySelector<HTMLElement>('.canvas-shell')
+    if (!scroller || !shell) return null
+    const view = scroller.getBoundingClientRect()
+    const rect = shell.getBoundingClientRect()
+    const scale = displayScaleRef.current
+    const { poster: current } = liveRef.current
+    const left = Math.max(0, (view.left - rect.left) / scale)
+    const top = Math.max(0, (view.top - rect.top) / scale)
+    const right = Math.min(current.width, (view.right - rect.left) / scale)
+    const bottom = Math.min(current.height, (view.bottom - rect.top) / scale)
+    return {
+      left: Math.floor(left),
+      top: Math.floor(top),
+      width: Math.ceil(right - left),
+      height: Math.ceil(bottom - top),
+      scale,
+      dpr: window.devicePixelRatio || 1,
+    }
+  }
 
   function clampZoom(value: number) {
     return Math.min(8, Math.max(0.1, value))
