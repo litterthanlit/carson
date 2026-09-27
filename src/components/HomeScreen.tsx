@@ -4,6 +4,7 @@ import { BrandMark } from './BrandMark'
 import { formatProjectTimestamp, posterAspectRatio } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
 import { ThemeToggle } from './ThemeToggle'
+import { buildCarsonPoster, CARSON_PAPER, type CarsonTextSpec } from '../lib/carsonPoster'
 
 export type HomeStartPreset = 'a3' | 'instagram' | 'square'
 
@@ -41,79 +42,105 @@ function PosterThumb({ project, recovered }: { project: StoredProject; recovered
   )
 }
 
+// Rough average glyph widths (em) per face, for wrapping text in the SVG preview.
+const GLYPH_EM: Record<string, number> = {
+  'IBM Plex Mono': 0.6,
+  'Special Elite': 0.6,
+  'Archivo Black': 0.78,
+  Archivo: 0.56,
+}
+
+function wrapLines(spec: CarsonTextSpec): string[] {
+  const perChar = spec.fontSize * (GLYPH_EM[spec.fontFamily] ?? 0.6) + (spec.charSpacing / 1000) * spec.fontSize
+  const maxChars = Math.max(1, Math.floor(spec.width / Math.max(perChar, 0.01)))
+  const lines: string[] = []
+  for (const hard of spec.text.split('\n')) {
+    let current = ''
+    for (const word of hard.split(' ')) {
+      const next = current ? `${current} ${word}` : word
+      if (next.length > maxChars && current) {
+        lines.push(current)
+        current = word
+      } else {
+        current = next
+      }
+    }
+    lines.push(current)
+  }
+  return lines
+}
+
 /**
- * A vector echo of the seed poster (lib/swissPoster) at A3 millimetres: the
- * same 12-column grid, folio, RAY GUN masthead with its red full stop,
- * numerals band and transit line.
+ * The seed poster (lib/carsonPoster) drawn as SVG at A3 millimetres — built from
+ * the same layer specs as the editor, so the card always shows what it opens.
  */
 function WreckArt() {
-  const ink = '#0a0a0a'
-  const soft = '#5b6066'
-  const font = "Helvetica, 'Helvetica Neue', Arial, sans-serif"
-  const stations: [number, string, string][] = [
-    [20.8, 'Scatter', 'Throw it'],
-    [86.2, 'Xerox', 'Copy it'],
-    [151.6, 'Re-roll', 'Roll again'],
-    [217, 'Undo', 'Walk it back'],
-  ]
-  const materials: [number, string, string][] = [
-    [20.8, '01', 'Type'],
-    [108, '02', 'Grid'],
-    [195.2, '03', 'Accident'],
-  ]
+  const W = 297
+  const H = 420
+  const specs = buildCarsonPoster(W, H)
   return (
-    <svg className="home-wreck-art" viewBox="0 0 297 420" aria-hidden="true" focusable="false">
-      <rect width="297" height="420" fill="#ffffff" />
-      <g fontFamily={font} fontSize="3.9">
-        <text x="20.8" y="24.2" fill={ink}>Issue 01</text>
-        <text x="108" y="24.2" fill={soft}>A poster made to be taken apart</text>
-        <text x="276.2" y="24.2" fill={soft} textAnchor="end">Autumn 2026</text>
-      </g>
-      <rect x="20.8" y="28.8" width="255.4" height="0.7" fill={ink} />
-      {/* textLength pins the masthead to its measured width so the red stop lands after the N in any fallback font. */}
-      <text
-        x="20.8"
-        y="92"
-        fill={ink}
-        fontFamily={font}
-        fontSize="55"
-        fontWeight="700"
-        textLength="210"
-        lengthAdjust="spacingAndGlyphs"
-      >
-        RAY GUN
-      </text>
-      <rect x="236.5" y="83.7" width="8.3" height="8.3" fill="#e4002b" />
-      <text fill={ink} fontFamily={font} fontSize="5.9">
-        <tspan x="20.8" y="124">Legibility is not neutral. A clean Swiss layout on a</tspan>
-        <tspan x="20.8" y="131.7">twelve-column grid, built to be taken apart one accident</tspan>
-        <tspan x="20.8" y="139.4">at a time.</tspan>
-      </text>
-      <g fontFamily={font} fill={ink}>
-        {materials.map(([x, numeral, title]) => (
-          <g key={numeral}>
-            <text x={x} y="290" fontSize="17.8" fontWeight="700">{numeral}</text>
-            <text x={x} y="300.5" fontSize="5" fontWeight="700">{title}</text>
-            <rect x={x} y="304" width="44" height="1.4" fill={soft} opacity="0.5" />
-            <rect x={x} y="309" width="34" height="1.4" fill={soft} opacity="0.5" />
-          </g>
-        ))}
-      </g>
-      <rect x="20.8" y="344.4" width="255.4" height="0.8" fill={ink} />
-      <g fontFamily={font} fontSize="5">
-        {stations.map(([x, label, verb]) => (
-          <g key={label}>
-            <circle cx={x + 2.5} cy="344.8" r="2.5" fill={ink} />
-            <text x={x} y="358.1" fill={ink} fontWeight="700">{label}</text>
-            <text x={x} y="364.3" fill={soft}>{verb}</text>
-          </g>
-        ))}
-      </g>
-      <rect x="20.8" y="389.3" width="255.4" height="0.35" fill={ink} />
-      <g fontFamily={font} fontSize="5" fill={soft}>
-        <text x="20.8" y="397.9">Set in Helvetica on a twelve-column grid. One red full stop.</text>
-        <text x="276.2" y="397.9" textAnchor="end">Made in Carson</text>
-      </g>
+    <svg className="home-wreck-art" viewBox={`0 0 ${W} ${H}`} aria-hidden="true" focusable="false">
+      <rect width={W} height={H} fill={CARSON_PAPER} />
+      {specs.map((spec) => {
+        const style = { mixBlendMode: spec.blend === 'multiply' ? 'multiply' : 'normal' } as const
+        const opacity = spec.opacity ?? 1
+        if (spec.type === 'line') {
+          return (
+            <line key={spec.name} x1={spec.x1} y1={spec.y1} x2={spec.x2} y2={spec.y2} stroke={spec.stroke} strokeWidth={spec.strokeWidth} opacity={opacity} />
+          )
+        }
+        if (spec.type === 'rect') {
+          return (
+            <rect
+              key={spec.name}
+              x={spec.left}
+              y={spec.top}
+              width={spec.width}
+              height={spec.height}
+              fill={spec.fill}
+              opacity={opacity}
+              style={style}
+              transform={spec.angle ? `rotate(${spec.angle} ${spec.left} ${spec.top})` : undefined}
+            />
+          )
+        }
+        if (spec.type === 'polygon') {
+          const pivotX = Math.min(...spec.points.map((point) => point.x))
+          const pivotY = Math.min(...spec.points.map((point) => point.y))
+          return (
+            <polygon
+              key={spec.name}
+              points={spec.points.map((point) => `${point.x},${point.y}`).join(' ')}
+              fill={spec.fill}
+              opacity={opacity}
+              style={style}
+              transform={spec.angle ? `rotate(${spec.angle} ${pivotX} ${pivotY})` : undefined}
+            />
+          )
+        }
+        // Fabric puts the first baseline ~0.88em below the box top and steps lines by 1.13 × lineHeight.
+        const step = spec.fontSize * 1.13 * spec.lineHeight
+        const first = spec.top + spec.fontSize * 0.88
+        return (
+          <text
+            key={spec.name}
+            fill={spec.fill}
+            opacity={opacity}
+            style={style}
+            fontFamily={spec.fontFamily}
+            fontSize={spec.fontSize}
+            fontWeight={spec.fontWeight}
+            letterSpacing={(spec.charSpacing / 1000) * spec.fontSize}
+            transform={spec.angle ? `rotate(${spec.angle} ${spec.left} ${spec.top})` : undefined}
+          >
+            {wrapLines(spec).map((textLine, index) => (
+              <tspan key={index} x={spec.left} y={first + index * step}>
+                {textLine}
+              </tspan>
+            ))}
+          </text>
+        )
+      })}
     </svg>
   )
 }

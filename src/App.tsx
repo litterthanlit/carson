@@ -231,7 +231,7 @@ import {
   writeComponentOverrides,
 } from './lib/components'
 import { reviveSerializedObject } from './lib/fabricRevive'
-import { buildSwissPoster, SWISS } from './lib/swissPoster'
+import { buildCarsonPoster, CARSON_PAPER, CARSON_POSTER_FONTS } from './lib/carsonPoster'
 import {
   applyCharacterStyleToText,
   applyParagraphStyleToText,
@@ -738,6 +738,8 @@ function App() {
           if (intent.image) await handleImageFile(intent.image, { fill: true })
           return
         }
+        await ensureLibraryFonts(CARSON_POSTER_FONTS)
+        if (cancelled || canvasRef.current !== canvas) return
         seedPoster(canvas, poster)
         if (cancelled || canvasRef.current !== canvas) return
         setDocumentMeta(createDefaultDocument(poster, canvas.toObject(HISTORY_PROPS as unknown as string[])))
@@ -1393,42 +1395,37 @@ function App() {
   tagObjectRef.current = tagObject
 
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
-    // A clean Swiss grid poster (see lib/swissPoster) — the finished layout the
-    // walkthrough then wrecks. Layer names "Oversized headline" and
-    // "Red interruption" are load-bearing for the walkthrough and verify scripts.
-    const measureHeadline = (text: string, fontSize: number) => {
-      const probe = new Textbox(text, {
-        width: currentPoster.width * 4,
-        fontFamily: SWISS.font,
-        fontSize,
-        fontWeight: 700,
-        charSpacing: -30,
-      })
-      return probe.getLineWidth(0)
-    }
-    const specs = buildSwissPoster(currentPoster.width, currentPoster.height, measureHeadline)
+    // A layered David Carson-style collage (see lib/carsonPoster) — the finished
+    // poster the walkthrough then wrecks further. Layer names "Oversized headline"
+    // and "Red interruption" are load-bearing for the walkthrough and verify scripts.
+    const specs = buildCarsonPoster(currentPoster.width, currentPoster.height)
     const objects: FabricObject[] = []
     let headline: FabricObject | null = null
     for (const spec of specs) {
+      const shared = {
+        angle: spec.angle ?? 0,
+        opacity: spec.opacity ?? 1,
+        globalCompositeOperation: spec.blend ?? 'source-over',
+      }
       if (spec.type === 'text') {
         const object = new Textbox(spec.text, {
+          ...shared,
           left: spec.left,
           top: spec.top,
           width: spec.width,
-          fontFamily: SWISS.font,
+          fontFamily: spec.fontFamily,
           fontSize: spec.fontSize,
           fontWeight: spec.fontWeight,
           lineHeight: spec.lineHeight,
           charSpacing: spec.charSpacing,
           fill: spec.fill,
-          textAlign: spec.textAlign,
-          styles: spec.styles ?? {},
         })
         tagObject(object, 'text', spec.name)
         if (spec.name === 'Oversized headline') headline = object
         objects.push(object)
       } else if (spec.type === 'rect') {
         const object = new Rect({
+          ...shared,
           left: spec.left,
           top: spec.top,
           width: spec.width,
@@ -1438,19 +1435,22 @@ function App() {
         })
         tagObject(object, 'shape', spec.name)
         objects.push(object)
+      } else if (spec.type === 'polygon') {
+        const object = new Polygon(spec.points, { ...shared, fill: spec.fill, strokeWidth: 0 })
+        tagObject(object, 'shape', spec.name)
+        objects.push(object)
       } else {
-        const object = new Path(spec.d, {
-          fill: spec.fill,
+        const object = new Line([spec.x1, spec.y1, spec.x2, spec.y2], {
+          ...shared,
           stroke: spec.stroke,
           strokeWidth: spec.strokeWidth,
-          strokeLineCap: 'butt',
         })
         tagObject(object, 'shape', spec.name)
         objects.push(object)
       }
     }
 
-    canvas.backgroundColor = SWISS.paper
+    canvas.backgroundColor = CARSON_PAPER
     canvas.add(...objects)
     if (headline) canvas.setActiveObject(headline)
     captureStyleBaseline()

@@ -164,7 +164,7 @@ const FEATURES = {
     const name = await inspectorName(page).inputValue()
     if (name !== 'Oversized headline') fail(`Inspect name was "${name}"`)
     const text = await page.getByRole('textbox', { name: 'Text' }).inputValue()
-    if (!text.includes('RAY GUN')) fail('Headline text was missing RAY GUN')
+    if (!text.replace(/\s+/g, '').includes('CARSON')) fail('Headline text was missing CARSON')
     await writeFile(join(outDir, 'inspect-headline.proof.json'), JSON.stringify({ name, text }, null, 2))
     await capture(page, outDir, 'inspect-headline')
   },
@@ -532,7 +532,7 @@ const FEATURES = {
     await page.getByRole('region', { name: 'Poster canvas' }).waitFor({ state: 'visible' })
     await openTab(page, 'Layers')
     if (await layerSelect(page, 'Oversized headline').count()) {
-      fail('New poster seeded the RAY GUN demo instead of a blank file')
+      fail('New poster seeded the CARSON demo instead of a blank file')
     }
     await capture(page, outDir, 'blank-new')
     await page.getByRole('textbox', { name: 'Project name' }).fill('Night bus')
