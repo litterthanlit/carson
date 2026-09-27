@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react'
 import { loadPixels } from '../lib/pixelStore'
 import { isPaintLayer, writePaintPixels } from '../lib/paintLayer'
 import { invalidateLayerThumbnail } from '../lib/layerThumbnail'
-import { parseHistorySnapshot, rehydratePaintLayers, serializeHistorySnapshot } from '../lib/historySnapshot'
+import { parseHistorySnapshot, rehydratePaintLayers, serializeHistorySnapshot, takeSnapshotPosterSize, type SnapshotPosterSize } from '../lib/historySnapshot'
 import type { Canvas } from 'fabric'
 import type { MutableRefObject, RefObject } from 'react'
 import { HISTORY_PROPS } from '../lib/editorConstants'
@@ -32,6 +32,8 @@ type UseEditorHistoryOptions = {
   scheduleAutosave: () => void
   captureStyleBaseline: () => void
   onAfterRestore: () => Promise<void>
+  /** A snapshot recorded a different poster size (undo past a resize or rotation). */
+  onPosterSizeRestore?: (size: SnapshotPosterSize) => void
   onTreatmentRestore: (objectId: string, treatmentsJson: string) => Promise<void>
   onPosterTreatmentRestore: (artboardId: string, treatmentsJson: string) => Promise<void>
   commitHistoryRef: RefObject<(message: string) => void>
@@ -62,6 +64,7 @@ export function useEditorHistory({
   scheduleAutosave,
   captureStyleBaseline,
   onAfterRestore,
+  onPosterSizeRestore,
   onTreatmentRestore,
   onPosterTreatmentRestore,
   commitHistoryRef,
@@ -97,8 +100,12 @@ export function useEditorHistory({
       if (!canvas) return
       restoringRef.current = true
       const parsed = parseHistorySnapshot(snapshot)
+      const posterSize = takeSnapshotPosterSize(parsed)
       await ensureLibraryFonts(collectFontFamilies(parsed))
       await withLayerSyncSuppressed(async () => {
+        if (posterSize && (canvas.getWidth() !== posterSize.width || canvas.getHeight() !== posterSize.height)) {
+          onPosterSizeRestore?.(posterSize)
+        }
         await canvas.loadFromJSON(parsed)
         await rehydratePaintLayers(canvas.getObjects() as unknown as Parameters<typeof rehydratePaintLayers>[0])
         await onAfterRestore()
@@ -110,7 +117,7 @@ export function useEditorHistory({
       syncLayers()
       setStatus(message)
     },
-    [canvasRef, captureStyleBaseline, onAfterRestore, setStatus, syncLayers, syncSelected],
+    [canvasRef, captureStyleBaseline, onAfterRestore, onPosterSizeRestore, setStatus, syncLayers, syncSelected],
   )
 
   const applyRestoreAction = useCallback(

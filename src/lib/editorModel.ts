@@ -1,4 +1,8 @@
-export type PosterPresetId = 'a3' | 'a2' | 'instagram' | 'square' | 'custom'
+/**
+ * `vertical` and `horizontal` are the sizes offered in the UI. The older named
+ * sizes stay resolvable so saved posters and artboards keep opening.
+ */
+export type PosterPresetId = 'vertical' | 'horizontal' | 'a3' | 'a2' | 'instagram' | 'square' | 'custom'
 
 export type PosterPreset = {
   id: PosterPresetId
@@ -203,6 +207,8 @@ export type ScrapeMask = {
 }
 
 const POSTER_PRESETS: Record<Exclude<PosterPresetId, 'custom'>, PosterPreset> = {
+  vertical: { id: 'vertical', name: 'Vertical', width: 3508, height: 4961, dpi: 300, widthMm: 297, heightMm: 420 },
+  horizontal: { id: 'horizontal', name: 'Horizontal', width: 4961, height: 3508, dpi: 300, widthMm: 420, heightMm: 297 },
   a3: { id: 'a3', name: 'A3 portrait (300dpi)', width: 3508, height: 4961, dpi: 300, widthMm: 297, heightMm: 420 },
   a2: { id: 'a2', name: 'A2 portrait (300dpi)', width: 4961, height: 7016, dpi: 300, widthMm: 420, heightMm: 594 },
   instagram: { id: 'instagram', name: 'Instagram portrait', width: 1080, height: 1350, dpi: 72 },

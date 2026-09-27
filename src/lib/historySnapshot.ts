@@ -60,7 +60,10 @@ export function resolveSnapshotSources<T>(json: T): T {
   return mapSources(json, (src) => (src.startsWith(REF_PREFIX) ? (refToSrc.get(src) ?? src) : src)) as T
 }
 
-type SerializableCanvas = { toObject: (props?: string[]) => unknown }
+type SerializableCanvas = { toObject: (props?: string[]) => unknown; getWidth?: () => number; getHeight?: () => number }
+
+/** Poster size recorded with each snapshot so undo can walk back a resize or rotation. */
+export type SnapshotPosterSize = { width: number; height: number }
 
 // ── Paint layers in history ────────────────────────────────────────────────
 // A paint layer's pixels live in a <canvas>; encoding it to PNG for every history
@@ -99,7 +102,9 @@ function paintRefFor(object: PaintSource, element: HTMLCanvasElement): string {
 export function serializeHistorySnapshot(canvas: SerializableCanvas, props: readonly string[]): string {
   serializingHistory = true
   try {
-    return JSON.stringify(internSnapshotSources(canvas.toObject(props as string[])))
+    const data = internSnapshotSources(canvas.toObject(props as string[])) as Record<string, Json>
+    if (canvas.getWidth && canvas.getHeight) data.posterSize = { width: canvas.getWidth(), height: canvas.getHeight() }
+    return JSON.stringify(data)
   } finally {
     serializingHistory = false
   }
@@ -117,6 +122,14 @@ function resolvePaintRefs(value: Json): Json {
     out.paintRef = record.src
   }
   return out
+}
+
+/** Pull the recorded poster size off a parsed snapshot (so Fabric never sees it). */
+export function takeSnapshotPosterSize(parsed: Record<string, unknown>): SnapshotPosterSize | null {
+  const size = parsed.posterSize as Partial<SnapshotPosterSize> | undefined
+  delete parsed.posterSize
+  if (!size || typeof size.width !== 'number' || typeof size.height !== 'number') return null
+  return { width: size.width, height: size.height }
 }
 
 export function parseHistorySnapshot(snapshot: string): Record<string, unknown> {

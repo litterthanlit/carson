@@ -5,7 +5,7 @@ import { formatProjectTimestamp, posterAspectRatio } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
 import { ThemeToggle } from './ThemeToggle'
 
-export type HomeStartPreset = 'a3' | 'instagram' | 'square'
+export type HomeStartPreset = 'vertical' | 'horizontal'
 
 type HomeScreenProps = {
   loading: boolean
@@ -24,9 +24,8 @@ type HomeScreenProps = {
 }
 
 const START_PRESETS: { id: HomeStartPreset; title: string; meta: string; ratio: string }[] = [
-  { id: 'a3', title: 'Blank A3', meta: '297 × 420 mm · 300 dpi', ratio: '297 / 420' },
-  { id: 'instagram', title: 'Instagram', meta: '1080 × 1350 px', ratio: '4 / 5' },
-  { id: 'square', title: 'Square', meta: '1600 × 1600 px', ratio: '1 / 1' },
+  { id: 'vertical', title: 'Vertical', meta: 'Blank · 297 × 420 mm', ratio: '297 / 420' },
+  { id: 'horizontal', title: 'Horizontal', meta: 'Blank · 420 × 297 mm', ratio: '420 / 297' },
 ]
 
 function PosterThumb({ project, recovered }: { project: StoredProject; recovered?: boolean }) {

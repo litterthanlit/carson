@@ -9,6 +9,7 @@ import {
   Line,
   Path,
   PencilBrush,
+  Point,
   Polygon,
   Rect,
   Textbox,
@@ -90,6 +91,7 @@ import {
   upsertDocumentInstrument,
   type DocumentMeta,
 } from './lib/document'
+import { presetForSize, rotateLayoutGuides, rotatePosterPoint, rotatedPreset, type QuarterTurn } from './lib/rotatePoster'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
 import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
 import { alignObjects, clampGridOverlay, distributeObjects, gridTensionScale, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
@@ -332,8 +334,8 @@ function App() {
   const printDpiRef = useRef(300)
   const bleedMmRef = useRef(3)
 
-  const [poster, setPoster] = useState<PosterPreset>(() => applyPosterPreset('a3'))
-  const [presetId, setPresetId] = useState<PosterPresetId>('a3')
+  const [poster, setPoster] = useState<PosterPreset>(() => applyPosterPreset('vertical'))
+  const [presetId, setPresetId] = useState<PosterPresetId>('vertical')
   const [customSize, setCustomSize] = useState({ width: 1200, height: 1600 })
   const [selected, setSelected] = useState<SelectedState | null>(null)
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([])
@@ -417,7 +419,7 @@ function App() {
   const [pathGeometryTick, setPathGeometryTick] = useState(0)
   const [penStrokeWidth, setPenStrokeWidth] = useState(3)
   const [penStrokeColor, setPenStrokeColor] = useState('#111111')
-  const [newArtboardPreset, setNewArtboardPreset] = useState<PosterPresetId>('instagram')
+  const [newArtboardPreset, setNewArtboardPreset] = useState<PosterPresetId>('vertical')
   const [pdfRegistrationMarks, setPdfRegistrationMarks] = useState(true)
   const [printDpi, setPrintDpi] = useState(300)
   const [bleedMm, setBleedMm] = useState(3)
@@ -567,6 +569,7 @@ function App() {
       setTrailCursor(cursor)
       if (!opId) return
     },
+    onPosterSizeRestore: (size) => applyPosterSize(presetForSize(size, liveRef.current.poster.dpi)),
     onAfterRestore: async () => {
       await reconcileArtifactTreatmentsRef.current()
       await refreshPosterTreatmentsRef.current()
@@ -891,6 +894,24 @@ function App() {
   }
 
   // Keyboard layer: full shortcut coverage. Stable listener reads handlers via ref.
+  // Paste an image from the clipboard (screenshot, copied photo) straight onto the poster.
+  const placeImageFilesRef = useRef<(files: File[], point: null) => Promise<void>>(async () => {})
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      if (screenRef.current !== 'editor') return
+      const element = event.target as HTMLElement | null
+      if (element?.closest?.('input, textarea, [contenteditable="true"]')) return
+      const active = canvasRef.current?.getActiveObject() as (FabricObject & { isEditing?: boolean }) | null
+      if (active?.isEditing) return
+      const images = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith('image/'))
+      if (!images.length) return
+      event.preventDefault()
+      void placeImageFilesRef.current(images, null)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [])
+
   const keyActionsRef = useRef<Record<string, () => void>>({})
   keyActionsRef.current = {
     undo: () => {
@@ -920,6 +941,8 @@ function App() {
     zoomIn: () => stepZoom(1),
     zoomOut: () => stepZoom(-1),
     reroll: () => void rerollLast(),
+    rotatePosterRight: () => rotatePoster(1),
+    rotatePosterLeft: () => rotatePoster(-1),
     scramble: () => void scrambleCanvas(),
     toggleLayoutGrid: () => {
       setShowLayoutGrid((value) => {
@@ -1190,6 +1213,10 @@ function App() {
         setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
       } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
         actions.togglePen()
+      } else if (event.altKey && event.code === 'KeyR') {
+        event.preventDefault()
+        if (event.shiftKey) actions.rotatePosterLeft()
+        else actions.rotatePosterRight()
       } else if (event.key.toLowerCase() === 'g') {
         event.preventDefault()
         actions.toggleLayoutGrid()
@@ -3361,9 +3388,9 @@ function App() {
     setOpenDialogOpen(false)
     setSaveAsOpen(false)
     if (intent.kind === 'seed') {
-      const preset = applyPosterPreset('a3')
+      const preset = applyPosterPreset('vertical')
       setPoster(preset)
-      setPresetId('a3')
+      setPresetId('vertical')
       setProjectName('Untitled poster')
       setProjectId(newProjectId())
       setDocumentMeta(null)
@@ -3755,7 +3782,7 @@ function App() {
     }
   }
 
-  async function handleImageFile(file: File, options: { fill?: boolean } = {}) {
+  async function handleImageFile(file: File, options: { fill?: boolean; at?: { x: number; y: number } } = {}) {
     const canvas = canvasRef.current
     if (!canvas) return
     const url = await readFileAsDataUrl(file)
@@ -3779,17 +3806,74 @@ function App() {
     const maxHeight = poster.height * 0.6
     image.scaleToWidth(Math.min(maxWidth, image.width ?? maxWidth))
     if (image.getScaledHeight() > maxHeight) image.scaleToHeight(maxHeight)
-    image.set({
-      left: poster.width * 0.12,
-      top: poster.height * 0.2,
-      angle: -2,
-      opacity: 0.96,
-    })
+    if (options.at) {
+      // Dropped: centre the image under the cursor, kept straight.
+      image.setPositionByOrigin(new Point(options.at.x, options.at.y), 'center', 'center')
+    } else {
+      image.set({
+        left: poster.width * 0.12,
+        top: poster.height * 0.2,
+        angle: -2,
+        opacity: 0.96,
+      })
+    }
     tagObject(image, 'image', file.name)
     canvas.add(image)
     canvas.setActiveObject(image)
     await persistAssetFromFile(file)
     commitHistory('Imported image')
+  }
+
+  /** Files dropped onto (or pasted into) the canvas; several fan out slightly so none hide the others. */
+  async function placeImageFiles(files: File[], point: { x: number; y: number } | null) {
+    const images = files.filter((file) => file.type.startsWith('image/'))
+    if (!images.length) {
+      setStatus('Only images can be dropped on the poster')
+      return
+    }
+    const origin = point ?? { x: poster.width / 2, y: poster.height / 2 }
+    const step = Math.round(Math.min(poster.width, poster.height) * 0.03)
+    for (const [index, file] of images.entries()) {
+      try {
+        await handleImageFile(file, { at: { x: origin.x + index * step, y: origin.y + index * step } })
+      } catch {
+        setStatus(`Could not read ${file.name}`)
+      }
+    }
+    if (images.length > 1) setStatus(`Placed ${images.length} images`)
+  }
+
+  placeImageFilesRef.current = placeImageFiles
+
+  /** Resize the page (canvas + poster + active artboard) without touching layers. */
+  function applyPosterSize(preset: PosterPreset) {
+    const canvas = canvasRef.current
+    if (canvas) {
+      canvas.setDimensions({ width: preset.width, height: preset.height })
+      applyBackstore(canvas)
+    }
+    setPoster(preset)
+    setPresetId(preset.id)
+    if (preset.id === 'custom') setCustomSize({ width: preset.width, height: preset.height })
+    setDocumentMeta((doc) => (doc ? updateArtboardPreset(doc, doc.activeArtboardId, preset) : doc))
+  }
+
+  /** Photoshop's Image › Rotate 90°: the page turns and every layer turns with it. */
+  function rotatePoster(direction: QuarterTurn) {
+    const canvas = canvasRef.current
+    if (!canvas || warpEditRef.current) return
+    const size = { width: poster.width, height: poster.height }
+    canvas.discardActiveObject()
+    for (const object of canvas.getObjects()) {
+      const center = rotatePosterPoint(object.getCenterPoint(), size, direction)
+      object.rotate(((object.angle ?? 0) + direction * 90 + 360) % 360)
+      object.setPositionByOrigin(new Point(center.x, center.y), 'center', 'center')
+      object.setCoords()
+    }
+    setLayoutGuides((current) => rotateLayoutGuides(current, size, direction))
+    applyPosterSize(rotatedPreset(poster))
+    canvas.requestRenderAll()
+    commitHistory(direction === 1 ? 'Rotated poster right' : 'Rotated poster left')
   }
 
   function applyImageEffect(effect: 'grayscale' | 'contrast' | 'threshold' | 'blur' | 'noise' | 'clear') {
@@ -5585,6 +5669,8 @@ function App() {
             if (asset) void insertAsset(asset)
           }}
           onComponentDrop={(componentId) => void placeComponentInstance(componentId)}
+          onImageFilesDrop={(files, point) => void placeImageFiles(files, point)}
+          onRotatePoster={rotatePoster}
           trailFrames={trailFrames}
           trailOpIds={trailOpIds}
           trailCursor={trailCursor}

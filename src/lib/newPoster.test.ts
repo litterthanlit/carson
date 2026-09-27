@@ -21,8 +21,9 @@ describe('new poster', () => {
 
   it('maps size choices to print or screen intent without mutating an open canvas', () => {
     const choices = newPosterChoices()
-    expect(choices.map((choice) => choice.id)).toEqual(['a3', 'a2', 'instagram', 'square', 'custom'])
-    expect(presetForNewPoster('instagram')).toMatchObject({ id: 'instagram', width: 1080, height: 1350 })
+    expect(choices.map((choice) => choice.id)).toEqual(['vertical', 'horizontal', 'custom'])
+    expect(presetForNewPoster('vertical')).toMatchObject({ id: 'vertical', width: 3508, height: 4961 })
+    expect(presetForNewPoster('horizontal')).toMatchObject({ id: 'horizontal', width: 4961, height: 3508 })
     expect(presetForNewPoster('custom', { width: 800, height: 900 })).toMatchObject({
       id: 'custom',
       width: 800,

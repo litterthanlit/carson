@@ -10,7 +10,7 @@ type NewPosterDialogProps = {
 }
 
 export function NewPosterDialog({ open, onCreate, onClose }: NewPosterDialogProps) {
-  const [presetId, setPresetId] = useState<PosterPresetId>('a3')
+  const [presetId, setPresetId] = useState<PosterPresetId>('vertical')
   const [customSize, setCustomSize] = useState({ width: 1200, height: 1600 })
 
   if (!open) return null
