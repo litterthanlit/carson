@@ -1,5 +1,6 @@
 import { memo, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import { LayoutGuidesOverlay } from './LayoutGuidesOverlay'
+import { ViewportRulers } from './ViewportRulers'
 import type { LayoutGuide } from '../lib/grid'
 import { Dices, Grid3x3, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { PosterPreset, PosterPresetId } from '../lib/editorModel'
@@ -210,6 +211,15 @@ export const EditorCanvas = memo(function EditorCanvas({
         ) : null}
       </div>
       {stackBar}
+      <div className="canvas-viewport">
+      <ViewportRulers
+        scrollRef={scrollRef}
+        displayScale={displayScale}
+        posterWidth={poster.width}
+        posterHeight={poster.height}
+        dpi={poster.dpi}
+        onAddGuide={onAddLayoutGuide}
+      />
       <div
         ref={scrollRef}
         className={isPanMode ? 'canvas-scroll panning' : 'canvas-scroll'}
@@ -250,6 +260,7 @@ export const EditorCanvas = memo(function EditorCanvas({
           />
           {hud}
         </div>
+      </div>
       </div>
       <ExplorationTrail
         frames={trailFrames}

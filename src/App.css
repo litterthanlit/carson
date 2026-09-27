@@ -1076,9 +1076,17 @@ input[type='color'] {
   flex: none;
 }
 
-.canvas-stage > .canvas-scroll {
+.canvas-stage > .canvas-viewport {
   flex: 1 1 0;
   min-height: 0;
+  position: relative;
+  display: flex;
+}
+
+.canvas-viewport > .canvas-scroll {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 20px 0 0 20px;
 }
 
 .exploration-trail {
@@ -1437,62 +1445,6 @@ input[type='color'] {
   inset: 0;
   pointer-events: none;
   z-index: 3;
-}
-
-.layout-ruler {
-  position: absolute;
-  pointer-events: auto;
-  border: 0;
-  padding: 0;
-  min-height: 0;
-  border-radius: 0;
-  background:
-    repeating-linear-gradient(
-      to right,
-      transparent 0 9px,
-      rgb(255 255 255 / 0.16) 9px 10px
-    );
-  background-color: #3a3a3a;
-  color: transparent;
-}
-
-.layout-ruler-top {
-  left: 0;
-  top: -18px;
-  width: 100%;
-  height: 18px;
-  cursor: col-resize;
-  background:
-    repeating-linear-gradient(
-      to right,
-      transparent 0 9px,
-      rgb(255 255 255 / 0.18) 9px 10px
-    );
-  background-color: #3a3a3a;
-}
-
-.layout-ruler-left {
-  left: -18px;
-  top: 0;
-  width: 18px;
-  height: 100%;
-  cursor: row-resize;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0 9px,
-      rgb(255 255 255 / 0.18) 9px 10px
-    );
-  background-color: #3a3a3a;
-}
-
-.layout-ruler-corner {
-  left: -18px;
-  top: -18px;
-  width: 18px;
-  height: 18px;
-  background: #333;
-  cursor: default;
 }
 
 .layout-guide {
@@ -2864,4 +2816,78 @@ label:has(> input[type='radio']) {
 .opentype-toggles .toggle-row {
   margin-top: 0;
   min-height: 24px;
+}
+
+/* ── Viewport rulers ─────────────────────────────────────────────────────── */
+.viewport-rulers {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.viewport-rulers .ruler {
+  position: absolute;
+  display: block;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.viewport-rulers .ruler-top {
+  top: 0;
+  left: 20px;
+  right: 0;
+  width: calc(100% - 20px);
+  height: 20px;
+  cursor: row-resize;
+}
+
+.viewport-rulers .ruler-left {
+  top: 20px;
+  left: 0;
+  bottom: 0;
+  width: 20px;
+  height: calc(100% - 20px);
+  cursor: col-resize;
+}
+
+.viewport-rulers .ruler-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  pointer-events: auto;
+  font: 600 9px/1 var(--font);
+  color: var(--text-faint);
+  background: #2a2a2a;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.viewport-rulers .ruler-corner:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.ruler-guide-preview {
+  position: absolute;
+  pointer-events: none;
+  background: #e11d48;
+}
+
+.ruler-guide-preview-h {
+  left: 20px;
+  right: 0;
+  height: 1px;
+}
+
+.ruler-guide-preview-v {
+  top: 20px;
+  bottom: 0;
+  width: 1px;
 }
