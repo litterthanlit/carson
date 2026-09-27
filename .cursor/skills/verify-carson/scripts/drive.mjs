@@ -159,7 +159,12 @@ const FEATURES = {
     await capture(page, outDir, 'instance')
     await page.getByRole('button', { name: 'Detach' }).click()
     await page.getByRole('status').filter({ hasText: /Detached/ }).waitFor()
-    if (await page.getByRole('button', { name: 'Detach' }).count()) fail('Detach control remained after unlink')
+    try {
+      // exact: the exploration trail adds a "Detached “…”" chip that a substring match would catch.
+      await page.getByRole('button', { name: 'Detach', exact: true }).waitFor({ state: 'detached', timeout: 5000 })
+    } catch {
+      fail('Detach control remained after unlink')
+    }
     await capture(page, outDir, 'detached')
   },
 

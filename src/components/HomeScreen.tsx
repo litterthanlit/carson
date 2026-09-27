@@ -110,7 +110,7 @@ export function HomeScreen({
       }}
       onDrop={handleDrop}
     >
-      <header className="home-topbar glass-bar">
+      <header className="home-topbar glass-bar" role="banner" aria-label="Carson">
         <div className="brand">
           <BrandMark />
           <div className="brand-copy">

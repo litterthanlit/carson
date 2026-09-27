@@ -149,7 +149,7 @@ export const TopBar = memo(function TopBar({
   ]
 
   return (
-    <header className="topbar glass-bar">
+    <header className="topbar glass-bar" role="banner" aria-label="Editor">
       <div className="brand">
         <button type="button" className="brand-home" aria-label="Carson home" title="Home" onClick={onHome}>
           <BrandMark />
