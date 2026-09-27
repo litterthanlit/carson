@@ -1,6 +1,7 @@
 import { memo, useRef, useState, type ComponentType } from 'react'
 import {
   Brush,
+  ChevronRight,
   Eye,
   EyeOff,
   Folder,
@@ -13,6 +14,7 @@ import {
   Type,
   type LucideProps,
 } from 'lucide-react'
+import { effectiveCollapsedIds, groupIdsWithChildren, visibleLayerRows } from '../lib/layerTreeView'
 
 export type LayerRow = {
   id: string
@@ -39,7 +41,11 @@ type LayersPanelProps = {
   onDragOver: (id: string) => void
   onDragEnd: () => void
   onZoomToLayer: (id: string) => void
+  collapsedIds?: ReadonlySet<string>
+  onToggleCollapsed?: (id: string) => void
 }
+
+const NO_COLLAPSED: ReadonlySet<string> = new Set()
 
 const KIND_ICONS: Record<string, ComponentType<LucideProps>> = {
   text: Type,
@@ -67,6 +73,8 @@ export const LayersPanel = memo(function LayersPanel({
   onDragOver,
   onDragEnd,
   onZoomToLayer,
+  collapsedIds = NO_COLLAPSED,
+  onToggleCollapsed,
 }: LayersPanelProps) {
   // Paint-to-toggle visibility, like Photoshop: press an eye and drag down the column.
   const [paintVisibility, setPaintVisibilityState] = useState<boolean | null>(null)
@@ -89,6 +97,11 @@ export const LayersPanel = memo(function LayersPanel({
   }
 
   const selectedSet = new Set(selectedIds)
+  const groupIds = groupIdsWithChildren(layers)
+  const collapsed = effectiveCollapsedIds(layers, collapsedIds, selectedIds)
+  const rows = visibleLayerRows(layers, collapsed)
+  // Reserve a caret column only when the document has groups, so flat documents stay tight.
+  const hasGroups = groupIds.size > 0 && Boolean(onToggleCollapsed)
 
   return (
     <div
@@ -98,8 +111,10 @@ export const LayersPanel = memo(function LayersPanel({
       onPointerUp={() => setPaintVisibility(null)}
       onPointerLeave={() => setPaintVisibility(null)}
     >
-      {layers.map((layer) => {
+      {rows.map((layer) => {
         const depth = layer.depth ?? 0
+        const isGroup = groupIds.has(layer.id)
+        const isCollapsed = isGroup && collapsed.has(layer.id)
         const KindIcon = KIND_ICONS[layer.kind] ?? Square
         const renaming = renamingLayerId === layer.id
         return (
@@ -113,6 +128,7 @@ export const LayersPanel = memo(function LayersPanel({
               depth > 0 ? 'nested' : '',
               layer.visible ? '' : 'is-hidden',
               layer.locked ? 'is-locked' : '',
+              isGroup ? 'is-group' : '',
             ]
               .filter(Boolean)
               .join(' ')}
@@ -163,6 +179,23 @@ export const LayersPanel = memo(function LayersPanel({
 
             <span className="layer-indent" style={{ width: depth * INDENT_PX }} aria-hidden="true" />
 
+            {hasGroups ? (
+              isGroup ? (
+                <button
+                  type="button"
+                  className="layer-caret"
+                  title={isCollapsed ? 'Expand group' : 'Collapse group'}
+                  aria-label={isCollapsed ? `Expand ${layer.name}` : `Collapse ${layer.name}`}
+                  aria-expanded={!isCollapsed}
+                  onClick={() => onToggleCollapsed?.(layer.id)}
+                >
+                  <ChevronRight size={12} />
+                </button>
+              ) : (
+                <span className="layer-caret-spacer" aria-hidden="true" />
+              )
+            ) : null}
+
             <span
               className="layer-thumb-wrap"
               title="Double-click to zoom to layer"
@@ -212,6 +245,12 @@ export const LayersPanel = memo(function LayersPanel({
                   if (event.key === 'F2') {
                     event.preventDefault()
                     onRenameStart(layer.id)
+                  } else if (isGroup && onToggleCollapsed && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+                    // Left collapses, right expands, as in a tree view.
+                    if ((event.key === 'ArrowLeft') !== isCollapsed) {
+                      event.preventDefault()
+                      onToggleCollapsed(layer.id)
+                    }
                   }
                 }}
               >

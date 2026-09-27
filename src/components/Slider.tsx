@@ -12,6 +12,8 @@ type SliderProps = {
   /** `field` drops the track: a scrubbable label plus numeric field, for dense toolbars. */
   variant?: 'track' | 'field'
   disabled?: boolean
+  /** Neutral value. When set, double-clicking the label or track resets to it. */
+  defaultValue?: number
 }
 
 // Pixels of horizontal drag that sweep the full range when scrubbing the label.
@@ -23,7 +25,7 @@ const SCRUB_SPAN_PX = 240
  * - Arrow keys in the field nudge by one step, Shift+Arrow by ten.
  * - Ranges that straddle zero fill outward from the zero point.
  */
-export function Slider({ label, value, min, max, onChange, onCommit, format, step = 1, variant = 'track', disabled = false }: SliderProps) {
+export function Slider({ label, value, min, max, onChange, onCommit, format, step = 1, variant = 'track', disabled = false, defaultValue }: SliderProps) {
   const display = format ? format(value) : String(Math.round(value))
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
@@ -56,6 +58,15 @@ export function Slider({ label, value, min, max, onChange, onCommit, format, ste
     setEditing(false)
   }
 
+  const canReset = defaultValue !== undefined && !disabled
+  const isModified = defaultValue !== undefined && Math.abs(value - defaultValue) > step / 2
+  const resetToDefault = () => {
+    if (!canReset || !isModified) return
+    onChange(clamp(defaultValue))
+    onCommit()
+  }
+  const resetHint = canReset ? ` · double-click to reset` : ''
+
   const onScrubStart = (event: ReactPointerEvent<HTMLSpanElement>) => {
     if (event.button !== 0 || disabled) return
     event.preventDefault()
@@ -87,7 +98,13 @@ export function Slider({ label, value, min, max, onChange, onCommit, format, ste
 
   return (
     <div
-      className={['dial', variant === 'field' ? 'dial-field' : '', scrubbing ? 'scrubbing' : '', disabled ? 'disabled' : '']
+      className={[
+        'dial',
+        variant === 'field' ? 'dial-field' : '',
+        scrubbing ? 'scrubbing' : '',
+        disabled ? 'disabled' : '',
+        isModified ? 'modified' : '',
+      ]
         .filter(Boolean)
         .join(' ')}
       style={
@@ -101,7 +118,8 @@ export function Slider({ label, value, min, max, onChange, onCommit, format, ste
       <div className="dial-head">
         <span
           className="dial-label"
-          title={`Drag to adjust ${label.toLowerCase()} · Shift for fine`}
+          title={`Drag to adjust ${label.toLowerCase()} · Shift for fine${resetHint}`}
+          onDoubleClick={resetToDefault}
           onPointerDown={onScrubStart}
           onPointerMove={onScrubMove}
           onPointerUp={onScrubEnd}
@@ -163,7 +181,7 @@ export function Slider({ label, value, min, max, onChange, onCommit, format, ste
         />
       </div>
       {variant === 'track' ? (
-      <div className="dial-track">
+      <div className="dial-track" onDoubleClick={resetToDefault} title={canReset ? 'Double-click to reset' : undefined}>
         <span className="dial-rail" aria-hidden="true" />
         <span className="dial-fill" aria-hidden="true" />
         {origin > 0 ? <span className="dial-origin" aria-hidden="true" /> : null}

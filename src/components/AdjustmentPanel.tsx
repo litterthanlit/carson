@@ -23,9 +23,10 @@ export function AdjustmentPanel({ adjustment, opacity, onChange, onOpacityChange
             <span style={{ left: `${(adjustment.black / 255) * 100}%` }} />
             <span style={{ left: `${(adjustment.white / 255) * 100}%` }} />
           </div>
-          <Slider label="Black" value={adjustment.black} min={0} max={254} onChange={(black) => onChange({ ...adjustment, black: Math.min(black, adjustment.white - 1) })} onCommit={commit} />
+          <Slider label="Black" defaultValue={0} value={adjustment.black} min={0} max={254} onChange={(black) => onChange({ ...adjustment, black: Math.min(black, adjustment.white - 1) })} onCommit={commit} />
           <Slider
             label="Midtones"
+            defaultValue={100}
             value={Math.round(adjustment.gamma * 100)}
             min={10}
             max={300}
@@ -33,20 +34,20 @@ export function AdjustmentPanel({ adjustment, opacity, onChange, onOpacityChange
             onChange={(value) => onChange({ ...adjustment, gamma: value / 100 })}
             onCommit={commit}
           />
-          <Slider label="White" value={adjustment.white} min={1} max={255} onChange={(white) => onChange({ ...adjustment, white: Math.max(white, adjustment.black + 1) })} onCommit={commit} />
+          <Slider label="White" defaultValue={255} value={adjustment.white} min={1} max={255} onChange={(white) => onChange({ ...adjustment, white: Math.max(white, adjustment.black + 1) })} onCommit={commit} />
         </>
       ) : null}
       {adjustment.type === 'hueSat' ? (
         <>
-          <Slider label="Hue" value={adjustment.hue} min={-180} max={180} format={(value) => `${Math.round(value)}°`} onChange={(hue) => onChange({ ...adjustment, hue })} onCommit={commit} />
-          <Slider label="Saturation" value={adjustment.saturation} min={-100} max={100} onChange={(saturation) => onChange({ ...adjustment, saturation })} onCommit={commit} />
-          <Slider label="Lightness" value={adjustment.lightness} min={-100} max={100} onChange={(lightness) => onChange({ ...adjustment, lightness })} onCommit={commit} />
+          <Slider label="Hue" defaultValue={0} value={adjustment.hue} min={-180} max={180} format={(value) => `${Math.round(value)}°`} onChange={(hue) => onChange({ ...adjustment, hue })} onCommit={commit} />
+          <Slider label="Saturation" defaultValue={0} value={adjustment.saturation} min={-100} max={100} onChange={(saturation) => onChange({ ...adjustment, saturation })} onCommit={commit} />
+          <Slider label="Lightness" defaultValue={0} value={adjustment.lightness} min={-100} max={100} onChange={(lightness) => onChange({ ...adjustment, lightness })} onCommit={commit} />
         </>
       ) : null}
       {adjustment.type === 'brightnessContrast' ? (
         <>
-          <Slider label="Brightness" value={adjustment.brightness} min={-100} max={100} onChange={(brightness) => onChange({ ...adjustment, brightness })} onCommit={commit} />
-          <Slider label="Contrast" value={adjustment.contrast} min={-100} max={100} onChange={(contrast) => onChange({ ...adjustment, contrast })} onCommit={commit} />
+          <Slider label="Brightness" defaultValue={0} value={adjustment.brightness} min={-100} max={100} onChange={(brightness) => onChange({ ...adjustment, brightness })} onCommit={commit} />
+          <Slider label="Contrast" defaultValue={0} value={adjustment.contrast} min={-100} max={100} onChange={(contrast) => onChange({ ...adjustment, contrast })} onCommit={commit} />
         </>
       ) : null}
       {adjustment.type === 'gradientMap' ? (
@@ -71,13 +72,14 @@ export function AdjustmentPanel({ adjustment, opacity, onChange, onOpacityChange
         </div>
       ) : null}
       {adjustment.type === 'threshold' ? (
-        <Slider label="Level" value={adjustment.level} min={0} max={255} onChange={(level) => onChange({ ...adjustment, level })} onCommit={commit} />
+        <Slider label="Level" defaultValue={128} value={adjustment.level} min={0} max={255} onChange={(level) => onChange({ ...adjustment, level })} onCommit={commit} />
       ) : null}
       {adjustment.type === 'posterize' ? (
         <Slider label="Levels" value={adjustment.levels} min={2} max={16} onChange={(levels) => onChange({ ...adjustment, levels: Math.round(levels) })} onCommit={commit} />
       ) : null}
       <Slider
         label="Opacity"
+        defaultValue={100}
         value={Math.round(opacity * 100)}
         min={0}
         max={100}

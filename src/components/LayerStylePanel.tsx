@@ -40,8 +40,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
   }
 
   return (
-    <div className="property-card layer-style-panel">
-      <h3 className="property-kicker">Layer style</h3>
+    <div className="layer-style-panel">
       {EFFECTS.map(({ kind, label, hint }) => {
         const active = Boolean(current[kind])
         return (
@@ -61,6 +60,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
                 <Slider
                   label="Opacity"
                   value={Math.round(current.dropShadow.opacity * 100)}
+                  defaultValue={Math.round(LAYER_STYLE_DEFAULTS.dropShadow.opacity * 100)}
                   min={0}
                   max={100}
                   format={(value) => `${Math.round(value)}%`}
@@ -70,6 +70,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
                 <Slider
                   label="Distance"
                   value={current.dropShadow.distance}
+                  defaultValue={LAYER_STYLE_DEFAULTS.dropShadow.distance}
                   min={0}
                   max={range(400)}
                   onChange={(distance) => patch('dropShadow', { distance })}
@@ -78,6 +79,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
                 <Slider
                   label="Blur"
                   value={current.dropShadow.blur}
+                  defaultValue={LAYER_STYLE_DEFAULTS.dropShadow.blur}
                   min={0}
                   max={range(300)}
                   onChange={(blur) => patch('dropShadow', { blur })}
@@ -86,6 +88,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
                 <Slider
                   label="Angle"
                   value={current.dropShadow.angle}
+                  defaultValue={LAYER_STYLE_DEFAULTS.dropShadow.angle}
                   min={0}
                   max={360}
                   format={(value) => `${Math.round(value)}°`}
@@ -105,6 +108,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
                 <Slider
                   label="Opacity"
                   value={Math.round(current.outerGlow.opacity * 100)}
+                  defaultValue={Math.round(LAYER_STYLE_DEFAULTS.outerGlow.opacity * 100)}
                   min={0}
                   max={100}
                   format={(value) => `${Math.round(value)}%`}
@@ -114,6 +118,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
                 <Slider
                   label="Size"
                   value={current.outerGlow.size}
+                  defaultValue={LAYER_STYLE_DEFAULTS.outerGlow.size}
                   min={0}
                   max={range(300)}
                   onChange={(size) => patch('outerGlow', { size })}
@@ -132,6 +137,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
                 <Slider
                   label="Width"
                   value={current.outline.width}
+                  defaultValue={LAYER_STYLE_DEFAULTS.outline.width}
                   min={0}
                   max={range(80)}
                   onChange={(width) => patch('outline', { width })}
@@ -140,6 +146,7 @@ export function LayerStylePanel({ style, onChange, onCommit, scale = 1 }: LayerS
                 <Slider
                   label="Opacity"
                   value={Math.round(current.outline.opacity * 100)}
+                  defaultValue={Math.round(LAYER_STYLE_DEFAULTS.outline.opacity * 100)}
                   min={0}
                   max={100}
                   format={(value) => `${Math.round(value)}%`}

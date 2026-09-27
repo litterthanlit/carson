@@ -27,7 +27,7 @@
   border-top: 0;
   border-left: 0;
   border-right: 0;
-  background: #2d2d2d;
+  background: var(--chrome-bar);
 }
 
 .brand,
@@ -134,12 +134,12 @@
   gap: 3px;
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
-  background: #2a2a2a;
+  background: var(--chrome-strip);
 }
 
 .treatment-chips.compact {
   padding: 3px 10px;
-  background: #323232;
+  background: var(--panel);
 }
 
 .treatment-chip-row {
@@ -156,8 +156,8 @@
   align-items: center;
   gap: 3px;
   padding: 1px 2px 1px 7px;
-  border: 1px solid #3f3f3f;
-  background: #252525;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
   font-size: 11px;
   border-radius: 2px;
 }
@@ -281,7 +281,7 @@
   border-top: 0;
   border-left: 0;
   border-right: 0;
-  background: #2d2d2d;
+  background: var(--chrome-bar);
 }
 
 .home-top-actions {
@@ -448,7 +448,7 @@ button {
 
 button:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: #5a5a5a;
+  border-color: var(--border-hover);
 }
 
 button:disabled {
@@ -483,13 +483,13 @@ textarea:focus-visible {
 .primary-button {
   background: var(--accent);
   color: #fff;
-  border-color: #0e63c7;
+  border-color: var(--accent-border);
   font-weight: 600;
 }
 
 .primary-button:hover:not(:disabled) {
   background: var(--accent-hover);
-  border-color: #1f74d4;
+  border-color: var(--accent-border-hover);
   color: #fff;
 }
 
@@ -540,7 +540,7 @@ textarea:focus-visible {
   min-height: calc(100dvh - 40px);
   max-height: calc(100dvh - 40px);
   border-right: 1px solid var(--border);
-  background: #2d2d2d;
+  background: var(--chrome-bar);
   z-index: 14;
 }
 
@@ -548,7 +548,7 @@ textarea:focus-visible {
   width: 18px;
   height: 1px;
   margin: 5px 0;
-  background: #4a4a4a;
+  background: var(--divider);
 }
 
 .tool-rail > button,
@@ -571,7 +571,7 @@ textarea:focus-visible {
 
 .tool-rail > button.active,
 .tool-rail-flyout-wrap > button.active {
-  background: #454545;
+  background: var(--tool-active);
   color: #fff;
   border-color: transparent;
 }
@@ -765,8 +765,8 @@ textarea {
   padding: 4px 8px;
   font-size: 12px;
   resize: vertical;
-  background: #1e1e1e;
-  border-color: #1a1a1a;
+  background: var(--field-bg);
+  border-color: var(--field-border);
   box-shadow: inset 0 1px 0 rgb(0 0 0 / 0.35);
 }
 
@@ -849,7 +849,7 @@ input[type='color'] {
 .dial-value-input:focus {
   outline: none;
   border-color: var(--accent);
-  background: #1e1e1e;
+  background: var(--field-bg);
   color: var(--text);
 }
 
@@ -1197,7 +1197,7 @@ input[type='color'] {
   border-left: 0;
   border-right: 0;
   border-top: 0;
-  background: #2d2d2d;
+  background: var(--chrome-bar);
   font-weight: 400;
   font-size: 11px;
   font-family: var(--font);
@@ -1267,7 +1267,7 @@ input[type='color'] {
   border-radius: 2px;
   font: 600 9px/1.4 var(--font);
   letter-spacing: 0.04em;
-  color: #cfe3ff;
+  color: var(--accent-text);
   background: rgb(20 115 230 / 0.28);
 }
 
@@ -1331,10 +1331,10 @@ input[type='color'] {
 
 .shortcut-list kbd {
   padding: 0 4px;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--bg-muted);
   border-bottom-width: 1px;
   border-radius: 2px;
-  background: #252525;
+  background: var(--surface-sunken);
   font: 500 10px/1.5 var(--font-mono);
   color: var(--text);
 }
@@ -1387,7 +1387,7 @@ input[type='color'] {
   width: var(--poster-display-width);
   height: var(--poster-display-height);
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
-  border: 1px solid #1a1a1a;
+  border: 1px solid var(--field-border);
   border-radius: 0;
   overflow: visible;
   background: #f6f1e6;
@@ -1589,7 +1589,7 @@ input[type='color'] {
   border-radius: var(--radius);
   font: 400 11px/1 var(--font);
   color: var(--text-muted);
-  background: rgb(255 255 255 / 0.08);
+  background: var(--wash-strong);
 }
 
 .visually-hidden {
@@ -1683,7 +1683,7 @@ input[type='color'] {
   gap: 0;
   padding: 0;
   overflow: hidden;
-  background: #2a2a2a;
+  background: var(--chrome-strip);
   border-bottom: 1px solid var(--border);
 }
 
@@ -2022,7 +2022,7 @@ input[type='color'] {
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: rgb(255 255 255 / 0.03);
+  background: var(--wash-faint);
 }
 
 .asset-thumb-empty {
@@ -2472,9 +2472,9 @@ input[type='color'] {
   gap: 8px;
   min-height: 24px;
   padding: 2px 6px;
-  border: 1px solid #1a1a1a;
+  border: 1px solid var(--field-border);
   border-radius: var(--radius);
-  background: #1e1e1e;
+  background: var(--field-bg);
   color: var(--text);
   cursor: pointer;
 }
@@ -2819,7 +2819,7 @@ label:has(> input[type='radio']) {
   pointer-events: auto;
   font: 600 9px/1 var(--font);
   color: var(--text-faint);
-  background: #2a2a2a;
+  background: var(--chrome-strip);
   border: 0;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -3391,7 +3391,7 @@ label:has(> input[type='radio']) {
   display: block;
   height: 14px;
   border-radius: 2px;
-  outline: 1px solid rgb(255 255 255 / 0.08);
+  outline: 1px solid var(--wash-strong);
 }
 
 
@@ -3602,7 +3602,7 @@ label:has(> input[type='radio']) {
   gap: 8px;
   min-height: var(--row-h);
   padding: 0 8px 0 0;
-  border-bottom: 1px solid rgb(0 0 0 / 0.18);
+  border-bottom: 1px solid var(--hairline-dark);
   font-size: 12px;
   color: var(--text);
   cursor: default;
@@ -3611,7 +3611,7 @@ label:has(> input[type='radio']) {
 }
 
 .layer-row:hover {
-  background: rgb(255 255 255 / 0.04);
+  background: var(--wash);
 }
 
 .layer-row.active {
@@ -3652,7 +3652,7 @@ label:has(> input[type='radio']) {
 
 .layer-vis:hover:not(:disabled),
 .layer-lock:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.08);
+  background: var(--wash-strong);
   border: 0;
   color: var(--text);
 }
@@ -3660,7 +3660,7 @@ label:has(> input[type='radio']) {
 .layer-vis {
   align-self: stretch;
   width: 32px;
-  border-right: 1px solid rgb(0 0 0 / 0.22);
+  border-right: 1px solid var(--hairline-dark);
   border-radius: 0;
 }
 
@@ -3696,7 +3696,7 @@ label:has(> input[type='radio']) {
   border-radius: 2px;
   /* Transparency checkerboard, as in every pixel editor. */
   background:
-    repeating-conic-gradient(#4a4a4a 0% 25%, #3a3a3a 0% 50%) 50% / 8px 8px;
+    repeating-conic-gradient(var(--checker-light) 0% 25%, var(--checker-dark) 0% 50%) 50% / 8px 8px;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
   color: var(--text-muted);
 }
@@ -3718,7 +3718,7 @@ label:has(> input[type='radio']) {
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  background: #1e1e1e;
+  background: var(--field-bg);
   box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
   color: var(--text-muted);
 }
@@ -3762,7 +3762,7 @@ label:has(> input[type='radio']) {
   height: 24px;
   padding: 0 6px;
   border-color: var(--accent);
-  background: #1e1e1e;
+  background: var(--field-bg);
   font: 400 12px/1 var(--font);
 }
 
@@ -3837,7 +3837,7 @@ label:has(> input[type='radio']) {
 .layers-footer-button:hover:not(:disabled),
 .layers-adjustment:hover {
   border: 0;
-  background: rgb(255 255 255 / 0.08);
+  background: var(--wash-strong);
   color: var(--text);
 }
 
@@ -3857,6 +3857,146 @@ label:has(> input[type='radio']) {
 
 @media (prefers-reduced-motion: reduce) {
   .layer-row {
+    transition: none;
+  }
+}
+
+/* A slider moved off its neutral value gets a small accent dot beside the label. */
+.dial.modified .dial-label::after {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.layer-caret,
+.layer-caret-spacer {
+  flex: 0 0 auto;
+  width: 16px;
+  margin-right: -6px;
+}
+
+.layer-caret {
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.layer-caret:hover:not(:disabled) {
+  border: 0;
+  background: var(--wash-strong);
+  color: var(--text);
+}
+
+.layer-caret svg {
+  transition: transform 120ms ease;
+}
+
+.layer-caret[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-caret svg {
+    transition: none;
+  }
+}
+
+/* ── Inspector property sections ─────────────────────────────────────────
+   Full-bleed collapsible groups (Type, Transform, Appearance, Path, Effects,
+   Mask). Headers share the panel's tracked-caps label style. */
+.property-section {
+  margin: 4px -10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.property-section-heading {
+  margin: 0;
+}
+
+.property-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font: 600 11px/1 var(--font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.property-section-toggle:hover:not(:disabled) {
+  border: 0;
+  background: var(--wash-faint);
+  color: var(--text);
+}
+
+.property-section-toggle:focus-visible {
+  outline-offset: -1px;
+}
+
+.property-section.open .property-section-toggle {
+  color: var(--text);
+}
+
+.property-section-caret {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  transition: transform 140ms ease;
+}
+
+.property-section.open .property-section-caret {
+  transform: rotate(90deg);
+}
+
+.property-section-title {
+  flex: 1;
+  text-align: left;
+}
+
+.property-section-summary {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font: 500 10px/1.4 var(--font);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--accent-text);
+}
+
+.property-section-body {
+  display: grid;
+  gap: 6px;
+  padding: 0 10px 14px;
+}
+
+.property-section-body[hidden] {
+  display: none;
+}
+
+/* The first control in a section shouldn't add its own top gap under the header. */
+.property-section-body > :first-child,
+.property-section-body > .dial:first-child {
+  margin-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .property-section-caret {
     transition: none;
   }
 }
