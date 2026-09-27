@@ -78,3 +78,21 @@ describe('hitLayoutGuide', () => {
     expect(hitLayoutGuide({ x: 40, y: 40 }, guides, 6)).toBeNull()
   })
 })
+
+describe('alignObjects / distributeObjects with Fabric 7 center origins', () => {
+  it('aligns bounding boxes, not origin points', async () => {
+    const { Rect } = await import('fabric')
+    const { alignObjects, distributeObjects, objectBounds } = await import('./grid')
+    const a = new Rect({ left: 100, top: 100, width: 40, height: 40 })
+    const b = new Rect({ left: 300, top: 200, width: 120, height: 20 })
+    const c = new Rect({ left: 600, top: 50, width: 10, height: 10 })
+    for (const object of [a, b, c]) object.setCoords()
+    alignObjects([a, b], 'left')
+    expect(objectBounds(a).left).toBeCloseTo(objectBounds(b).left)
+    alignObjects([a, b], 'bottom')
+    expect(objectBounds(a).top + objectBounds(a).height).toBeCloseTo(objectBounds(b).top + objectBounds(b).height)
+    distributeObjects([a, b, c], 'horizontal')
+    const [ba, bb, bc] = [a, b, c].map(objectBounds).sort((x, y) => x.left - y.left)
+    expect(bb.left - (ba.left + ba.width)).toBeCloseTo(bc.left - (bb.left + bb.width))
+  })
+})

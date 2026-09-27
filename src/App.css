@@ -1063,10 +1063,22 @@ input[type='color'] {
   position: relative;
   min-width: 0;
   min-height: calc(100dvh - 40px);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 0;
+  /* Pin to the viewport so zoomed posters scroll inside .canvas-scroll instead of growing the page. */
+  height: calc(100dvh - 40px);
+  /* Flex column: toolbar, optional treatment stack bar, scroll area, trail. Only the
+     scroll area stretches, however many optional bars are present. */
+  display: flex;
+  flex-direction: column;
   background: var(--canvas-bg);
+}
+
+.canvas-stage > * {
+  flex: none;
+}
+
+.canvas-stage > .canvas-scroll {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .exploration-trail {
@@ -1743,6 +1755,10 @@ input[type='color'] {
   .canvas-scroll {
     min-height: 560px;
     padding: 28px 16px 16px 28px;
+  }
+
+  .canvas-stage {
+    height: auto;
   }
 }
 

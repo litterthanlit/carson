@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ActiveSelection,
   Canvas,
@@ -28,6 +28,7 @@ import {
   type PosterPresetId,
 } from './lib/editorModel'
 import { createSeededRandom, newSeed } from './lib/random'
+import { applyBackstore, backstoreScale, installDynamicBackstore } from './lib/backstoreScale'
 import {
   clearAutosave,
   deleteProject,
@@ -289,6 +290,8 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const displayScaleRef = useRef(1)
+  const backstoreScaleRef = useRef(0)
+  const zoomAnchorRef = useRef<{ clientX: number; clientY: number; posterX: number; posterY: number } | null>(null)
   const guidesRef = useRef<{ v: number[]; h: number[] }>({ v: [], h: [] })
   const lastChaosRef = useRef<ChaosRun | null>(null)
   const walkthroughStepRef = useRef<WalkthroughStep | null>(null)
@@ -632,6 +635,16 @@ function App() {
   }, [poster.height, poster.width, stageSize])
   const displayScale = zoom ?? fitScale
   displayScaleRef.current = displayScale
+  const pasteboard = useMemo(
+    () =>
+      stageSize && displayScale > fitScale * 1.02
+        ? { x: Math.round(stageSize.width * 0.45), y: Math.round(stageSize.height * 0.45) }
+        : null,
+    [displayScale, fitScale, stageSize],
+  )
+  if (backstoreScaleRef.current === 0) {
+    backstoreScaleRef.current = backstoreScale(displayScale, window.devicePixelRatio || 1, poster.width, poster.height)
+  }
 
   // Keep latest values reachable from stable event listeners.
   const liveRef = useRef({ poster, projectName, projectId, displayScale, fitScale, zoom })
@@ -657,6 +670,8 @@ function App() {
       selectionLineWidth: 1,
     })
 
+    // Size the backing store to what the screen shows instead of poster × DPR.
+    installDynamicBackstore(canvas, () => backstoreScaleRef.current)
     canvasRef.current = canvas
     registerCanvasEvents(canvas)
 
@@ -757,6 +772,16 @@ function App() {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    const next = backstoreScale(displayScale, window.devicePixelRatio || 1, poster.width, poster.height)
+    if (next === backstoreScaleRef.current) return
+    backstoreScaleRef.current = next
+    applyBackstore(canvas)
+    canvas.requestRenderAll()
+  }, [displayScale, poster.width, poster.height, screen, editorSession])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
     for (const object of canvas.getObjects()) {
       applySelectionChrome(object, displayScale)
     }
@@ -774,6 +799,7 @@ function App() {
     }
     if (canvas.getWidth() === poster.width && canvas.getHeight() === poster.height) return
     canvas.setDimensions({ width: poster.width, height: poster.height })
+    applyBackstore(canvas)
     canvas.backgroundColor = '#f6f1e6'
     canvas.requestRenderAll()
     commitHistory('Changed poster size')
@@ -842,7 +868,7 @@ function App() {
     addText: () => setEditorTool('text'),
     addShape,
     zoomFit: () => setZoom(null),
-    zoom100: () => setZoom(1),
+    zoom100: () => zoomAround(1),
     zoomIn: () => stepZoom(1),
     zoomOut: () => stepZoom(-1),
     reroll: () => void rerollLast(),
@@ -1124,11 +1150,26 @@ function App() {
       event.preventDefault()
       const current = liveRef.current.zoom ?? liveRef.current.fitScale
       const next = clampZoom(current * Math.exp(-event.deltaY * 0.0015))
-      setZoom(next)
+      zoomAround(next, { x: event.clientX, y: event.clientY })
     }
     scroller.addEventListener('wheel', onWheel, { passive: false })
     return () => scroller.removeEventListener('wheel', onWheel)
   }, [screen])
+
+  function applyZoomAnchor(scale: number) {
+    const anchor = zoomAnchorRef.current
+    zoomAnchorRef.current = null
+    const scroller = scrollRef.current
+    const shell = scroller?.querySelector<HTMLElement>('.canvas-shell')
+    if (!anchor || !scroller || !shell) return
+    const rect = shell.getBoundingClientRect()
+    scroller.scrollLeft += rect.left + anchor.posterX * scale - anchor.clientX
+    scroller.scrollTop += rect.top + anchor.posterY * scale - anchor.clientY
+  }
+
+  useLayoutEffect(() => {
+    applyZoomAnchor(displayScale)
+  }, [displayScale, pasteboard])
 
   function clampZoom(value: number) {
     return Math.min(8, Math.max(0.1, value))
@@ -1140,7 +1181,29 @@ function App() {
       direction === 1
         ? ZOOM_LEVELS.find((level) => level > current + 0.001)
         : [...ZOOM_LEVELS].reverse().find((level) => level < current - 0.001)
-    setZoom(clampZoom(next ?? current))
+    zoomAround(clampZoom(next ?? current))
+  }
+
+  /**
+   * Zoom while keeping a screen point pinned over the same poster pixel
+   * (cursor for wheel/pinch, viewport center for buttons and shortcuts).
+   */
+  function zoomAround(next: number | null, screenPoint?: { x: number; y: number }) {
+    const scroller = scrollRef.current
+    const shell = scroller?.querySelector<HTMLElement>('.canvas-shell')
+    if (scroller && shell) {
+      const view = scroller.getBoundingClientRect()
+      const rect = shell.getBoundingClientRect()
+      const anchor = screenPoint ?? { x: view.left + view.width / 2, y: view.top + view.height / 2 }
+      const scale = liveRef.current.displayScale
+      zoomAnchorRef.current = {
+        clientX: anchor.x,
+        clientY: anchor.y,
+        posterX: (anchor.x - rect.left) / scale,
+        posterY: (anchor.y - rect.top) / scale,
+      }
+    }
+    setZoom(next)
   }
 
   function handlePanMouseDown(event: React.MouseEvent) {
@@ -1556,7 +1619,12 @@ function App() {
       patch.globalCompositeOperation = values.blendMode as GlobalCompositeOperation
       delete (patch as Partial<SelectedState>).blendMode
     }
+    // Rotate around the visual center (Photoshop/Figma behavior) rather than the
+    // top-left origin point.
+    const nextAngle = patch.angle
+    delete patch.angle
     object.set(patch)
+    if (nextAngle !== undefined) object.rotate(nextAngle)
     if (values.text !== undefined || values.fill !== undefined || values.stroke !== undefined) {
       recordOverrideFromPatch(object, {
         text: values.text,
@@ -1725,8 +1793,15 @@ function App() {
     if (!canvas || !active) return
     const objects = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
     alignObjects(objects, mode)
+    refreshSelectionBounds(active)
     canvas.requestRenderAll()
     commitHistory(`Aligned ${mode}`)
+  }
+
+  function refreshSelectionBounds(active: FabricObject) {
+    // Children moved inside an ActiveSelection; re-fit the selection box to them.
+    if (active.type === 'activeselection') (active as FabricGroup).triggerLayout()
+    active.setCoords()
   }
 
   function distributeSelection(axis: 'horizontal' | 'vertical') {
@@ -1735,6 +1810,7 @@ function App() {
     if (!canvas || !active) return
     const objects = active.type === 'activeselection' ? canvas.getActiveObjects() : [active]
     distributeObjects(objects, axis)
+    refreshSelectionBounds(active)
     canvas.requestRenderAll()
     commitHistory(`Distributed ${axis}`)
   }
@@ -2384,6 +2460,7 @@ function App() {
       setPoster(target.preset)
       setPresetId(target.preset.id)
       canvas.setDimensions({ width: target.preset.width, height: target.preset.height })
+      applyBackstore(canvas)
       void refreshPosterTreatments()
       canvas.requestRenderAll()
     }
@@ -3056,14 +3133,15 @@ function App() {
     const viewW = Math.max(160, scroller.clientWidth - padding * 2)
     const viewH = Math.max(160, scroller.clientHeight - padding * 2)
     const nextScale = clampZoom(Math.min(viewW / Math.max(bounds.width, 1), viewH / Math.max(bounds.height, 1), 4))
-    setZoom(nextScale)
-
-    window.requestAnimationFrame(() => {
-      const centerX = (bounds.left + bounds.width / 2) * nextScale
-      const centerY = (bounds.top + bounds.height / 2) * nextScale
-      scroller.scrollLeft = Math.max(0, centerX - scroller.clientWidth / 2)
-      scroller.scrollTop = Math.max(0, centerY - scroller.clientHeight / 2)
-    })
+    const view = scroller.getBoundingClientRect()
+    zoomAnchorRef.current = {
+      clientX: view.left + view.width / 2,
+      clientY: view.top + view.height / 2,
+      posterX: bounds.left + bounds.width / 2,
+      posterY: bounds.top + bounds.height / 2,
+    }
+    if (Math.abs(nextScale - displayScale) < 1e-6) applyZoomAnchor(displayScale)
+    else setZoom(nextScale)
     setStatus(`Zoomed to ${String(readObjectProp(object, 'name') ?? 'layer')}`)
   }
 
@@ -4854,6 +4932,7 @@ function App() {
         <EditorCanvas
           poster={poster}
           displayScale={displayScale}
+          pasteboard={pasteboard}
           status={status}
           isPanMode={isPanMode}
           documentMeta={documentMeta}
@@ -4905,7 +4984,7 @@ function App() {
           onSwitchArtboard={(artboardId) => void switchToArtboard(artboardId)}
           onChangeArtboardPreset={changeArtboardPreset}
           onStepZoom={stepZoom}
-          onZoom100={() => setZoom(1)}
+          onZoom100={() => zoomAround(1)}
           onZoomFit={() => setZoom(null)}
           onReroll={() => void rerollLast()}
           onPanMouseDown={handlePanMouseDown}

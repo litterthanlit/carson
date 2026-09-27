@@ -10,6 +10,20 @@ export function objectBounds(object: FabricObject): Bounds {
   return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
 }
 
+/**
+ * Move an object so its bounding box starts at (targetLeft, targetTop).
+ * Works as a translation delta, so it is independent of origin (Fabric 7 defaults
+ * to center) and of whether the object lives inside an ActiveSelection, where
+ * `left`/`top` are relative to the selection rather than the canvas.
+ */
+function moveBoundsTo(object: FabricObject, bounds: Bounds, targetLeft: number, targetTop: number) {
+  const dx = targetLeft - bounds.left
+  const dy = targetTop - bounds.top
+  if (dx === 0 && dy === 0) return
+  object.set({ left: (object.left ?? 0) + dx, top: (object.top ?? 0) + dy })
+  object.setCoords()
+}
+
 export function alignObjects(objects: FabricObject[], mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
   if (objects.length < 2) return
   const bounds = objects.map(objectBounds)
@@ -30,8 +44,7 @@ export function alignObjects(objects: FabricObject[], mode: 'left' | 'center' | 
     if (mode === 'top') top = minTop
     if (mode === 'middle') top = centerY - b.height / 2
     if (mode === 'bottom') top = maxBottom - b.height
-    object.set({ left, top })
-    object.setCoords()
+    moveBoundsTo(object, b, left, top)
   })
 }
 
@@ -51,8 +64,7 @@ export function distributeObjects(objects: FabricObject[], axis: 'horizontal' | 
     const gap = (span - totalWidth) / (sorted.length - 1)
     let cursor = first.left
     sorted.forEach((object, index) => {
-      object.set({ left: cursor })
-      object.setCoords()
+      moveBoundsTo(object, bounds[index], cursor, bounds[index].top)
       cursor += bounds[index].width + gap
     })
   } else {
@@ -63,8 +75,7 @@ export function distributeObjects(objects: FabricObject[], axis: 'horizontal' | 
     const gap = (span - totalHeight) / (sorted.length - 1)
     let cursor = first.top
     sorted.forEach((object, index) => {
-      object.set({ top: cursor })
-      object.setCoords()
+      moveBoundsTo(object, bounds[index], bounds[index].left, cursor)
       cursor += bounds[index].height + gap
     })
   }

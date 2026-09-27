@@ -10,6 +10,8 @@ import type { TrailFrame } from '../lib/explorationTrail'
 type EditorCanvasProps = {
   poster: PosterPreset
   displayScale: number
+  /** Extra working space around the poster when zoomed past fit, so zoom can anchor anywhere. */
+  pasteboard: { x: number; y: number } | null
   status: string
   isPanMode: boolean
   documentMeta: DocumentMeta | null
@@ -53,6 +55,7 @@ type EditorCanvasProps = {
 export const EditorCanvas = memo(function EditorCanvas({
   poster,
   displayScale,
+  pasteboard,
   status,
   isPanMode,
   documentMeta,
@@ -231,6 +234,7 @@ export const EditorCanvas = memo(function EditorCanvas({
               '--poster-height': `${poster.height}px`,
               '--poster-display-width': `${poster.width * displayScale}px`,
               '--poster-display-height': `${poster.height * displayScale}px`,
+              ...(pasteboard ? { margin: `${pasteboard.y}px ${pasteboard.x}px` } : null),
             } as CSSProperties
           }
         >
