@@ -33,5 +33,5 @@ Preconditions:
 - Driving `localhost:5173` can load the operator's autosave instead of the seed poster. Use the launched `127.0.0.1` origin.
 - A restored autosave with decay specks is not baseline. Use a fresh Playwright profile.
 - Dialog `Wreck this poster` can lazy-load. Wait for the dialog, then `Skip intro`, then wait until it is hidden. Do not click inspector tabs while `.command-backdrop` is up.
-- Hide/Lock/Rename also include the layer name. Click the control titled `Select layer · double-click to zoom to layer`.
+- Hide/Lock/Rename also include the layer name. Click the `button.layer-select` control containing the layer name.
 - Inspector has two Name fields. Use the Inspector complementary region's first Name textbox, not the project name.

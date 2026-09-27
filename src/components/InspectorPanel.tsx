@@ -142,6 +142,8 @@ export type InspectorPanelProps = {
   onFinalizeActive: (message: string) => void
   onLayerStyleChange: (style: LayerStyle) => void
   onAddAdjustment?: (type: AdjustmentType) => void
+  onStartWarp?: (type: 'distort' | 'mesh') => void
+  onRemoveWarp?: () => void
   onAdjustmentChange?: (adjustment: Adjustment) => void
   onPreviewBlendMode: (mode: string | null) => void
   onApplyBlendMode: (mode: string) => void
@@ -324,6 +326,8 @@ export function InspectorPanel({
   onFinalizeActive,
   onLayerStyleChange,
   onAddAdjustment,
+  onStartWarp,
+  onRemoveWarp,
   onAdjustmentChange,
   onPreviewBlendMode,
   onApplyBlendMode,
@@ -1366,6 +1370,21 @@ export function InspectorPanel({
                     onChange={(value) => onUpdateActive({ skewX: value })}
                     onCommit={() => onFinalizeActive('Skewed layer')}
                   />
+                  {selectedLayerIds.length <= 1 && onStartWarp ? (
+                    <div className="button-row">
+                      <button type="button" title="Drag four corners for perspective (⌘K: Distort)" onClick={() => onStartWarp('distort')}>
+                        Distort
+                      </button>
+                      <button type="button" title="Bend the layer with a 4×4 mesh" onClick={() => onStartWarp('mesh')}>
+                        Warp
+                      </button>
+                      {selected.warp && onRemoveWarp ? (
+                        <button type="button" title="Back to the unwarped layer" onClick={onRemoveWarp}>
+                          Remove warp
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="button-row">
                     <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
                       <BringToFront size={16} />

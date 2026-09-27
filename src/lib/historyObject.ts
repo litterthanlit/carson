@@ -8,6 +8,7 @@ import { applyPathData, type PathData } from './pathEditing'
 import { readObjectProp } from './canvasUtils'
 import { readLayerStyle, writeLayerStyle, type LayerStyle } from './layerStyles'
 import type { Adjustment } from './adjustments'
+import type { Warp } from './warp'
 
 export type ObjectPatch = {
   left: number
@@ -25,6 +26,7 @@ export type ObjectPatch = {
   layerMask?: LayerMask | null
   layerStyle?: LayerStyle | null
   adjustment?: Adjustment
+  warp?: Warp | null
 }
 
 export function captureObjectPatch(object: FabricObject): string {
@@ -45,6 +47,7 @@ export function captureObjectPatch(object: FabricObject): string {
   }
   const adjustment = readObjectProp(object, 'adjustment') as Adjustment | undefined
   if (adjustment) patch.adjustment = adjustment
+  patch.warp = (readObjectProp(object, 'warp') as Warp | undefined) ?? null
   return JSON.stringify(patch)
 }
 
@@ -80,6 +83,7 @@ export function applyObjectPatch(object: FabricObject, patchJson: string): void 
     evented: patch.evented,
   } as Partial<FabricObject>)
   if (patch.adjustment) object.set({ adjustment: patch.adjustment } as Partial<FabricObject>)
+  if (Object.prototype.hasOwnProperty.call(patch, 'warp')) object.set({ warp: patch.warp ?? undefined, dirty: true } as Partial<FabricObject>)
   if (Object.prototype.hasOwnProperty.call(patch, 'layerStyle')) {
     writeLayerStyle(object, patch.layerStyle ?? null)
   }

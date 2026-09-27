@@ -13,6 +13,7 @@ export const HISTORY_PROPS = [
   'paintLayer',
   'paintVersion',
   'perPixelTargetFind',
+  'warp',
   'transformBaseline',
   'stroke',
   'strokeWidth',

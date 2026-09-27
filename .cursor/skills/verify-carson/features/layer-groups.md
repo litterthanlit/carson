@@ -23,8 +23,8 @@ Preconditions:
 - Bare `G` is not pressed. That toggles the layout grid.
 
 - **Select two layers.** Choose `Oversized headline`, then shift-click `Red interruption`. Run `node .cursor/skills/verify-carson/scripts/drive.mjs --feature layer-groups`. The `Group` button is enabled.
-- **Group.** Choose `Group`. A layer row matching `Group group` appears. Nested `Red interruption` and `Oversized headline` rows remain under it.
-- **Ungroup.** Choose `Ungroup`. The `Group group` row is gone. `Oversized headline` is a top-level row again.
+- **Group.** Choose `Group`. A layer row named `Group` appears. Nested `Red interruption` and `Oversized headline` rows remain under it.
+- **Ungroup.** Choose `Ungroup`. The `Group` row is gone. `Oversized headline` is a top-level row again.
 - **Proof.** `artifacts/layer-groups/grouped.png` shows the group row. `ungrouped.png` shows the children restored.
 
 ## Gotchas
