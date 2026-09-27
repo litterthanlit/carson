@@ -32,6 +32,8 @@ import { serializeHistorySnapshot } from './lib/historySnapshot'
 import { runWhenIdle } from './lib/idle'
 import type { PixelSelection, SelectionMode } from './lib/selection'
 import { SelectionOverlay } from './components/SelectionOverlay'
+import { AdjustmentLayer, readAdjustment } from './lib/adjustmentLayer'
+import { ADJUSTMENT_LABELS, defaultAdjustment, type Adjustment, type AdjustmentType } from './lib/adjustments'
 import { layerStyleScale, readLayerStyle, scaledLayerStyleDefaults, writeLayerStyle, type LayerStyle, type LayerStyleKind } from './lib/layerStyles'
 import { applyBackstore, backstoreScale, installDynamicBackstore } from './lib/backstoreScale'
 import {
@@ -1596,6 +1598,7 @@ function App() {
       componentId: readComponentId(object) ?? undefined,
       overrideCount: overrideCount(readComponentOverrides(object)),
       layerStyle: readLayerStyle(object),
+      adjustment: readAdjustment(object),
     }
   }
 
@@ -1717,6 +1720,39 @@ function App() {
     syncSelected()
     invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
     scheduleSyncLayers()
+  }
+
+  /** Add an adjustment layer above the selected layer (or on top), covering the poster. */
+  function addAdjustmentLayer(type: AdjustmentType) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const layer = new AdjustmentLayer({
+      left: 0,
+      top: 0,
+      width: poster.width,
+      height: poster.height,
+      adjustment: defaultAdjustment(type),
+    })
+    tagObject(layer, 'adjustment', ADJUSTMENT_LABELS[type])
+    const active = activeObject()
+    const anchor = active && active.type !== 'activeselection' ? topLevelLayer(active) : null
+    const index = anchor ? canvas.getObjects().indexOf(anchor) : -1
+    if (index >= 0) canvas.insertAt(index + 1, layer)
+    else canvas.add(layer)
+    canvas.setActiveObject(layer)
+    canvas.requestRenderAll()
+    setInspectorTab('inspect')
+    commitHistory(`Added ${ADJUSTMENT_LABELS[type].toLowerCase()} adjustment`)
+  }
+
+  function updateAdjustment(adjustment: Adjustment) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || !readAdjustment(object)) return
+    beginObjectEditSession(object)
+    object.set({ adjustment } as Partial<FabricObject>)
+    canvas.requestRenderAll()
+    syncSelected()
   }
 
   function toggleLayerStyleEffect(kind: LayerStyleKind, label: string) {
@@ -4745,6 +4781,13 @@ function App() {
         run: () => toggleLayerStyleEffect(kind, label),
       }
     }),
+    ...(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => ({
+      id: `adjustment-${type}`,
+      label: `Add ${ADJUSTMENT_LABELS[type].toLowerCase()} adjustment layer`,
+      keywords: ['adjustment', 'layer', 'color', 'grade', type, ADJUSTMENT_LABELS[type].toLowerCase()],
+      scope: 'canvas' as const,
+      run: () => addAdjustmentLayer(type),
+    })),
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
@@ -5367,6 +5410,8 @@ function App() {
           onUpdateActive={updateActive}
           onFinalizeActive={finalizeActive}
           onLayerStyleChange={updateLayerStyle}
+          onAddAdjustment={addAdjustmentLayer}
+          onAdjustmentChange={updateAdjustment}
           onPreviewBlendMode={previewBlendMode}
           onApplyBlendMode={applyBlendMode}
           onLoadGoogleFont={loadGoogleFont}

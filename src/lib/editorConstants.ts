@@ -9,6 +9,7 @@ export const HISTORY_PROPS = [
   'treatments',
   'layerMask',
   'layerStyle',
+  'adjustment',
   'transformBaseline',
   'stroke',
   'strokeWidth',

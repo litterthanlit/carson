@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState, type RefObject } from 'react'
 import {
-  BoxSelect,
+  Brush,
   Circle,
   CircleDashed,
   Lasso,
@@ -231,7 +231,7 @@ export const ToolRail = memo(function ToolRail({
             setFlyout((current) => (current === 'mask' ? null : 'mask'))
           }}
         >
-          <BoxSelect size={16} />
+          <Brush size={16} />
         </button>
         {flyout === 'mask' ? (
           <div className="tool-flyout" role="menu" aria-label="Mask tools">

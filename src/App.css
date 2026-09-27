@@ -3399,3 +3399,48 @@ label:has(> input[type='radio']) {
   backdrop-filter: blur(8px);
   box-shadow: var(--shadow-md);
 }
+
+/* ── Adjustment layers ──────────────────────────────────────────────────── */
+.adjustment-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.levels-ramp {
+  position: relative;
+  height: 12px;
+  margin: 2px 0 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #000, #fff);
+}
+
+.levels-ramp span {
+  position: absolute;
+  top: 100%;
+  width: 0;
+  height: 0;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-bottom-color: var(--text);
+  transform: translateY(-2px);
+}
+
+.gradient-map-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.gradient-map-preview {
+  display: block;
+  height: 14px;
+  border-radius: 2px;
+  outline: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.add-adjustment {
+  margin: 0 0 6px;
+}
+
+.add-adjustment select {
+  font-size: 12px;
+}

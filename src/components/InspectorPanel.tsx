@@ -55,6 +55,8 @@ import { BlendModePicker } from './BlendModePicker'
 import { Slider } from './Slider'
 import { LayerStylePanel } from './LayerStylePanel'
 import { layerStyleScale, type LayerStyle } from '../lib/layerStyles'
+import { AdjustmentPanel } from './AdjustmentPanel'
+import { ADJUSTMENT_LABELS, type Adjustment, type AdjustmentType } from '../lib/adjustments'
 import { ScopeSel } from './ScopeBadge'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
 
@@ -136,6 +138,8 @@ export type InspectorPanelProps = {
   onUpdateActive: (values: Partial<SelectedState>) => void
   onFinalizeActive: (message: string) => void
   onLayerStyleChange: (style: LayerStyle) => void
+  onAddAdjustment?: (type: AdjustmentType) => void
+  onAdjustmentChange?: (adjustment: Adjustment) => void
   onPreviewBlendMode: (mode: string | null) => void
   onApplyBlendMode: (mode: string) => void
   onLoadGoogleFont: (family: string) => Promise<void>
@@ -314,6 +318,8 @@ export function InspectorPanel({
   onUpdateActive,
   onFinalizeActive,
   onLayerStyleChange,
+  onAddAdjustment,
+  onAdjustmentChange,
   onPreviewBlendMode,
   onApplyBlendMode,
   onLoadGoogleFont,
@@ -864,6 +870,26 @@ export function InspectorPanel({
       {inspectorTab === 'layers' ? (
         <div className="panel-section">
           <h2>Layers</h2>
+          {onAddAdjustment ? (
+            <label className="add-adjustment">
+              <span className="visually-hidden">Add adjustment layer</span>
+              <select
+                aria-label="Add adjustment layer"
+                value=""
+                onChange={(event) => {
+                  const type = event.target.value as AdjustmentType
+                  if (type) onAddAdjustment(type)
+                }}
+              >
+                <option value="">＋ Adjustment layer…</option>
+                {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {ADJUSTMENT_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <div className="button-row">
             <button type="button" title="Group selected layers (Cmd+G)" disabled={!canGroupLayers} onClick={onGroupLayers}>
               <Group size={14} />
@@ -952,6 +978,16 @@ export function InspectorPanel({
                     onBlur={() => onFinalizeActive('Renamed layer')}
                   />
                 </label>
+                {selected.adjustment && onAdjustmentChange ? (
+                  <AdjustmentPanel
+                    adjustment={selected.adjustment}
+                    opacity={selected.opacity}
+                    onChange={onAdjustmentChange}
+                    onOpacityChange={(opacity) => onUpdateActive({ opacity })}
+                    onCommit={onFinalizeActive}
+                  />
+                ) : null}
+                {selected.adjustment ? null : (<>
                 {selectedIsText ? (
                   <>
                     <label>
@@ -1449,6 +1485,7 @@ export function InspectorPanel({
                   />
                 </label>
                 <p className="hint">Hover a mode to preview it on the canvas. Click to apply.</p>
+                </>)}
                 <div className="button-row">
                   <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
                     <BringToFront size={16} />
