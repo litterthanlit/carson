@@ -102,6 +102,27 @@ const FEATURES = {
     await capture(page, outDir, 'undone')
   },
 
+  async warp(page, outDir) {
+    await openTab(page, 'Inspect')
+    await page.getByRole('button', { name: 'Distort', exact: true }).click()
+    await page.getByRole('toolbar', { name: 'Warp options' }).waitFor()
+    const handle = page.getByRole('button', { name: 'Top-left corner', exact: true })
+    const box = await handle.boundingBox()
+    if (!box) fail('Distort handles missing')
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 80, box.y + 30, { steps: 10 })
+    await page.mouse.up()
+    await capture(page, outDir, 'distorting')
+    await page.getByRole('button', { name: 'Done' }).click()
+    await page.getByRole('status').filter({ hasText: 'Distorted layer' }).waitFor()
+    await page.getByRole('button', { name: 'Remove warp' }).waitFor()
+    await capture(page, outDir, 'distorted')
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await page.getByRole('status').filter({ hasText: /Undo: Distorted layer/ }).waitFor()
+    if (await page.getByRole('button', { name: 'Remove warp' }).count()) fail('Undo left the warp in place')
+  },
+
   async 'home-recents'(page, outDir) {
     const home = page.getByRole('region', { name: 'Home' })
     await home.waitFor({ state: 'visible' })

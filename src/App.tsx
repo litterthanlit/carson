@@ -37,6 +37,10 @@ import { BrushBar } from './components/BrushBar'
 import { DEFAULT_BRUSH, type BrushSettings } from './lib/brush'
 import { StrokeSession, bumpPaintVersion, createPaintLayer, isPaintLayer, posterToPaintPixel } from './lib/paintLayer'
 import { storePixels } from './lib/pixelStore'
+import { WarpOverlay } from './components/WarpOverlay'
+import { WarpBar } from './components/WarpBar'
+import { MESH_SIZE, identityDistort, identityMesh, isIdentityWarp, warpPoint, type Warp } from './lib/warp'
+import { readWarp } from './lib/warpRender'
 import { AdjustmentLayer, readAdjustment } from './lib/adjustmentLayer'
 import { ADJUSTMENT_LABELS, defaultAdjustment, type Adjustment, type AdjustmentType } from './lib/adjustments'
 import { layerStyleScale, readLayerStyle, scaledLayerStyleDefaults, writeLayerStyle, type LayerStyle, type LayerStyleKind } from './lib/layerStyles'
@@ -105,7 +109,7 @@ import {
   type WalkthroughStep,
 } from './lib/onboardingWalkthrough'
 import { addPosterTreatment, findPressCheck, isPressCheckOn, readPosterTreatments, removePosterTreatment, updatePosterTreatment, writePosterTreatments } from './lib/posterTreatments'
-import { captureLayerOrder, captureObjectPatch } from './lib/historyObject'
+import { applyObjectPatch, captureLayerOrder, captureObjectPatch } from './lib/historyObject'
 import {
   applyLayerMask,
   brushRadiusForSize,
@@ -399,6 +403,9 @@ function App() {
   const [maskHardness, setMaskHardness] = useState(35)
   const [selectMode, setSelectMode] = useState<SelectionMode>('rect')
   const [brush, setBrush] = useState<BrushSettings>(DEFAULT_BRUSH)
+  const [warpEdit, setWarpEdit] = useState<{ objectId: string; startPatch: string; warp: Warp } | null>(null)
+  const warpEditRef = useRef(warpEdit)
+  warpEditRef.current = warpEdit
   const brushRef = useRef(brush)
   brushRef.current = brush
   const strokeRef = useRef<{ session: StrokeSession | null; createdLayer: boolean; maskFallback: boolean } | null>(null)
@@ -1097,6 +1104,12 @@ function App() {
 
       if (isTypingContext(event.target)) return
 
+      if (warpEditRef.current && (event.key === 'Enter' || event.key === 'Escape')) {
+        event.preventDefault()
+        finishWarpEdit(event.key === 'Enter')
+        return
+      }
+
       const canvasFocused = document.activeElement?.closest('.canvas-scroll') != null
       if (event.key === 'Tab' && canvasFocused) {
         event.preventDefault()
@@ -1665,6 +1678,7 @@ function App() {
       overrideCount: overrideCount(readComponentOverrides(object)),
       layerStyle: readLayerStyle(object),
       adjustment: readAdjustment(object),
+      warp: readWarp(object),
     }
   }
 
@@ -2086,6 +2100,85 @@ function App() {
       return
     }
     setStatus('Paint mask — drag to conceal, Alt-drag to reveal · [ ] brush size')
+  }
+
+  /** Convert between warp kinds without losing the current shape. */
+  function convertWarp(current: Warp, type: Warp['type']): Warp {
+    if (current.type === type) return current
+    if (type === 'mesh') {
+      const points = []
+      for (let j = 0; j < MESH_SIZE; j += 1) {
+        for (let i = 0; i < MESH_SIZE; i += 1) points.push(warpPoint(current, i / (MESH_SIZE - 1), j / (MESH_SIZE - 1)))
+      }
+      return { type: 'mesh', points }
+    }
+    const pts = (current as Extract<Warp, { type: 'mesh' }>).points
+    const n = MESH_SIZE - 1
+    return { type: 'distort', corners: [pts[0], pts[n], pts[MESH_SIZE * MESH_SIZE - 1], pts[n * MESH_SIZE]] }
+  }
+
+  function startWarpEdit(type: Warp['type']) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection' || readAdjustment(object)) {
+      setStatus('Select a single layer to distort or warp')
+      return
+    }
+    const startPatch = captureObjectPatch(object)
+    const current = readWarp(object)
+    const warp = current ? convertWarp(current, type) : type === 'distort' ? identityDistort() : identityMesh()
+    object.set({ warp, hasControls: false, hasBorders: false } as Partial<FabricObject>)
+    setPenMode(false)
+    setEditorTool('move')
+    setWarpEdit({ objectId: String(readObjectProp(object, 'id') ?? ''), startPatch, warp })
+    canvas.requestRenderAll()
+    setStatus(type === 'distort' ? 'Distort — drag corners for perspective · Enter to apply · Esc to cancel' : 'Warp — drag mesh points · Enter to apply · Esc to cancel')
+  }
+
+  function updateWarp(warp: Warp) {
+    const session = warpEditRef.current
+    const object = session ? findObjectById(session.objectId) : null
+    if (!session || !object) return
+    // Only the mapping changes; the cached warp source stays valid (no dirty flag).
+    object.set({ warp } as Partial<FabricObject>)
+    setWarpEdit({ ...session, warp })
+    canvasRef.current?.requestRenderAll()
+  }
+
+  function finishWarpEdit(apply: boolean) {
+    const session = warpEditRef.current
+    const canvas = canvasRef.current
+    setWarpEdit(null)
+    if (!session || !canvas) return
+    const object = findObjectById(session.objectId)
+    if (!object) return
+    object.set({ hasControls: true, hasBorders: true } as Partial<FabricObject>)
+    if (!apply) {
+      applyObjectPatch(object, session.startPatch)
+      canvas.requestRenderAll()
+      setStatus('Warp cancelled')
+      return
+    }
+    if (isIdentityWarp(readWarp(object))) object.set({ warp: undefined, dirty: true } as Partial<FabricObject>)
+    const after = captureObjectPatch(object)
+    canvas.requestRenderAll()
+    invalidateLayerThumbnail(session.objectId)
+    if (after !== session.startPatch) {
+      commitObjectPatchHistoryRef.current(session.objectId, session.warp.type === 'distort' ? 'Distorted layer' : 'Warped layer', session.startPatch, after)
+    }
+    syncSelected()
+    scheduleSyncLayers()
+  }
+
+  function removeWarp() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || !readWarp(object)) return
+    const before = captureObjectPatch(object)
+    object.set({ warp: undefined, dirty: true } as Partial<FabricObject>)
+    canvas.requestRenderAll()
+    commitObjectPatchHistoryRef.current(String(readObjectProp(object, 'id') ?? ''), 'Removed warp', before, captureObjectPatch(object))
+    syncSelected()
   }
 
   function brushMaxSize() {
@@ -4946,6 +5039,8 @@ function App() {
       scope: 'canvas' as const,
       run: () => addAdjustmentLayer(type),
     })),
+    { id: 'distort', label: 'Distort / perspective', keywords: ['perspective', 'distort', 'transform', 'corner', 'skew', 'free transform'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('distort') },
+    { id: 'warp', label: 'Warp', keywords: ['warp', 'mesh', 'bend', 'transform', 'puppet'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('mesh') },
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
@@ -5390,7 +5485,15 @@ function App() {
             />
           }
           toolBar={
-            editorTool === 'brush' ? (
+            warpEdit ? (
+              <WarpBar
+                warp={warpEdit.warp}
+                onMode={(type) => updateWarp(convertWarp(warpEdit.warp, type))}
+                onReset={() => updateWarp(warpEdit.warp.type === 'distort' ? identityDistort() : identityMesh())}
+                onDone={() => finishWarpEdit(true)}
+                onCancel={() => finishWarpEdit(false)}
+              />
+            ) : editorTool === 'brush' ? (
               <BrushBar
                 brush={brush}
                 maxSize={brushMaxSize()}
@@ -5407,6 +5510,24 @@ function App() {
           }
           hud={
             <>
+            {warpEdit
+              ? (() => {
+                  const object = findObjectById(warpEdit.objectId)
+                  if (!object) return null
+                  return (
+                    <WarpOverlay
+                      warp={warpEdit.warp}
+                      matrix={object.calcTransformMatrix() as number[]}
+                      boxWidth={Math.max(1, (object.width ?? 0) + (object.strokeWidth ?? 0))}
+                      boxHeight={Math.max(1, (object.height ?? 0) + (object.strokeWidth ?? 0))}
+                      posterWidth={poster.width}
+                      posterHeight={poster.height}
+                      displayScale={displayScale}
+                      onChange={updateWarp}
+                    />
+                  )
+                })()
+              : null}
             <BrushOverlay
               active={editorTool === 'brush' && !isPanMode}
               displayScale={displayScale}
@@ -5430,7 +5551,7 @@ function App() {
               onLayerViaCopy={() => void liftSelectionToLayer(false)}
               onLayerViaCut={() => void liftSelectionToLayer(true)}
             />
-            {selected && editorTool !== 'select' && editorTool !== 'brush' ? (
+            {selected && editorTool !== 'select' && editorTool !== 'brush' && !warpEdit ? (
               <LiveSelectionHud
                 canvasRef={canvasRef}
                 selected={selected}
@@ -5595,6 +5716,8 @@ function App() {
           onUpdateActive={updateActive}
           onFinalizeActive={finalizeActive}
           onLayerStyleChange={updateLayerStyle}
+          onStartWarp={startWarpEdit}
+          onRemoveWarp={removeWarp}
           onAddAdjustment={addAdjustmentLayer}
           onAdjustmentChange={updateAdjustment}
           onPreviewBlendMode={previewBlendMode}

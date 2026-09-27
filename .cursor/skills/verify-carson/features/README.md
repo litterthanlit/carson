@@ -61,3 +61,4 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [CMYK plates](./cmyk-plates.md) covers Print → Export CMYK plates.
 - [Variations trail](./variations-trail.md) covers the history filmstrip, fork, comps gallery, and compare.
 - [Brush](./brush.md) covers pressure painting on a new Paint layer, the eraser (paint and mask), and stroke undo.
+- [Distort and Warp](./warp.md) covers four-corner perspective, mesh warp, commit/cancel, undo, and export.

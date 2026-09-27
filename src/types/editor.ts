@@ -1,5 +1,6 @@
 import type { LayerStyle } from '../lib/layerStyles'
 import type { Adjustment } from '../lib/adjustments'
+import type { Warp } from '../lib/warp'
 export type EditorTool = 'move' | 'text' | 'shape' | 'image' | 'select' | 'brush' | 'mask' | 'instruments'
 export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'star' | 'pen'
 export type MaskKind = 'clip' | 'brush' | 'scrape'
@@ -57,4 +58,5 @@ export type SelectedState = {
   overrideCount?: number
   layerStyle?: LayerStyle | null
   adjustment?: Adjustment
+  warp?: Warp | null
 }
