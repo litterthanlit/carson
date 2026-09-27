@@ -901,7 +901,6 @@ export function InspectorPanel({
             ) : (
               <div className="control-stack">
                 <div className="property-heading">
-                  <p className="property-kicker">Properties</p>
                   <div className="property-title-row">
                     <h3>{selected.name}</h3>
                     <span className="property-badge">{selected.kind}</span>
@@ -927,14 +926,20 @@ export function InspectorPanel({
                     </div>
                   </div>
                 ) : null}
-                <div className="button-row">
-                  <button type="button" title="Group selected layers (Cmd+G)" disabled={!canGroupLayers} onClick={onGroupLayers}>
-                    Group
-                  </button>
-                  <button type="button" title="Ungroup (Cmd+Shift+G)" disabled={!canUngroupLayers} onClick={onUngroupLayers}>
-                    Ungroup
-                  </button>
-                </div>
+                {canGroupLayers || canUngroupLayers ? (
+                  <div className="button-row">
+                    {canGroupLayers ? (
+                      <button type="button" title="Group selected layers (Cmd+G)" onClick={onGroupLayers}>
+                        Group
+                      </button>
+                    ) : null}
+                    {canUngroupLayers ? (
+                      <button type="button" title="Ungroup (Cmd+Shift+G)" onClick={onUngroupLayers}>
+                        Ungroup
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 <label>
                   Name
                   <input
@@ -1848,7 +1853,7 @@ export function InspectorPanel({
             Export CMYK plates
           </button>
           <PrintGamutReadout hex={typeof selected?.fill === 'string' ? selected.fill : undefined} />
-          <label>
+          <label className="toggle-row">
             <input type="checkbox" checked={pdfRegistrationMarks} onChange={(event) => onPdfRegistrationMarksChange(event.target.checked)} />
             Printer’s marks in PDF export
           </label>

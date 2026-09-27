@@ -332,6 +332,11 @@ function App() {
   const editorIntentRef = useRef<EditorIntent | null>(null)
   const screenRef = useRef<EditorScreen>('home')
   const savedCleanRef = useRef(true)
+  const [isDirty, setIsDirty] = useState(false)
+  const markSavedClean = (clean: boolean) => {
+    savedCleanRef.current = clean
+    setIsDirty(!clean)
+  }
   const unsavedResolverRef = useRef<((choice: 'cancel' | 'discard' | 'save') => void) | null>(null)
   screenRef.current = screen
   const [projectName, setProjectName] = useState('Untitled poster')
@@ -682,7 +687,7 @@ function App() {
         if (intent.kind === 'project' || intent.kind === 'autosave') {
           if (cancelled) return
           await loadProject(intent.project, { keepId: intent.kind === 'project' })
-          savedCleanRef.current = true
+          markSavedClean(true)
           return
         }
         if (cancelled || canvasRef.current !== canvas) return
@@ -692,7 +697,7 @@ function App() {
           syncSelected()
           syncLayers()
           resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
-          savedCleanRef.current = true
+          markSavedClean(true)
           setStatus('Started a new poster')
           return
         }
@@ -703,7 +708,7 @@ function App() {
         syncSelected()
         syncLayers()
         resetHistory(JSON.stringify(canvas.toObject(HISTORY_PROPS as unknown as string[])), 'Started a new poster')
-        savedCleanRef.current = true
+        markSavedClean(true)
         setStatus('Started a new poster')
         if (intent.walkthrough) startWalkthrough()
       } catch {
@@ -1422,7 +1427,7 @@ function App() {
 
   function scheduleAutosave() {
     if (screenRef.current !== 'editor') return
-    savedCleanRef.current = false
+    markSavedClean(false)
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = window.setTimeout(() => {
       const canvas = canvasRef.current
@@ -2941,7 +2946,7 @@ function App() {
     setPenMode(false)
     lastChaosRef.current = null
     setLastChaos(null)
-    savedCleanRef.current = true
+    markSavedClean(true)
     if (screenRef.current === 'editor') setEditorSession((value) => value + 1)
     else setScreen('editor')
   }
@@ -4148,7 +4153,7 @@ function App() {
       if (!ok) return
       setSavedProjects(await listProjects())
       await clearAutosave()
-      savedCleanRef.current = true
+      markSavedClean(true)
       setStatus(`Saved “${name}”`)
     } catch {
       setStatus('Save failed — storage may be full or unavailable')
@@ -4192,7 +4197,7 @@ function App() {
       setProjectName(trimmed)
       setSavedProjects(await listProjects())
       await clearAutosave()
-      savedCleanRef.current = true
+      markSavedClean(true)
       setSaveAsOpen(false)
       setStatus(`Saved as “${trimmed}”`)
     } catch {
@@ -4230,7 +4235,7 @@ function App() {
     syncSelected()
     syncLayers()
     setStatus(`Loaded ${project.name}`)
-    savedCleanRef.current = true
+    markSavedClean(true)
     if (options.keepId) {
       try {
         await touchProjectOpened(project.id)
@@ -4827,6 +4832,7 @@ function App() {
           redo()
         }}
         onSave={() => void saveProjectAction()}
+        isDirty={isDirty}
         onDuplicatePoster={() => void duplicatePosterAction()}
         onSaveAs={openSaveAsDialog}
         onOpenCommands={handleOpenCommands}

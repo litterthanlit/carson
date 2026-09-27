@@ -54,10 +54,10 @@ Stable handles:
 - Dialog `Open poster`, buttons `Open <name>`, empty copy `No saved posters yet`
 - Dialog `Unsaved changes`, buttons `Save`, `Don't save`, `Cancel`
 - Dialog `Save as`, textbox `Save as name`, button `Save copy`
-- Buttons `New poster`, `Open poster`, `Duplicate poster`, and `Save as` in the editor top bar
+- Editor top bar: button `File` opens menu `File` with menuitems `New poster`, `Open poster`, `Save as`, `Duplicate poster`, `Home`; button `Save` shows saved state
 - Region `Wreck this poster` (coach, after Let's wreck it)
 - Region `Poster canvas`, heading `Carson`
-- Buttons `Home` and `Carson home` in the editor top bar
+- Button `Carson home` in the editor top bar (Home is also in the `File` menu)
 - Tabs `Inspect`, `Treatments`, `Layers`, `Assets`, `Layout`, `Print`
 - Layer rows: the control titled `Select layer · double-click to zoom to layer`
 - Seed layer names `Oversized headline`, `Red interruption`

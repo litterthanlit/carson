@@ -35,6 +35,25 @@ export function LiveSelectionHud({
     return readHudBounds(object) ?? EMPTY_BOUNDS
   })
 
+  const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const start = () => setDragging(true)
+    const end = () => setDragging(false)
+    canvas.on('object:moving', start)
+    canvas.on('object:scaling', start)
+    canvas.on('object:rotating', start)
+    canvas.on('mouse:up', end)
+    return () => {
+      canvas.off('object:moving', start)
+      canvas.off('object:scaling', start)
+      canvas.off('object:rotating', start)
+      canvas.off('mouse:up', end)
+    }
+  }, [canvasRef])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -68,6 +87,7 @@ export function LiveSelectionHud({
       selected={selected}
       bounds={bounds}
       displayScale={displayScale}
+      dragging={dragging}
       customFonts={customFonts}
       onLoadGoogleFont={onLoadGoogleFont}
       onUpdateActive={onUpdateActive}

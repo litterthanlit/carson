@@ -2180,16 +2180,6 @@ input[type='color'] {
   gap: 8px;
 }
 
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.92rem;
-}
-
-.toggle-row input {
-  width: auto;
-}
 
 .variant-list {
   display: grid;
@@ -2670,4 +2660,208 @@ input[type='color'] {
 
 .blend-picker-menu:focus-visible {
   box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* ── Top bar clusters (UI system pass) ───────────────────────────────────── */
+.topbar .brand-copy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-menu {
+  position: relative;
+}
+
+.file-menu-trigger {
+  min-height: 26px;
+  padding: 0 8px;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.file-menu-trigger[aria-expanded='true'],
+.file-menu-trigger:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+  border-color: transparent;
+}
+
+.file-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 220px;
+  display: grid;
+  padding: 4px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  animation: popover-in 120ms ease-out;
+}
+
+.file-menu-popover [role='menuitem'] {
+  justify-content: flex-start;
+  min-height: 30px;
+  padding: 0 8px;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+}
+
+.file-menu-popover [role='menuitem'] svg {
+  color: var(--text-muted);
+}
+
+.file-menu-popover [role='menuitem']:hover,
+.file-menu-popover [role='menuitem']:focus-visible {
+  background: var(--accent);
+  color: #fff;
+  outline: none;
+}
+
+.file-menu-popover [role='menuitem']:hover svg,
+.file-menu-popover [role='menuitem']:focus-visible svg {
+  color: #fff;
+}
+
+.file-menu-popover kbd {
+  margin-left: auto;
+  font: 500 11px/1 var(--font);
+  color: inherit;
+  opacity: 0.7;
+}
+
+.save-state {
+  min-height: 22px;
+  padding: 0 8px;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: transparent;
+  border-color: transparent;
+  border-radius: 999px;
+}
+
+.save-state .save-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3ecf8e;
+}
+
+.save-state.dirty {
+  color: var(--text);
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+}
+
+.top-cluster {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.command-button {
+  min-height: 26px;
+  padding: 0 8px;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border-strong);
+}
+
+.top-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border-strong);
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-menu-popover {
+    animation: none;
+  }
+}
+
+/* Selection HUD docks above the selection and steps aside while dragging. */
+.selection-hud {
+  border-radius: var(--radius-xl);
+  transition: opacity 120ms ease;
+}
+
+.selection-hud.is-dragging {
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selection-hud {
+    transition: none;
+  }
+}
+
+/* ── Type scale (UI system pass) ─────────────────────────────────────────
+   One scale for every panel: 11px/600 tracked labels, 12–13px fields,
+   12px help text. Monospace is reserved for numeric readouts. */
+.rail h2,
+.panel-title h2,
+.property-kicker,
+.export-box h3,
+.treatment-stack small,
+.onboarding-coach-kicker,
+.typography-face .panel-title h3 {
+  font: 600 11px/1.3 var(--font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: auto;
+  box-shadow: none;
+  accent-color: var(--accent);
+}
+
+label:has(> input[type='checkbox']),
+label:has(> input[type='radio']) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  font: 500 12px/1.3 var(--font);
+  color: var(--text);
+}
+
+.hint,
+.empty {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.opentype-toggles {
+  gap: 4px;
+}
+
+.opentype-toggles .toggle-row {
+  margin-top: 0;
+  min-height: 24px;
 }
