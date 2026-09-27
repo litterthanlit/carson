@@ -211,7 +211,7 @@ export const LayersPanel = memo(function LayersPanel({
               )}
               {layer.thumbnail ? (
                 <span className="layer-kind">
-                  <KindIcon size={9} strokeWidth={2.5} />
+                  <KindIcon size={9} strokeWidth={2} />
                 </span>
               ) : null}
             </span>

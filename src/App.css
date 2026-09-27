@@ -118,9 +118,7 @@
 }
 
 .tension-name {
-  font: 500 9px/1 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 500 11px/1 var(--font);
   color: var(--text-faint);
 }
 
@@ -481,16 +479,16 @@ textarea:focus-visible {
 }
 
 .primary-button {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent-border);
-  font-weight: 600;
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  border-color: var(--primary-bg);
+  font-weight: 500;
 }
 
 .primary-button:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-border-hover);
-  color: #fff;
+  background: var(--primary-bg-hover);
+  border-color: var(--primary-bg-hover);
+  color: var(--primary-text);
 }
 
 .scramble-button {
@@ -572,7 +570,7 @@ textarea:focus-visible {
 .tool-rail > button.active,
 .tool-rail-flyout-wrap > button.active {
   background: var(--tool-active);
-  color: #fff;
+  color: var(--text);
   border-color: transparent;
 }
 
@@ -639,7 +637,7 @@ textarea:focus-visible {
 .instruments-palette .performance-chain {
   margin: 4px 0 0;
   min-height: 2.4em;
-  font: 500 11px/1.35 var(--font-mono);
+  font: 500 11px/1.35 var(--font);
   color: var(--text-muted);
   word-break: break-word;
 }
@@ -684,9 +682,7 @@ textarea:focus-visible {
 }
 
 .rail h2 {
-  font: 500 10px/1.2 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 500 10px/1.2 var(--font);
   color: var(--text-faint);
 }
 
@@ -752,9 +748,7 @@ label,
 label {
   margin-top: 6px;
   color: var(--text-muted);
-  font: 500 10px/1.3 var(--font);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font: 500 12px/1.3 var(--font);
 }
 
 input,
@@ -767,7 +761,7 @@ textarea {
   resize: vertical;
   background: var(--field-bg);
   border-color: var(--field-border);
-  box-shadow: inset 0 1px 0 rgb(0 0 0 / 0.35);
+  box-shadow: none;
 }
 
 textarea {
@@ -877,9 +871,8 @@ input[type='color'] {
   justify-content: space-between;
   gap: 8px;
   padding: 0 9px;
-  font: 500 10.5px/1 var(--font-mono);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font: 450 12px/1 var(--font);
+  font-variant-numeric: tabular-nums;
   color: var(--slider-text);
 }
 
@@ -939,7 +932,7 @@ input[type='color'] {
   border-radius: var(--radius);
   background: transparent;
   box-shadow: none;
-  font: 500 10.5px/1 var(--font-mono);
+  font: 450 12px/1 var(--font);
   font-variant-numeric: tabular-nums;
   text-align: right;
   color: transparent;
@@ -974,7 +967,7 @@ input[type='color'] {
 
 .dial-sm .dial-text {
   padding: 0 7px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .dial-sm .dial-bar .dial-value-input {
@@ -982,7 +975,7 @@ input[type='color'] {
   right: 2px;
   bottom: 2px;
   width: 48px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .dial-field .dial-head {
@@ -996,9 +989,7 @@ input[type='color'] {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font: 500 10.5px/1 var(--font-mono);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font: 500 12px/1 var(--font);
   color: var(--text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1020,7 +1011,7 @@ input[type='color'] {
   border-radius: var(--radius);
   background: var(--field-bg);
   box-shadow: none;
-  font: 500 11px/1 var(--font-mono);
+  font: 450 12px/1 var(--font);
   font-variant-numeric: tabular-nums;
   color: var(--text);
   text-align: right;
@@ -1155,9 +1146,8 @@ input[type='color'] {
 }
 
 .trail-label {
-  font-family: var(--font-mono);
+  font-family: var(--font);
   font-size: 11px;
-  text-transform: uppercase;
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -1278,7 +1268,7 @@ input[type='color'] {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
-  font-family: var(--font-mono);
+  font-family: var(--font);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--text);
@@ -1307,8 +1297,7 @@ input[type='color'] {
   margin-left: auto;
   padding: 1px 5px;
   border-radius: 2px;
-  font: 600 9px/1.4 var(--font);
-  letter-spacing: 0.04em;
+  font: 500 10px/1.4 var(--font);
   color: var(--accent-text);
   background: rgb(20 115 230 / 0.28);
 }
@@ -1507,9 +1496,7 @@ input[type='color'] {
   display: block;
   margin-top: 10px;
   color: var(--text-muted);
-  font: 500 10px/1.3 var(--font);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font: 500 12px/1.3 var(--font);
 }
 
 .toggle-row {
@@ -1587,9 +1574,7 @@ input[type='color'] {
 
 .export-box h3 {
   margin: 0;
-  font: 500 10px/1.2 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 500 10px/1.2 var(--font);
   color: var(--text-faint);
 }
 
@@ -1604,9 +1589,7 @@ input[type='color'] {
 
 .property-kicker {
   margin: 0 0 6px;
-  font: 500 10px/1.2 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 500 10px/1.2 var(--font);
   color: var(--text-faint);
 }
 
@@ -1780,7 +1763,7 @@ input[type='color'] {
 }
 
 .treatment-stack small {
-  font-family: var(--font-mono);
+  font-family: var(--font);
   color: var(--text-muted);
 }
 
@@ -1994,9 +1977,7 @@ input[type='color'] {
 
 .onboarding-coach-kicker {
   margin: 0 0 4px;
-  font: 500 10px/1 var(--font-mono);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font: 500 10px/1 var(--font);
   color: var(--text-faint);
 }
 
@@ -2129,6 +2110,12 @@ input[type='color'] {
 .text-styles {
   display: grid;
   gap: 8px;
+}
+
+/* Styles sits inside the Type section; it shouldn't add its own panel inset. */
+.text-styles.panel-section {
+  padding: 0;
+  border: 0;
 }
 
 
@@ -2492,8 +2479,6 @@ input[type='color'] {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -2572,10 +2557,8 @@ input[type='color'] {
 .font-picker-group-label {
   margin: 0;
   padding: 8px 10px 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -2768,20 +2751,24 @@ input[type='color'] {
   }
 }
 
-/* ── Type scale (UI system pass) ─────────────────────────────────────────
-   One scale for every panel: 11px/600 tracked labels, 12–13px fields,
-   12px help text. Monospace is reserved for numeric readouts. */
+/* ── Type scale (quiet pass) ─────────────────────────────────────────────
+   Inter throughout, sentence case, no tracking. Headings are 13px/600 in
+   full-strength ink; sub-labels 12px/500 muted; numbers use tabular figures.
+   Monospace is reserved for code (kbd, hex values). */
 .rail h2,
 .panel-title h2,
-.property-kicker,
 .export-box h3,
-.treatment-stack small,
-.onboarding-coach-kicker,
 .typography-face .panel-title h3 {
-  font: 600 11px/1.3 var(--font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
+  font: 600 13px/1.3 var(--font);
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.property-kicker,
+.treatment-stack small,
+.onboarding-coach-kicker {
+  font: 500 12px/1.3 var(--font);
+  color: var(--text-muted);
 }
 
 input[type='checkbox'],
@@ -2938,8 +2925,6 @@ label:has(> input[type='radio']) {
 .home-section-head h2 {
   margin: 0;
   font: 600 11px/1.3 var(--font);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--text-faint);
 }
 
@@ -3559,7 +3544,7 @@ label:has(> input[type='radio']) {
   padding: 1px 5px;
   border-radius: 999px;
   background: var(--bg-muted);
-  font: 500 10px/1.4 var(--font-mono);
+  font: 500 10px/1.4 var(--font);
   font-variant-numeric: tabular-nums;
   text-align: center;
   color: var(--text-muted);
@@ -3641,13 +3626,6 @@ label:has(> input[type='radio']) {
   background: rgb(20 115 230 / 0.3);
 }
 
-.layer-row.active::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--accent);
-}
 
 .layer-row.dragging {
   opacity: 0.4;
@@ -3712,7 +3690,7 @@ label:has(> input[type='radio']) {
   width: 30px;
   height: 30px;
   object-fit: contain;
-  border-radius: 2px;
+  border-radius: 4px;
   /* Transparency checkerboard, as in every pixel editor. */
   background:
     repeating-conic-gradient(var(--checker-light) 0% 25%, var(--checker-dark) 0% 50%) 50% / 8px 8px;
@@ -3953,9 +3931,7 @@ label:has(> input[type='radio']) {
   border: 0;
   border-radius: 0;
   background: transparent;
-  font: 600 11px/1 var(--font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 600 13px/1 var(--font);
   color: var(--text-muted);
 }
 
@@ -4035,7 +4011,7 @@ input[type='checkbox'] {
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 4px;
   background: var(--switch-off);
   cursor: pointer;
   transition: background-color 140ms ease;
@@ -4048,7 +4024,7 @@ input[type='checkbox']::before {
   left: 3px;
   width: 10px;
   height: 10px;
-  border-radius: 1px;
+  border-radius: 2px;
   background: var(--switch-knob-off);
   transition: transform 160ms cubic-bezier(0.3, 0.7, 0.4, 1), background-color 140ms ease;
 }
