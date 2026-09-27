@@ -14,6 +14,13 @@ type SliderProps = {
   disabled?: boolean
   /** Neutral value. When set, double-clicking the bar (or label) resets to it. */
   defaultValue?: number
+  /** `sm` is a shorter bar for floating toolbars. */
+  size?: 'md' | 'sm'
+  /**
+   * Drop focus after a pointer drag so single-key tool shortcuts keep working
+   * (keyboard users who tab in keep focus).
+   */
+  releaseFocusOnPointerUp?: boolean
 }
 
 // Pixels of horizontal drag that sweep the full range when scrubbing a field label.
@@ -44,6 +51,8 @@ export function Slider({
   variant = 'track',
   disabled = false,
   defaultValue,
+  size = 'md',
+  releaseFocusOnPointerUp = false,
 }: SliderProps) {
   const display = format ? format(value) : String(Math.round(value))
   const [editing, setEditing] = useState(false)
@@ -132,6 +141,7 @@ export function Slider({
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     if (drag.moved || snap(drag.raw) !== drag.startValue) onCommit()
+    if (releaseFocusOnPointerUp) rangeRef.current?.blur()
   }
 
   // ── Field-variant label scrubbing ──────────────────────────────────────
@@ -228,6 +238,7 @@ export function Slider({
   const className = [
     'dial',
     variant === 'field' ? 'dial-field' : 'dial-bar-slider',
+    size === 'sm' ? 'dial-sm' : '',
     dragging ? 'scrubbing' : '',
     editing ? 'editing' : '',
     disabled ? 'disabled' : '',

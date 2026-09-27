@@ -968,6 +968,23 @@ input[type='color'] {
 }
 
 /* Field variant: scrubbable label + boxed number (Layers opacity). */
+.dial-sm {
+  --dial-h: 22px;
+}
+
+.dial-sm .dial-text {
+  padding: 0 7px;
+  font-size: 10px;
+}
+
+.dial-sm .dial-bar .dial-value-input {
+  top: 2px;
+  right: 2px;
+  bottom: 2px;
+  width: 48px;
+  font-size: 10px;
+}
+
 .dial-field .dial-head {
   display: flex;
   align-items: center;
@@ -3377,7 +3394,7 @@ label:has(> input[type='radio']) {
   pointer-events: auto;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
-  background: rgb(42 42 42 / 0.92);
+  background: var(--float-bar);
   backdrop-filter: blur(8px);
   box-shadow: var(--shadow-md);
 }
@@ -3468,7 +3485,7 @@ label:has(> input[type='radio']) {
   pointer-events: auto;
   font: 500 11px/1 var(--font);
   color: var(--text-muted);
-  background: rgb(42 42 42 / 0.94);
+  background: var(--float-bar);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
@@ -3494,29 +3511,12 @@ label:has(> input[type='radio']) {
 }
 
 .brush-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font: 500 11px/1 var(--font);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--text-muted);
+  width: 136px;
+  flex: 0 0 auto;
 }
 
-.brush-field input[type='range'] {
-  width: 78px;
-  padding: 0;
-  box-shadow: none;
-  accent-color: var(--accent);
-  background: transparent;
-  border: 0;
-}
-
-.brush-field output {
-  min-width: 30px;
-  font: 500 11px/1 var(--font-mono);
-  color: var(--text);
+.brush-field .dial {
+  margin-top: 0;
 }
 
 .brush-pressure {

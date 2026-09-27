@@ -1,5 +1,6 @@
 import { Eraser, Paintbrush } from 'lucide-react'
-import type { BrushSettings } from '../lib/brush'
+import { DEFAULT_BRUSH, type BrushSettings } from '../lib/brush'
+import { Slider } from './Slider'
 
 type BrushBarProps = {
   brush: BrushSettings
@@ -8,44 +9,47 @@ type BrushBarProps = {
   onChange: (patch: Partial<BrushSettings>) => void
 }
 
-function RangeField({
+const pct = (value: number) => `${Math.round(value)}%`
+const noCommit = () => undefined
+
+/**
+ * Brush sliders work in whole percents (0–100) so typed values read naturally;
+ * BrushSettings stores 0–1 fractions.
+ */
+function BrushSlider({
   label,
   value,
   min,
   max,
-  step = 1,
-  format,
   onChange,
+  format = pct,
+  defaultValue,
 }: {
   label: string
   value: number
   min: number
   max: number
-  step?: number
-  format: (value: number) => string
   onChange: (value: number) => void
+  format?: (value: number) => string
+  defaultValue?: number
 }) {
   return (
-    <label className="brush-field">
-      <span>{label}</span>
-      <input
-        type="range"
+    <div className="brush-field">
+      <Slider
+        size="sm"
+        label={label}
+        value={value}
         min={min}
         max={max}
-        step={step}
-        value={value}
-        aria-label={label}
-        onChange={(event) => onChange(Number(event.target.value))}
-        // After a pointer drag, hand focus back so single-key shortcuts (B, E, [ ]) work;
-        // keyboard users keep focus on the slider.
-        onPointerUp={(event) => event.currentTarget.blur()}
+        format={format}
+        defaultValue={defaultValue}
+        releaseFocusOnPointerUp
+        onChange={onChange}
+        onCommit={noCommit}
       />
-      <output>{format(value)}</output>
-    </label>
+    </div>
   )
 }
-
-const pct = (value: number) => `${Math.round(value * 100)}%`
 
 /** Floating options for the brush tool, pinned to the top of the viewport. */
 export function BrushBar({ brush, maxSize, targetName, onChange }: BrushBarProps) {
@@ -66,11 +70,11 @@ export function BrushBar({ brush, maxSize, targetName, onChange }: BrushBarProps
           <input type="color" aria-label="Brush color" value={brush.color} onChange={(event) => onChange({ color: event.target.value })} />
         </label>
       ) : null}
-      <RangeField label="Size" value={brush.size} min={1} max={maxSize} format={(value) => `${Math.round(value)}`} onChange={(size) => onChange({ size })} />
-      <RangeField label="Hardness" value={brush.hardness} min={0} max={1} step={0.01} format={pct} onChange={(hardness) => onChange({ hardness })} />
-      <RangeField label="Opacity" value={brush.opacity} min={0.01} max={1} step={0.01} format={pct} onChange={(opacity) => onChange({ opacity })} />
-      <RangeField label="Flow" value={brush.flow} min={0.01} max={1} step={0.01} format={pct} onChange={(flow) => onChange({ flow })} />
-      <RangeField label="Smoothing" value={brush.smoothing} min={0} max={0.9} step={0.01} format={pct} onChange={(smoothing) => onChange({ smoothing })} />
+      <BrushSlider label="Size" value={brush.size} min={1} max={maxSize} defaultValue={Math.min(DEFAULT_BRUSH.size, maxSize)} format={(value) => `${Math.round(value)}`} onChange={(size) => onChange({ size })} />
+      <BrushSlider label="Hardness" value={Math.round(brush.hardness * 100)} min={0} max={100} defaultValue={Math.round(DEFAULT_BRUSH.hardness * 100)} onChange={(value) => onChange({ hardness: value / 100 })} />
+      <BrushSlider label="Opacity" value={Math.round(brush.opacity * 100)} min={1} max={100} defaultValue={Math.round(DEFAULT_BRUSH.opacity * 100)} onChange={(value) => onChange({ opacity: value / 100 })} />
+      <BrushSlider label="Flow" value={Math.round(brush.flow * 100)} min={1} max={100} defaultValue={Math.round(DEFAULT_BRUSH.flow * 100)} onChange={(value) => onChange({ flow: value / 100 })} />
+      <BrushSlider label="Smoothing" value={Math.round(brush.smoothing * 100)} min={0} max={90} defaultValue={Math.round(DEFAULT_BRUSH.smoothing * 100)} onChange={(value) => onChange({ smoothing: value / 100 })} />
       <span className="brush-pressure" role="group" aria-label="Pen pressure controls">
         <span>Pressure</span>
         <button type="button" aria-pressed={brush.pressureSize} onClick={() => onChange({ pressureSize: !brush.pressureSize })}>

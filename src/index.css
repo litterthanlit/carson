@@ -67,6 +67,8 @@
   --ruler-major: rgb(255 255 255 / 0.5);
   --ruler-edge: #1f1f1f;
   --scrim: rgb(0 0 0 / 0.5);
+  /* Floating toolbars over the canvas (brush bar, treatment chips). */
+  --float-bar: rgb(42 42 42 / 0.94);
   /* Home screen surfaces. */
   --home-bar: rgb(45 45 45 / 0.85);
   --home-card: rgb(50 50 50 / 0.72);
@@ -181,6 +183,7 @@ body {
   --ruler-major: rgb(0 0 0 / 0.55);
   --ruler-edge: #a6a6a6;
   --scrim: rgb(40 40 40 / 0.35);
+  --float-bar: rgb(217 217 217 / 0.94);
   --home-bar: rgb(217 217 217 / 0.88);
   --home-card: #cfcfcf;
   --home-card-hover: #d9d9d9;
