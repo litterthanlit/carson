@@ -27,6 +27,27 @@
   --dial-value: #e6e6e6;
   --surface: #3a3a3a;
   --surface-muted: #2c2c2c;
+  /* Chrome layers, darkest to lightest: inset fields, sunken wells, bars, tab strips. */
+  --field-bg: #1e1e1e;
+  --field-border: #1a1a1a;
+  --surface-sunken: #252525;
+  --chrome-strip: #2a2a2a;
+  --chrome-bar: #2d2d2d;
+  --tool-active: #454545;
+  --divider: #4a4a4a;
+  --border-subtle: #3f3f3f;
+  --border-hover: #5a5a5a;
+  --accent-border: #0e63c7;
+  --accent-border-hover: #1f74d4;
+  --accent-text: #cfe3ff;
+  /* Hover washes and hairlines that sit on top of any chrome colour. */
+  --wash-faint: rgb(255 255 255 / 0.03);
+  --wash: rgb(255 255 255 / 0.05);
+  --wash-strong: rgb(255 255 255 / 0.08);
+  --hairline-dark: rgb(0 0 0 / 0.2);
+  /* Transparency checkerboard behind thumbnails. */
+  --checker-light: #4a4a4a;
+  --checker-dark: #3a3a3a;
   --radius: 2px;
   --radius-lg: 3px;
   --radius-xl: 4px;

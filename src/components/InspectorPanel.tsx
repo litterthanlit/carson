@@ -1,9 +1,11 @@
-import type { RefObject } from 'react'
+import { useCallback, useState, type RefObject } from 'react'
 import {
   AlignLeft,
   Blend,
   BookmarkPlus,
   BringToFront,
+  Contrast,
+  Copy,
   ChevronDown,
   ChevronUp,
   Dices,
@@ -54,6 +56,7 @@ import { FontPicker } from './FontPicker'
 import { BlendModePicker } from './BlendModePicker'
 import { Slider } from './Slider'
 import { LayerStylePanel } from './LayerStylePanel'
+import { PropertySection } from './PropertySection'
 import { layerStyleScale, type LayerStyle } from '../lib/layerStyles'
 import { AdjustmentPanel } from './AdjustmentPanel'
 import { ADJUSTMENT_LABELS, type Adjustment, type AdjustmentType } from '../lib/adjustments'
@@ -184,6 +187,8 @@ export type InspectorPanelProps = {
   canGroupLayers: boolean
   canUngroupLayers: boolean
   onGroupLayers: () => void
+  onDuplicateLayer?: () => void
+  onDeleteLayer?: () => void
   onUngroupLayers: () => void
   onDetachInstance: () => void
   onResetInstance: () => void
@@ -365,6 +370,8 @@ export function InspectorPanel({
   canUngroupLayers,
   onGroupLayers,
   onUngroupLayers,
+  onDuplicateLayer,
+  onDeleteLayer,
   onDetachInstance,
   onResetInstance,
   onUpdateComponent,
@@ -407,6 +414,21 @@ export function InspectorPanel({
   onNewArtboardPresetChange,
   onExportAllArtboards,
 }: InspectorPanelProps) {
+  // Collapsed layer groups live here so they survive switching inspector tabs.
+  const [collapsedLayerIds, setCollapsedLayerIds] = useState<ReadonlySet<string>>(() => new Set())
+  const toggleLayerCollapsed = useCallback((id: string) => {
+    setCollapsedLayerIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+  const activeEffectCount = selected?.layerStyle
+    ? Object.values(selected.layerStyle).filter((effect) => effect && effect.enabled !== false).length
+    : 0
+  const effectsSummary = activeEffectCount > 0 ? `${activeEffectCount} on` : undefined
+  const maskSummary = hasMaskContent(layerMask) ? (layerMask?.enabled === false ? 'bypassed' : 'on') : undefined
   const inspectProjectSection = (
     <div className="panel-section">
       <h2>Project</h2>
@@ -564,6 +586,7 @@ export function InspectorPanel({
                           min={0}
                           max={100}
                           value={treatment.params.inkSpread ?? PRESS_CHECK_DEFAULTS.inkSpread}
+                          defaultValue={PRESS_CHECK_DEFAULTS.inkSpread}
                           onChange={(value) => onPreviewPosterTreatmentParams(treatment.id, { inkSpread: value })}
                           onCommit={() => onUpdatePosterTreatmentParams(treatment.id, {})}
                         />
@@ -572,6 +595,7 @@ export function InspectorPanel({
                           min={0}
                           max={100}
                           value={treatment.params.misregistration ?? PRESS_CHECK_DEFAULTS.misregistration}
+                          defaultValue={PRESS_CHECK_DEFAULTS.misregistration}
                           onChange={(value) => onPreviewPosterTreatmentParams(treatment.id, { misregistration: value })}
                           onCommit={() => onUpdatePosterTreatmentParams(treatment.id, {})}
                         />
@@ -580,6 +604,7 @@ export function InspectorPanel({
                           min={0}
                           max={100}
                           value={treatment.params.paperTooth ?? PRESS_CHECK_DEFAULTS.paperTooth}
+                          defaultValue={PRESS_CHECK_DEFAULTS.paperTooth}
                           onChange={(value) => onPreviewPosterTreatmentParams(treatment.id, { paperTooth: value })}
                           onCommit={() => onUpdatePosterTreatmentParams(treatment.id, {})}
                         />
@@ -658,6 +683,7 @@ export function InspectorPanel({
                         <Slider
                           label="Wobble"
                           value={treatment.params.wobble ?? COPY_MACHINE_DEFAULTS.wobble}
+                          defaultValue={COPY_MACHINE_DEFAULTS.wobble}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { wobble: value })}
@@ -666,6 +692,7 @@ export function InspectorPanel({
                         <Slider
                           label="Drag"
                           value={treatment.params.drag ?? COPY_MACHINE_DEFAULTS.drag}
+                          defaultValue={COPY_MACHINE_DEFAULTS.drag}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { drag: value })}
@@ -674,6 +701,7 @@ export function InspectorPanel({
                         <Slider
                           label="Tear"
                           value={treatment.params.wobbleFreq ?? COPY_MACHINE_DEFAULTS.wobbleFreq}
+                          defaultValue={COPY_MACHINE_DEFAULTS.wobbleFreq}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { wobbleFreq: value })}
@@ -682,6 +710,7 @@ export function InspectorPanel({
                         <Slider
                           label="Scan angle"
                           value={treatment.params.dragAngle ?? COPY_MACHINE_DEFAULTS.dragAngle}
+                          defaultValue={COPY_MACHINE_DEFAULTS.dragAngle}
                           min={0}
                           max={359}
                           format={formatDegrees}
@@ -691,6 +720,7 @@ export function InspectorPanel({
                         <Slider
                           label="Grain"
                           value={treatment.params.grain ?? COPY_MACHINE_DEFAULTS.grain}
+                          defaultValue={COPY_MACHINE_DEFAULTS.grain}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { grain: value })}
@@ -699,6 +729,7 @@ export function InspectorPanel({
                         <Slider
                           label="Contrast"
                           value={treatment.params.contrast ?? COPY_MACHINE_DEFAULTS.contrast}
+                          defaultValue={COPY_MACHINE_DEFAULTS.contrast}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { contrast: value })}
@@ -707,6 +738,7 @@ export function InspectorPanel({
                         <Slider
                           label="Bands"
                           value={treatment.params.bands ?? COPY_MACHINE_DEFAULTS.bands}
+                          defaultValue={COPY_MACHINE_DEFAULTS.bands}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { bands: value })}
@@ -715,6 +747,7 @@ export function InspectorPanel({
                         <Slider
                           label="Voids"
                           value={treatment.params.voids ?? COPY_MACHINE_DEFAULTS.voids}
+                          defaultValue={COPY_MACHINE_DEFAULTS.voids}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { voids: value })}
@@ -723,6 +756,7 @@ export function InspectorPanel({
                         <Slider
                           label="Ghost"
                           value={treatment.params.ghost ?? COPY_MACHINE_DEFAULTS.ghost}
+                          defaultValue={COPY_MACHINE_DEFAULTS.ghost}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { ghost: value })}
@@ -731,6 +765,7 @@ export function InspectorPanel({
                         <Slider
                           label="Ghost offset"
                           value={treatment.params.ghostOffset ?? COPY_MACHINE_DEFAULTS.ghostOffset}
+                          defaultValue={COPY_MACHINE_DEFAULTS.ghostOffset}
                           min={0}
                           max={24}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { ghostOffset: value })}
@@ -742,6 +777,7 @@ export function InspectorPanel({
                         <Slider
                           label="Amount"
                           value={treatment.params.amount ?? 55}
+                          defaultValue={55}
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { amount: value })}
@@ -753,6 +789,7 @@ export function InspectorPanel({
                         <Slider
                           label="Offset"
                           value={treatment.params.offset ?? 10}
+                          defaultValue={10}
                           min={0}
                           max={40}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { offset: value })}
@@ -772,6 +809,7 @@ export function InspectorPanel({
                         <Slider
                           label="Rows"
                           value={treatment.params.rows ?? 5}
+                          defaultValue={5}
                           min={2}
                           max={12}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { rows: value })}
@@ -780,6 +818,7 @@ export function InspectorPanel({
                         <Slider
                           label="Jitter"
                           value={treatment.params.jitter ?? 12}
+                          defaultValue={12}
                           min={0}
                           max={40}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { jitter: value })}
@@ -797,6 +836,7 @@ export function InspectorPanel({
                               defaultsForFx(treatment.fxKind)[param.key] ??
                               param.min
                             }
+                            defaultValue={defaultsForFx(treatment.fxKind)[param.key]}
                             min={param.min}
                             max={param.max}
                             format={(value) => formatFilterParam(param, value)}
@@ -868,37 +908,39 @@ export function InspectorPanel({
       ) : null}
 
       {inspectorTab === 'layers' ? (
-        <div className="panel-section">
-          <h2>Layers</h2>
-          {onAddAdjustment ? (
-            <label className="add-adjustment">
-              <span className="visually-hidden">Add adjustment layer</span>
-              <select
-                aria-label="Add adjustment layer"
-                value=""
-                onChange={(event) => {
-                  const type = event.target.value as AdjustmentType
-                  if (type) onAddAdjustment(type)
-                }}
-              >
-                <option value="">＋ Adjustment layer…</option>
-                {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
-                  <option key={type} value={type}>
-                    {ADJUSTMENT_LABELS[type]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <div className="button-row">
-            <button type="button" title="Group selected layers (Cmd+G)" disabled={!canGroupLayers} onClick={onGroupLayers}>
-              <Group size={14} />
-              Group
-            </button>
-            <button type="button" title="Ungroup (Cmd+Shift+G)" disabled={!canUngroupLayers} onClick={onUngroupLayers}>
-              <Ungroup size={14} />
-              Ungroup
-            </button>
+        <div className="panel-section layers-section">
+          <div className="layers-header">
+            <h2>Layers</h2>
+            <span className="layers-count" aria-label={`${layers.length} layers`}>
+              {layers.length}
+            </span>
+          </div>
+          <div className={selected ? 'layers-props' : 'layers-props is-disabled'}>
+            <div className="layers-blend" title="Blend mode">
+              {selected ? (
+                <BlendModePicker
+                  value={selected.blendMode ?? 'source-over'}
+                  onPreview={onPreviewBlendMode}
+                  onChange={onApplyBlendMode}
+                />
+              ) : (
+                <button type="button" className="layers-blend-placeholder" disabled>
+                  Normal
+                </button>
+              )}
+            </div>
+            <Slider
+              variant="field"
+              label="Opacity"
+              defaultValue={100}
+              disabled={!selected}
+              value={selected ? Math.round(selected.opacity * 100) : 100}
+              min={5}
+              max={100}
+              format={formatPercent}
+              onChange={(value) => onUpdateActive({ opacity: value / 100 })}
+              onCommit={() => onFinalizeActive('Changed opacity')}
+            />
           </div>
           <LayersPanel
             layers={layers}
@@ -914,7 +956,78 @@ export function InspectorPanel({
             onDragOver={onDragLayerOver}
             onDragEnd={onDragLayerEnd}
             onZoomToLayer={onZoomToLayer}
+            collapsedIds={collapsedLayerIds}
+            onToggleCollapsed={toggleLayerCollapsed}
           />
+          <div className="layers-footer" role="toolbar" aria-label="Layer actions">
+            {onAddAdjustment ? (
+              <label className="layers-footer-button layers-adjustment" title="New adjustment layer">
+                <Contrast size={15} aria-hidden="true" />
+                <select
+                  aria-label="Add adjustment layer"
+                  value=""
+                  onChange={(event) => {
+                    const type = event.target.value as AdjustmentType
+                    if (type) onAddAdjustment(type)
+                  }}
+                >
+                  <option value="" disabled>
+                    Adjustment layer
+                  </option>
+                  {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
+                    <option key={type} value={type}>
+                      {ADJUSTMENT_LABELS[type]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <button
+              type="button"
+              className="layers-footer-button"
+              title="Group layers (⌘G)"
+              aria-label="Group layers"
+              disabled={!canGroupLayers}
+              onClick={onGroupLayers}
+            >
+              <Group size={15} />
+            </button>
+            <button
+              type="button"
+              className="layers-footer-button"
+              title="Ungroup (⇧⌘G)"
+              aria-label="Ungroup"
+              disabled={!canUngroupLayers}
+              onClick={onUngroupLayers}
+            >
+              <Ungroup size={15} />
+            </button>
+            <span className="layers-footer-spacer" />
+            {onDuplicateLayer ? (
+              <button
+                type="button"
+                className="layers-footer-button"
+                title="Duplicate layer (⌘D)"
+                aria-label="Duplicate layer"
+                disabled={!selected}
+                onClick={onDuplicateLayer}
+              >
+                <Copy size={15} />
+              </button>
+            ) : null}
+            {onDeleteLayer ? (
+              <button
+                type="button"
+                className="layers-footer-button"
+                title="Delete layer (⌫)"
+                aria-label="Delete layer"
+                disabled={!selected}
+                onClick={onDeleteLayer}
+              >
+                <Trash2 size={15} />
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -989,513 +1102,531 @@ export function InspectorPanel({
                 ) : null}
                 {selected.adjustment ? null : (<>
                 {selectedIsText ? (
-                  <>
-                    <label>
-                      Text
-                      <textarea
-                        value={selected.text ?? ''}
-                        rows={4}
-                        onChange={(event) => onUpdateActive({ text: event.target.value })}
-                        onBlur={() => onFinalizeActive('Edited text')}
-                      />
-                    </label>
-                    <div className="typography-face panel-section nested">
-                      <div className="panel-title">
-                        <h3>Typography</h3>
-                      </div>
-                      <label className="font-picker-label">
-                        Typeface
-                        <FontPicker
-                          value={selected.fontFamily ?? FONT_STACKS[0]}
-                          customFonts={customFonts}
-                          onLoadGoogleFont={onLoadGoogleFont}
-                          onChange={(family) => {
-                            onUpdateActive({ fontFamily: family })
-                            onFinalizeActive('Changed font')
-                          }}
-                        />
-                      </label>
-                      <button type="button" title="Upload a font file (.ttf, .otf, .woff)" onClick={() => fontInputRef.current?.click()}>
-                        Upload font
-                      </button>
+                  <PropertySection id="type" title="Type">
+                  <label>
+                    Text
+                    <textarea
+                      value={selected.text ?? ''}
+                      rows={4}
+                      onChange={(event) => onUpdateActive({ text: event.target.value })}
+                      onBlur={() => onFinalizeActive('Edited text')}
+                    />
+                  </label>
+                  <label className="font-picker-label">
+                    Typeface
+                    <FontPicker
+                      value={selected.fontFamily ?? FONT_STACKS[0]}
+                      customFonts={customFonts}
+                      onLoadGoogleFont={onLoadGoogleFont}
+                      onChange={(family) => {
+                        onUpdateActive({ fontFamily: family })
+                        onFinalizeActive('Changed font')
+                      }}
+                    />
+                  </label>
+                  <button type="button" title="Upload a font file (.ttf, .otf, .woff)" onClick={() => fontInputRef.current?.click()}>
+                    Upload font
+                  </button>
+                  <input
+                    ref={fontInputRef}
+                    className="visually-hidden"
+                    type="file"
+                    accept=".ttf,.otf,.woff,.woff2"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      if (file) onFontFileChange(file)
+                      event.currentTarget.value = ''
+                    }}
+                  />
+                  <Slider
+                    label="Weight axis"
+                    value={Number(selected.fontWeight) || 700}
+                    min={100}
+                    max={900}
+                    onChange={(value) => onUpdateActive({ fontWeight: value })}
+                    onCommit={() => onFinalizeActive('Changed weight')}
+                  />
+                  <Slider
+                    label="Width axis"
+                    defaultValue={100}
+                    value={fontStretch}
+                    min={50}
+                    max={200}
+                    format={formatPercent}
+                    onChange={(value) => {
+                      onFontStretchChange(value)
+                      onUpdateActive({ scaleX: value / 100 })
+                    }}
+                    onCommit={() => onFinalizeActive('Changed width axis')}
+                  />
+                  <p className="hint legibility-readout">
+                    Legibility: {legibilityBand(textContrast)} · contrast {textContrast ? textContrast.toFixed(1) : '—'}:1
+                  </p>
+                  <Slider
+                    label="Size"
+                    value={selected.fontSize ?? 80}
+                    min={12}
+                    max={360}
+                    onChange={(value) => onUpdateActive({ fontSize: value })}
+                    onCommit={() => onFinalizeActive('Changed type size')}
+                  />
+                  <Slider
+                    label="Spacing"
+                    defaultValue={0}
+                    value={selected.charSpacing ?? 0}
+                    min={-120}
+                    max={260}
+                    onChange={(value) => onUpdateActive({ charSpacing: value })}
+                    onCommit={() => onFinalizeActive('Changed spacing')}
+                  />
+                  <Slider
+                    label="Line"
+                    defaultValue={100}
+                    value={Math.round((selected.lineHeight ?? 1) * 100)}
+                    min={50}
+                    max={180}
+                    format={formatLineHeight}
+                    onChange={(value) => onUpdateActive({ lineHeight: value / 100 })}
+                    onCommit={() => onFinalizeActive('Changed line height')}
+                  />
+                  <label>
+                    Alignment
+                    <select
+                      value={selected.textAlign ?? 'left'}
+                      onChange={(event) => {
+                        onUpdateActive({ textAlign: event.target.value as SelectedState['textAlign'] })
+                        onFinalizeActive('Changed text alignment')
+                      }}
+                    >
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                      <option value="justify">Justify</option>
+                    </select>
+                  </label>
+                  <div className="opentype-toggles">
+                    <p className="property-kicker">OpenType</p>
+                    <label className="toggle-row">
                       <input
-                        ref={fontInputRef}
-                        className="visually-hidden"
-                        type="file"
-                        accept=".ttf,.otf,.woff,.woff2"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0]
-                          if (file) onFontFileChange(file)
-                          event.currentTarget.value = ''
-                        }}
+                        type="checkbox"
+                        checked={openTypeFeatures.kern}
+                        onChange={(event) => onOpenTypeChange({ kern: event.target.checked })}
                       />
-                      <Slider
-                        label="Weight axis"
-                        value={Number(selected.fontWeight) || 700}
-                        min={100}
-                        max={900}
-                        onChange={(value) => onUpdateActive({ fontWeight: value })}
-                        onCommit={() => onFinalizeActive('Changed weight')}
+                      Kerning
+                    </label>
+                    <label className="toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={openTypeFeatures.liga}
+                        onChange={(event) => onOpenTypeChange({ liga: event.target.checked })}
                       />
-                      <Slider
-                        label="Width axis"
-                        value={fontStretch}
-                        min={50}
-                        max={200}
-                        format={formatPercent}
-                        onChange={(value) => {
-                          onFontStretchChange(value)
-                          onUpdateActive({ scaleX: value / 100 })
-                        }}
-                        onCommit={() => onFinalizeActive('Changed width axis')}
+                      Ligatures
+                    </label>
+                    <label className="toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={openTypeFeatures.smcp}
+                        onChange={(event) => onOpenTypeChange({ smcp: event.target.checked })}
                       />
-                      <p className="hint legibility-readout">
-                        Legibility: {legibilityBand(textContrast)} · contrast {textContrast ? textContrast.toFixed(1) : '—'}:1
+                      Small caps
+                    </label>
+                  </div>
+                  <div className="text-styles panel-section nested">
+                    <p className="property-kicker">Styles</p>
+                    {textSelection ? (
+                      <p className="hint">
+                        Selection {textSelection.start}–{textSelection.end} · double-click text to edit
                       </p>
-                      <Slider
-                        label="Size"
-                        value={selected.fontSize ?? 80}
-                        min={12}
-                        max={360}
-                        onChange={(value) => onUpdateActive({ fontSize: value })}
-                        onCommit={() => onFinalizeActive('Changed type size')}
-                      />
-                      <Slider
-                        label="Spacing"
-                        value={selected.charSpacing ?? 0}
-                        min={-120}
-                        max={260}
-                        onChange={(value) => onUpdateActive({ charSpacing: value })}
-                        onCommit={() => onFinalizeActive('Changed spacing')}
-                      />
-                      <Slider
-                        label="Line"
-                        value={Math.round((selected.lineHeight ?? 1) * 100)}
-                        min={50}
-                        max={180}
-                        format={formatLineHeight}
-                        onChange={(value) => onUpdateActive({ lineHeight: value / 100 })}
-                        onCommit={() => onFinalizeActive('Changed line height')}
-                      />
+                    ) : (
+                      <p className="hint">Double-click text to select characters for inline styling.</p>
+                    )}
+                    {textSelection ? (
+                      <div className="button-row">
+                        <button type="button" title="Apply accent color to selection" onClick={onStyleSelectionAccent}>
+                          Accent selection
+                        </button>
+                        <button type="button" title="Bold selected characters" onClick={onStyleSelectionBold}>
+                          Bold selection
+                        </button>
+                        <button type="button" title="Italic selected characters" onClick={onStyleSelectionItalic}>
+                          Italic selection
+                        </button>
+                      </div>
+                    ) : null}
+                    <div className="button-row">
+                      <button type="button" title="Save character style from selection or layer" onClick={onSaveCharacterStyle}>
+                        Save character style
+                      </button>
+                      <button type="button" title="Save paragraph style from this text layer" onClick={onSaveParagraphStyle}>
+                        Save paragraph style
+                      </button>
+                    </div>
+                    {documentMeta && documentMeta.characterStyles.length > 0 ? (
                       <label>
-                        Alignment
+                        Character style
                         <select
-                          value={selected.textAlign ?? 'left'}
+                          defaultValue=""
                           onChange={(event) => {
-                            onUpdateActive({ textAlign: event.target.value as SelectedState['textAlign'] })
-                            onFinalizeActive('Changed text alignment')
+                            if (event.target.value) onApplyCharacterStyle(event.target.value)
+                            event.currentTarget.value = ''
                           }}
                         >
-                          <option value="left">Left</option>
-                          <option value="center">Center</option>
-                          <option value="right">Right</option>
-                          <option value="justify">Justify</option>
+                          <option value="">Apply character style…</option>
+                          {documentMeta.characterStyles.map((style) => (
+                            <option key={style.id} value={style.id}>
+                              {style.name}
+                            </option>
+                          ))}
                         </select>
                       </label>
-                      <div className="opentype-toggles">
-                        <p className="property-kicker">OpenType</p>
-                        <label className="toggle-row">
-                          <input
-                            type="checkbox"
-                            checked={openTypeFeatures.kern}
-                            onChange={(event) => onOpenTypeChange({ kern: event.target.checked })}
-                          />
-                          Kerning
-                        </label>
-                        <label className="toggle-row">
-                          <input
-                            type="checkbox"
-                            checked={openTypeFeatures.liga}
-                            onChange={(event) => onOpenTypeChange({ liga: event.target.checked })}
-                          />
-                          Ligatures
-                        </label>
-                        <label className="toggle-row">
-                          <input
-                            type="checkbox"
-                            checked={openTypeFeatures.smcp}
-                            onChange={(event) => onOpenTypeChange({ smcp: event.target.checked })}
-                          />
-                          Small caps
-                        </label>
-                      </div>
-                      <div className="text-styles panel-section nested">
-                        <p className="property-kicker">Styles</p>
-                        {textSelection ? (
-                          <p className="hint">
-                            Selection {textSelection.start}–{textSelection.end} · double-click text to edit
-                          </p>
-                        ) : (
-                          <p className="hint">Double-click text to select characters for inline styling.</p>
-                        )}
-                        {textSelection ? (
-                          <div className="button-row">
-                            <button type="button" title="Apply accent color to selection" onClick={onStyleSelectionAccent}>
-                              Accent selection
-                            </button>
-                            <button type="button" title="Bold selected characters" onClick={onStyleSelectionBold}>
-                              Bold selection
-                            </button>
-                            <button type="button" title="Italic selected characters" onClick={onStyleSelectionItalic}>
-                              Italic selection
-                            </button>
-                          </div>
-                        ) : null}
-                        <div className="button-row">
-                          <button type="button" title="Save character style from selection or layer" onClick={onSaveCharacterStyle}>
-                            Save character style
-                          </button>
-                          <button type="button" title="Save paragraph style from this text layer" onClick={onSaveParagraphStyle}>
-                            Save paragraph style
-                          </button>
-                        </div>
-                        {documentMeta && documentMeta.characterStyles.length > 0 ? (
-                          <label>
-                            Character style
-                            <select
-                              defaultValue=""
-                              onChange={(event) => {
-                                if (event.target.value) onApplyCharacterStyle(event.target.value)
-                                event.currentTarget.value = ''
-                              }}
-                            >
-                              <option value="">Apply character style…</option>
-                              {documentMeta.characterStyles.map((style) => (
-                                <option key={style.id} value={style.id}>
-                                  {style.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        ) : null}
-                        {documentMeta && documentMeta.paragraphStyles.length > 0 ? (
-                          <label>
-                            Paragraph style
-                            <select
-                              defaultValue=""
-                              onChange={(event) => {
-                                if (event.target.value) onApplyParagraphStyle(event.target.value)
-                                event.currentTarget.value = ''
-                              }}
-                            >
-                              <option value="">Apply paragraph style…</option>
-                              {documentMeta.paragraphStyles.map((style) => (
-                                <option key={style.id} value={style.id}>
-                                  {style.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        ) : null}
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-
-                <div className="split-inputs">
-                  <label>
-                    X
-                    <input
-                      type="number"
-                      value={selected.left}
-                      onChange={(event) => onUpdateActive({ left: Number(event.target.value) })}
-                      onBlur={() => onFinalizeActive('Moved layer')}
-                    />
-                  </label>
-                  <label>
-                    Y
-                    <input
-                      type="number"
-                      value={selected.top}
-                      onChange={(event) => onUpdateActive({ top: Number(event.target.value) })}
-                      onBlur={() => onFinalizeActive('Moved layer')}
-                    />
-                  </label>
-                </div>
-                <Slider
-                  label="Rotate"
-                  value={selected.angle}
-                  min={-180}
-                  max={180}
-                  format={formatDegrees}
-                  onChange={(value) => onUpdateActive({ angle: value })}
-                  onCommit={() => onFinalizeActive('Rotated layer')}
-                />
-                <Slider
-                  label="Opacity"
-                  value={Math.round(selected.opacity * 100)}
-                  min={5}
-                  max={100}
-                  format={formatPercent}
-                  onChange={(value) => onUpdateActive({ opacity: value / 100 })}
-                  onCommit={() => onFinalizeActive('Changed opacity')}
-                />
-                <Slider
-                  label="Stretch X"
-                  value={Math.round(selected.scaleX * 100)}
-                  min={20}
-                  max={320}
-                  format={formatPercent}
-                  onChange={(value) => onUpdateActive({ scaleX: value / 100 })}
-                  onCommit={() => onFinalizeActive('Stretched layer')}
-                />
-                <Slider
-                  label="Stretch Y"
-                  value={Math.round(selected.scaleY * 100)}
-                  min={20}
-                  max={320}
-                  format={formatPercent}
-                  onChange={(value) => onUpdateActive({ scaleY: value / 100 })}
-                  onCommit={() => onFinalizeActive('Stretched layer')}
-                />
-                <Slider
-                  label="Skew X"
-                  value={selected.skewX ?? 0}
-                  min={-45}
-                  max={45}
-                  format={formatDegrees}
-                  onChange={(value) => onUpdateActive({ skewX: value })}
-                  onCommit={() => onFinalizeActive('Skewed layer')}
-                />
-                <label>
-                  Color
-                  <span className="color-row">
-                    <input
-                      type="color"
-                      value={typeof selected.fill === 'string' ? selected.fill : '#111111'}
-                      onChange={(event) => onUpdateActive({ fill: event.target.value })}
-                      onBlur={(event) => {
-                        onPushRecentColor(event.target.value)
-                        onFinalizeActive('Changed color')
-                      }}
-                      disabled={selectedIsImage}
-                    />
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label="Pick a color from the screen"
-                      title="Pick a color from the screen"
-                      onClick={onPickColorWithEyeDropper}
-                      disabled={selectedIsImage}
-                    >
-                      <Pipette size={14} />
-                    </button>
-                  </span>
-                </label>
-                {!selectedIsImage ? (
-                  <PrintGamutReadout hex={typeof selected.fill === 'string' ? selected.fill : undefined} />
-                ) : null}
-                <div className="swatch-row" aria-label="Document palette">
-                  {documentPalette.map((color, index) => (
-                    <label key={`${color}-${index}`} className="swatch-edit" title={`Document swatch ${index + 1}`}>
-                      <input
-                        type="color"
-                        value={color}
-                        disabled={selectedIsImage}
-                        onChange={(event) => onUpdatePaletteSwatch(index, event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="swatch"
-                        style={{ background: color }}
-                        disabled={selectedIsImage}
-                        onClick={() => {
-                          onUpdateActive({ fill: color })
-                          onFinalizeActive('Applied palette color')
-                        }}
-                      />
-                    </label>
-                  ))}
-                </div>
-                {selectedIsText ? (
+                    ) : null}
+                    {documentMeta && documentMeta.paragraphStyles.length > 0 ? (
+                      <label>
+                        Paragraph style
+                        <select
+                          defaultValue=""
+                          onChange={(event) => {
+                            if (event.target.value) onApplyParagraphStyle(event.target.value)
+                            event.currentTarget.value = ''
+                          }}
+                        >
+                          <option value="">Apply paragraph style…</option>
+                          {documentMeta.paragraphStyles.map((style) => (
+                            <option key={style.id} value={style.id}>
+                              {style.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </div>
                   <button type="button" title="Wrap selected text on a curved path" onClick={onApplyTextOnPath}>
                     Text on path
                   </button>
+                  </PropertySection>
                 ) : null}
-                {!selectedIsImage ? (
-                  <div className="button-row">
-                    <button type="button" title="Apply a linear gradient from palette colors" onClick={() => onApplyGradientFill('linear')}>
-                      Linear gradient
-                    </button>
-                    <button type="button" title="Apply a radial gradient from palette colors" onClick={() => onApplyGradientFill('radial')}>
-                      Radial gradient
-                    </button>
-                  </div>
-                ) : null}
-                {!selectedIsText && selected ? (
-                  <div className="button-row">
-                    <button type="button" onClick={() => onApplyStrokeDash('solid')}>
-                      Solid stroke
-                    </button>
-                    <button type="button" onClick={() => onApplyStrokeDash('dashed')}>
-                      Dashed
-                    </button>
-                    <button type="button" onClick={() => onApplyStrokeDash('dotted')}>
-                      Dotted
-                    </button>
-                  </div>
-                ) : null}
-                {selected && selectedLayerIds.length <= 1 ? (
-                  <LayerStylePanel
-                    style={selected.layerStyle ?? null}
-                    onChange={onLayerStyleChange}
-                    onCommit={onFinalizeActive}
-                    scale={layerStyleScale(posterWidth, posterHeight)}
-                  />
-                ) : null}
-                {selected ? (
-                  <div className="property-card">
-                    <h3 className="property-kicker">Layer mask</h3>
-                    <p className="hint">
-                      {hasMaskContent(layerMask)
-                        ? `${layerMaskLabel(layerMask)} · ${layerMask?.enabled === false ? 'bypassed' : 'live'}`
-                        : 'Paint to conceal. Alt-paint to reveal. Clip keeps the source.'}
-                    </p>
-                    <Slider
-                      label="Brush"
-                      value={maskBrushSize}
-                      min={4}
-                      max={100}
-                      onChange={onMaskBrushSizeChange}
-                      onCommit={() => undefined}
-                    />
-                    <Slider
-                      label="Softness"
-                      value={100 - maskHardness}
-                      min={0}
-                      max={90}
-                      onChange={(value) => onMaskHardnessChange(100 - value)}
-                      onCommit={() => undefined}
-                    />
-                    <div className="button-row">
-                      <button type="button" onClick={onPaintBrushMask}>
-                        Paint
-                      </button>
-                      <button type="button" onClick={onClipSelectionToShape}>
-                        Clip to shape
-                      </button>
-                    </div>
-                    <div className="button-row">
-                      <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onInvertLayerMask}>
-                        Invert
-                      </button>
-                      <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onToggleLayerMask}>
-                        {layerMask?.enabled === false ? 'Enable' : 'Bypass'}
-                      </button>
-                      <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onClearLayerMask}>
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                {canBooleanUnion || canBooleanSubtract ? (
-                  <div className="button-row">
-                    <button
-                      type="button"
-                      title="Union selected shapes into one path"
-                      disabled={!canBooleanUnion}
-                      onClick={onBooleanUnion}
-                    >
-                      Combine <ScopeSel />
-                    </button>
-                    <button
-                      type="button"
-                      title="Second selected shape punches the first"
-                      disabled={!canBooleanSubtract}
-                      onClick={onBooleanSubtract}
-                    >
-                      Subtract <ScopeSel />
-                    </button>
-                  </div>
-                ) : null}
-                {selectedIsPath ? (
-                  <>
-                    <div className="button-row">
-                      <button
-                        type="button"
-                        className={pathEditMode ? 'active' : undefined}
-                        onClick={onTogglePathEditMode}
-                      >
-                        {pathEditMode ? 'Done editing points' : 'Edit points'}
-                      </button>
-                      {pathEditMode ? (
-                        <button
-                          type="button"
-                          className={pathAddPointMode ? 'active' : undefined}
-                          onClick={onTogglePathAddPointMode}
-                        >
-                          {pathAddPointMode ? 'Adding points' : '+ Point'}
-                        </button>
-                      ) : null}
-                      {pathEditMode ? (
-                        <button type="button" disabled={pathIsClosed} onClick={onClosePath}>
-                          Close path
-                        </button>
-                      ) : null}
-                    </div>
+                <PropertySection id="transform" title="Transform">
+                  <div className="split-inputs">
                     <label>
-                      Stroke color
+                      X
                       <input
-                        type="color"
-                        value={selected.stroke ?? '#111111'}
-                        onChange={(event) => {
-                          onUpdateActive({ stroke: event.target.value })
-                          onPenStrokeColorChange(event.target.value)
-                        }}
-                        onBlur={() => onFinalizeActive('Changed stroke color')}
+                        type="number"
+                        value={selected.left}
+                        onChange={(event) => onUpdateActive({ left: Number(event.target.value) })}
+                        onBlur={() => onFinalizeActive('Moved layer')}
                       />
                     </label>
-                    <Slider
-                      label="Stroke width"
-                      value={selected.strokeWidth ?? penStrokeWidth}
-                      min={1}
-                      max={48}
-                      onChange={(value) => {
-                        onUpdateActive({ strokeWidth: value })
-                        onPenStrokeWidthChange(value)
-                      }}
-                      onCommit={() => onFinalizeActive('Changed stroke width')}
+                    <label>
+                      Y
+                      <input
+                        type="number"
+                        value={selected.top}
+                        onChange={(event) => onUpdateActive({ top: Number(event.target.value) })}
+                        onBlur={() => onFinalizeActive('Moved layer')}
+                      />
+                    </label>
+                  </div>
+                  <Slider
+                    label="Rotate"
+                    defaultValue={0}
+                    value={selected.angle}
+                    min={-180}
+                    max={180}
+                    format={formatDegrees}
+                    onChange={(value) => onUpdateActive({ angle: value })}
+                    onCommit={() => onFinalizeActive('Rotated layer')}
+                  />
+                  <Slider
+                    label="Stretch X"
+                    defaultValue={100}
+                    value={Math.round(selected.scaleX * 100)}
+                    min={20}
+                    max={320}
+                    format={formatPercent}
+                    onChange={(value) => onUpdateActive({ scaleX: value / 100 })}
+                    onCommit={() => onFinalizeActive('Stretched layer')}
+                  />
+                  <Slider
+                    label="Stretch Y"
+                    defaultValue={100}
+                    value={Math.round(selected.scaleY * 100)}
+                    min={20}
+                    max={320}
+                    format={formatPercent}
+                    onChange={(value) => onUpdateActive({ scaleY: value / 100 })}
+                    onCommit={() => onFinalizeActive('Stretched layer')}
+                  />
+                  <Slider
+                    label="Skew X"
+                    defaultValue={0}
+                    value={selected.skewX ?? 0}
+                    min={-45}
+                    max={45}
+                    format={formatDegrees}
+                    onChange={(value) => onUpdateActive({ skewX: value })}
+                    onCommit={() => onFinalizeActive('Skewed layer')}
+                  />
+                  <div className="button-row">
+                    <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
+                      <BringToFront size={16} />
+                      Front
+                    </button>
+                    <button type="button" title="Send the layer to the back" onClick={() => onMoveLayer('back')}>
+                      <SendToBack size={16} />
+                      Back
+                    </button>
+                  </div>
+                </PropertySection>
+                <PropertySection id="appearance" title="Appearance">
+                  <label className="font-picker-label">
+                    Blend
+                    <BlendModePicker
+                      value={selected.blendMode ?? 'source-over'}
+                      onPreview={onPreviewBlendMode}
+                      onChange={onApplyBlendMode}
                     />
-                  </>
-                ) : null}
-                {recentColors.length > 0 && !selectedIsImage ? (
-                  <div className="swatch-row" aria-label="Recently used colors">
-                    {recentColors.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        className="swatch"
-                        style={{ background: color }}
-                        aria-label={`Use color ${color}`}
-                        title={color}
-                        onClick={() => {
-                          onUpdateActive({ fill: color })
+                  </label>
+                  <Slider
+                    label="Opacity"
+                    defaultValue={100}
+                    value={Math.round(selected.opacity * 100)}
+                    min={5}
+                    max={100}
+                    format={formatPercent}
+                    onChange={(value) => onUpdateActive({ opacity: value / 100 })}
+                    onCommit={() => onFinalizeActive('Changed opacity')}
+                  />
+                  <label>
+                    Color
+                    <span className="color-row">
+                      <input
+                        type="color"
+                        value={typeof selected.fill === 'string' ? selected.fill : '#111111'}
+                        onChange={(event) => onUpdateActive({ fill: event.target.value })}
+                        onBlur={(event) => {
+                          onPushRecentColor(event.target.value)
                           onFinalizeActive('Changed color')
                         }}
+                        disabled={selectedIsImage}
                       />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Pick a color from the screen"
+                        title="Pick a color from the screen"
+                        onClick={onPickColorWithEyeDropper}
+                        disabled={selectedIsImage}
+                      >
+                        <Pipette size={14} />
+                      </button>
+                    </span>
+                  </label>
+                  {!selectedIsImage ? (
+                    <PrintGamutReadout hex={typeof selected.fill === 'string' ? selected.fill : undefined} />
+                  ) : null}
+                  <div className="swatch-row" aria-label="Document palette">
+                    {documentPalette.map((color, index) => (
+                      <label key={`${color}-${index}`} className="swatch-edit" title={`Document swatch ${index + 1}`}>
+                        <input
+                          type="color"
+                          value={color}
+                          disabled={selectedIsImage}
+                          onChange={(event) => onUpdatePaletteSwatch(index, event.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="swatch"
+                          style={{ background: color }}
+                          disabled={selectedIsImage}
+                          onClick={() => {
+                            onUpdateActive({ fill: color })
+                            onFinalizeActive('Applied palette color')
+                          }}
+                        />
+                      </label>
                     ))}
                   </div>
+                  {recentColors.length > 0 && !selectedIsImage ? (
+                    <div className="swatch-row" aria-label="Recently used colors">
+                      {recentColors.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          className="swatch"
+                          style={{ background: color }}
+                          aria-label={`Use color ${color}`}
+                          title={color}
+                          onClick={() => {
+                            onUpdateActive({ fill: color })
+                            onFinalizeActive('Changed color')
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {!selectedIsImage ? (
+                    <div className="button-row">
+                      <button type="button" title="Apply a linear gradient from palette colors" onClick={() => onApplyGradientFill('linear')}>
+                        Linear gradient
+                      </button>
+                      <button type="button" title="Apply a radial gradient from palette colors" onClick={() => onApplyGradientFill('radial')}>
+                        Radial gradient
+                      </button>
+                    </div>
+                  ) : null}
+                  {!selectedIsText && selected ? (
+                    <div className="button-row">
+                      <button type="button" onClick={() => onApplyStrokeDash('solid')}>
+                        Solid stroke
+                      </button>
+                      <button type="button" onClick={() => onApplyStrokeDash('dashed')}>
+                        Dashed
+                      </button>
+                      <button type="button" onClick={() => onApplyStrokeDash('dotted')}>
+                        Dotted
+                      </button>
+                    </div>
+                  ) : null}
+                </PropertySection>
+                {selectedIsPath || canBooleanUnion || canBooleanSubtract ? (
+                  <PropertySection id="path" title="Path">
+                  {canBooleanUnion || canBooleanSubtract ? (
+                    <div className="button-row">
+                      <button
+                        type="button"
+                        title="Union selected shapes into one path"
+                        disabled={!canBooleanUnion}
+                        onClick={onBooleanUnion}
+                      >
+                        Combine <ScopeSel />
+                      </button>
+                      <button
+                        type="button"
+                        title="Second selected shape punches the first"
+                        disabled={!canBooleanSubtract}
+                        onClick={onBooleanSubtract}
+                      >
+                        Subtract <ScopeSel />
+                      </button>
+                    </div>
+                  ) : null}
+                  {selectedIsPath ? (
+                    <>
+                      <div className="button-row">
+                        <button
+                          type="button"
+                          className={pathEditMode ? 'active' : undefined}
+                          onClick={onTogglePathEditMode}
+                        >
+                          {pathEditMode ? 'Done editing points' : 'Edit points'}
+                        </button>
+                        {pathEditMode ? (
+                          <button
+                            type="button"
+                            className={pathAddPointMode ? 'active' : undefined}
+                            onClick={onTogglePathAddPointMode}
+                          >
+                            {pathAddPointMode ? 'Adding points' : '+ Point'}
+                          </button>
+                        ) : null}
+                        {pathEditMode ? (
+                          <button type="button" disabled={pathIsClosed} onClick={onClosePath}>
+                            Close path
+                          </button>
+                        ) : null}
+                      </div>
+                      <label>
+                        Stroke color
+                        <input
+                          type="color"
+                          value={selected.stroke ?? '#111111'}
+                          onChange={(event) => {
+                            onUpdateActive({ stroke: event.target.value })
+                            onPenStrokeColorChange(event.target.value)
+                          }}
+                          onBlur={() => onFinalizeActive('Changed stroke color')}
+                        />
+                      </label>
+                      <Slider
+                        label="Stroke width"
+                        value={selected.strokeWidth ?? penStrokeWidth}
+                        min={1}
+                        max={48}
+                        onChange={(value) => {
+                          onUpdateActive({ strokeWidth: value })
+                          onPenStrokeWidthChange(value)
+                        }}
+                        onCommit={() => onFinalizeActive('Changed stroke width')}
+                      />
+                    </>
+                  ) : null}
+                  </PropertySection>
                 ) : null}
-                <label className="font-picker-label">
-                  Blend
-                  <BlendModePicker
-                    value={selected.blendMode ?? 'source-over'}
-                    onPreview={onPreviewBlendMode}
-                    onChange={onApplyBlendMode}
+                {selectedLayerIds.length <= 1 ? (
+                  <PropertySection id="effects" title="Effects" defaultOpen={false} summary={effectsSummary}>
+                    <LayerStylePanel
+                      style={selected.layerStyle ?? null}
+                      onChange={onLayerStyleChange}
+                      onCommit={onFinalizeActive}
+                      scale={layerStyleScale(posterWidth, posterHeight)}
+                    />
+                  </PropertySection>
+                ) : null}
+                <PropertySection id="mask" title="Mask" defaultOpen={false} summary={maskSummary}>
+                  <p className="hint">
+                    {hasMaskContent(layerMask)
+                      ? `${layerMaskLabel(layerMask)} · ${layerMask?.enabled === false ? 'bypassed' : 'live'}`
+                      : 'Paint to conceal. Alt-paint to reveal. Clip keeps the source.'}
+                  </p>
+                  <Slider
+                    label="Brush"
+                    value={maskBrushSize}
+                    min={4}
+                    max={100}
+                    onChange={onMaskBrushSizeChange}
+                    onCommit={() => undefined}
                   />
-                </label>
-                <p className="hint">Hover a mode to preview it on the canvas. Click to apply.</p>
+                  <Slider
+                    label="Softness"
+                    value={100 - maskHardness}
+                    min={0}
+                    max={90}
+                    onChange={(value) => onMaskHardnessChange(100 - value)}
+                    onCommit={() => undefined}
+                  />
+                  <div className="button-row">
+                    <button type="button" onClick={onPaintBrushMask}>
+                      Paint
+                    </button>
+                    <button type="button" onClick={onClipSelectionToShape}>
+                      Clip to shape
+                    </button>
+                  </div>
+                  <div className="button-row">
+                    <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onInvertLayerMask}>
+                      Invert
+                    </button>
+                    <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onToggleLayerMask}>
+                      {layerMask?.enabled === false ? 'Enable' : 'Bypass'}
+                    </button>
+                    <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onClearLayerMask}>
+                      Clear
+                    </button>
+                  </div>
+                </PropertySection>
                 </>)}
-                <div className="button-row">
-                  <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
-                    <BringToFront size={16} />
-                    Front
-                  </button>
-                  <button type="button" title="Send the layer to the back" onClick={() => onMoveLayer('back')}>
-                    <SendToBack size={16} />
-                    Back
-                  </button>
-                </div>
+                {selected.adjustment ? (
+                  <div className="button-row">
+                    <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
+                      <BringToFront size={16} />
+                      Front
+                    </button>
+                    <button type="button" title="Send the layer to the back" onClick={() => onMoveLayer('back')}>
+                      <SendToBack size={16} />
+                      Back
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

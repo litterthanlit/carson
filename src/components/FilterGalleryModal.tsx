@@ -217,6 +217,7 @@ export function FilterGalleryModal({
                         key={param.key}
                         label={param.label}
                         value={params[param.key] ?? selectedPreset.defaultParams[param.key] ?? param.min}
+                        defaultValue={selectedPreset.defaultParams[param.key]}
                         min={param.min}
                         max={param.max}
                         format={(value) => formatFilterParam(param, value)}
