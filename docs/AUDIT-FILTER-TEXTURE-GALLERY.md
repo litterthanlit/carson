@@ -1,6 +1,6 @@
 # Carson — Filter & Texture Gallery Audit
 
-*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3 are fixed in a follow-up commit on `claude/filter-texture-gallery-audit-p0scb6` (see §1a). Everything else is still open.*
+*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3 and H1–H6 are fixed in follow-up commits on `claude/filter-texture-gallery-audit-p0scb6` (see §1a and §2a). Everything else is still open.*
 
 ---
 
@@ -48,6 +48,21 @@ The importer-side `available` flag suggested in C3 wasn't needed: detecting miss
 | H5 | **Transparency is flattened to white in previews.** JPEG encoding turns a text layer's transparent bounds into a white box (the corner pixel sampled `255,255,255,255`). The canvas result is still transparent, and the poster shows through it. | Previews of type and shapes, and of multiply-mode treatments (Xerox, Decay, Cold wash), don't match how they composite on the poster. | Encode previews as PNG or WebP with alpha. Show them on the checker pattern the Texture Gallery already has (`.checker`), or better, on the poster crop behind the layer. |
 | H6 | **Scatter presets preview as rotate-and-scale only.** `applyScatterTransform` moves `left/top`, but `image.toDataURL()` renders the object in its own bounds, so the Distance parameter has no visible effect. | The Transform category's thumbnails for Drift, Scatter and Explode look almost the same. | Render the scatter preview into a padded frame that includes the translation, or draw a ghost of the original position. |
 | H7 | **The texture thumbnail grid overlaps.** Tiles in `.filter-gallery-thumbs` overlap in the drive screenshot. Rows are shorter than the square `aspect-ratio: 1` images, so names are hidden and the last tile stretches. The Filter Gallery's grid, which uses the same classes, renders correctly. | Texture names are unreadable, and it is hard to tell which tile is selected. | Give `.filter-gallery-thumb` an explicit `height: auto; align-content: start` and set `grid-auto-rows: max-content` on the grid. Check against global `button` sizing rules. |
+
+### 2a. Shipped
+
+| # | Fix | Verification |
+|---|---|---|
+| H1 | Each main-preview request gets an id from `previewRequestRef`. Only the newest request may set the preview URL or clear the loading state. The debounce can be cancelled and is cancelled on unmount. | Component test: an older Gaussian render that resolves *after* Heavy gaussian doesn't replace it, and "Updating preview…" clears. |
+| H2 | `previewMultiplier()` sizes the raster to the layer's bounds: 640 px on the long side for the preview, 144 px for thumbnails (sharp on 2× screens), clamped to 0.02–2×. The layer is rasterized **once per size** and shared by every preset. | Drive: `Oversized headline` previews at 640×343. The old path produced 1×420 for a thin rule. |
+| H3 | `previewPixelRatio()` compares preview pixels with the pixels the filter really runs on: the 2× snapshot for type and shapes, or the image's own element for image layers. `scalePreviewParams()` scales the pixel-measured params (`distance` for motion blur, `blocksize` for pixelate and newsprint) by that ratio. | Unit tests. In the drive, the Motion blur preview and the applied result show the same smear relative to the letterforms. |
+| H4 | Thumbnails render at 144 px from the shared raster, appear one by one, and yield to the main thread between presets (`scheduler.yield` when available). | Drive: all 6 Blur thumbnails rendered in about 240 ms. Component test: a thumbnail appears as soon as its render resolves. |
+| H5 | Previews are PNG, so transparent areas stay transparent over the paper-toned preview pane. Print, Decay and Cold wash previews use `mix-blend-mode: multiply`, as on the canvas. Thumbnails show the whole layer (`object-fit: contain`) on a paper backing. | Drive screenshots: no white box around type, and the Print thumbnails match the applied Xerox result. |
+| H6 | Scatter previews render into a frame padded for the travel distance, with an 18% ghost at the original position. | Drive screenshot: Explode visibly moves, rotates and scales against its ghost. |
+
+H7 (overlapping texture grid) is left for the shared dialog in step 4.
+
+Remaining limitation: 3×3 convolution kernels (Sharpen, Unsharp, Emboss, Find edges) act on single pixels, so their strength still depends on resolution. At 640 px they preview a little stronger than on a large snapshot. A faithful fix means running the preview at applied resolution and downscaling the result, which fits the worker-based renderer in §5.
 
 ---
 

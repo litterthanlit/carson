@@ -10,9 +10,19 @@ import {
   type FilterCategory,
   type FilterPreset,
 } from '../lib/filterGallery'
-import { clearFilterPreviewCache, debounce, renderFilterPreview } from '../lib/filterPreview'
+import {
+  clearFilterPreviewCache,
+  debounce,
+  previewBlendMode,
+  renderFilterPreview,
+  yieldToMain,
+} from '../lib/filterPreview'
 import { Slider } from './Slider'
 import { handleGalleryKeyDown } from './galleryKeys'
+
+/** Long side of rendered previews, in device pixels (thumbs show at 72 CSS px). */
+const THUMB_PX = 144
+const PREVIEW_PX = 640
 
 export type FilterGalleryModalProps = {
   open: boolean
@@ -36,6 +46,8 @@ export function FilterGalleryModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
   const [previewLoading, setPreviewLoading] = useState(false)
+  // Only the newest preview request may write state; slower, older renders are dropped.
+  const previewRequestRef = useRef(0)
 
   const categoryPresets = useMemo(() => presetsForCategory(category), [category])
   const selectedPreset = useMemo(
@@ -67,16 +79,17 @@ export function FilterGalleryModal({
     const presets = categoryPresets.filter((preset) => isPresetApplicable(preset, selectedIsImage))
 
     void (async () => {
-      const next: Record<string, string> = {}
       for (const preset of presets) {
         if (cancelled) return
         try {
-          next[preset.id] = await renderFilterPreview(source, preset, preset.defaultParams, 72)
+          const url = await renderFilterPreview(source, preset, preset.defaultParams, THUMB_PX)
+          if (cancelled) return
+          setThumbUrls((current) => (current[preset.id] === url ? current : { ...current, [preset.id]: url }))
         } catch {
           // Preview generation can fail for unsupported layer types.
         }
+        await yieldToMain()
       }
-      if (!cancelled) setThumbUrls(next)
     })()
 
     return () => {
@@ -86,24 +99,42 @@ export function FilterGalleryModal({
 
   const refreshPreview = useMemo(
     () =>
-      debounce((preset: FilterPreset, nextParams: Record<string, number>, layer: FabricObject) => {
-        if (!isPresetApplicable(preset, selectedIsImage)) {
-          setPreviewUrl(null)
-          return
-        }
-        setPreviewLoading(true)
-        void renderFilterPreview(layer, preset, nextParams, 420)
-          .then((url) => setPreviewUrl(url))
-          .catch(() => setPreviewUrl(null))
-          .finally(() => setPreviewLoading(false))
+      debounce((requestId: number, preset: FilterPreset, nextParams: Record<string, number>, layer: FabricObject) => {
+        const isLatest = () => previewRequestRef.current === requestId
+        void renderFilterPreview(layer, preset, nextParams, PREVIEW_PX)
+          .then((url) => {
+            if (isLatest()) setPreviewUrl(url)
+          })
+          .catch(() => {
+            if (isLatest()) setPreviewUrl(null)
+          })
+          .finally(() => {
+            if (isLatest()) setPreviewLoading(false)
+          })
       }, 120),
-    [selectedIsImage],
+    [],
   )
 
   useEffect(() => {
     if (!open || !source || !selectedPreset) return
-    refreshPreview(selectedPreset, params, source)
-  }, [open, source, selectedPreset, params, refreshPreview])
+    const requestId = ++previewRequestRef.current
+    if (!isPresetApplicable(selectedPreset, selectedIsImage)) {
+      refreshPreview.cancel()
+      setPreviewUrl(null)
+      setPreviewLoading(false)
+      return
+    }
+    setPreviewLoading(true)
+    refreshPreview(requestId, selectedPreset, params, source)
+  }, [open, source, selectedPreset, selectedIsImage, params, refreshPreview])
+
+  useEffect(
+    () => () => {
+      refreshPreview.cancel()
+      previewRequestRef.current += 1
+    },
+    [refreshPreview],
+  )
 
   useEffect(() => {
     if (open) dialogRef.current?.focus()
@@ -174,7 +205,9 @@ export function FilterGalleryModal({
                       onClick={() => selectPreset(preset)}
                     >
                       {thumbUrls[preset.id] ? (
-                        <img src={thumbUrls[preset.id]} alt="" />
+                        <span className="filter-gallery-thumb-paper">
+                          <img src={thumbUrls[preset.id]} alt="" style={{ mixBlendMode: previewBlendMode(preset) }} />
+                        </span>
                       ) : (
                         <div className="filter-gallery-thumb-placeholder" aria-hidden />
                       )}
@@ -188,7 +221,11 @@ export function FilterGalleryModal({
             <div className="filter-gallery-preview">
               {previewLoading ? <p className="hint filter-gallery-preview-status">Updating preview…</p> : null}
               {previewUrl ? (
-                <img src={previewUrl} alt="Filter preview" />
+                <img
+                  src={previewUrl}
+                  alt={selectedPreset ? `${selectedPreset.name} preview` : 'Filter preview'}
+                  style={{ mixBlendMode: selectedPreset ? previewBlendMode(selectedPreset) : undefined }}
+                />
               ) : (
                 <div className="filter-gallery-preview-placeholder">
                   {selectedPreset && !isPresetApplicable(selectedPreset, selectedIsImage)
