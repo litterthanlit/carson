@@ -17,8 +17,10 @@ import {
   renderFilterPreview,
   yieldToMain,
 } from '../lib/filterPreview'
+import { filterStateForCategory, loadFilterGalleryState, saveFilterGalleryState } from '../lib/galleryMemory'
 import { Slider } from './Slider'
-import { handleGalleryKeyDown } from './galleryKeys'
+import { GalleryDialog } from './GalleryDialog'
+import { handleGridKeyDown } from './gridNavigation'
 
 /** Long side of rendered previews, in device pixels (thumbs show at 72 CSS px). */
 const THUMB_PX = 144
@@ -39,10 +41,11 @@ export function FilterGalleryModal({
   onApply,
   onClose,
 }: FilterGalleryModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const [category, setCategory] = useState<FilterCategory>('blur')
-  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null)
-  const [params, setParams] = useState<Record<string, number>>({})
+  // Reopen on the last filter and settings, as long as that filter still fits this layer.
+  const [initial] = useState(() => loadFilterGalleryState(selectedIsImage))
+  const [category, setCategory] = useState<FilterCategory>(initial.category)
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(initial.presetId)
+  const [params, setParams] = useState<Record<string, number>>(initial.params)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -50,6 +53,7 @@ export function FilterGalleryModal({
   const previewRequestRef = useRef(0)
 
   const categoryPresets = useMemo(() => presetsForCategory(category), [category])
+  const categoryLabel = FILTER_CATEGORIES.find((item) => item.id === category)?.label ?? category
   const selectedPreset = useMemo(
     () => categoryPresets.find((preset) => preset.id === selectedPresetId) ?? categoryPresets[0] ?? null,
     [categoryPresets, selectedPresetId],
@@ -60,11 +64,21 @@ export function FilterGalleryModal({
     setParams({ ...preset.defaultParams })
   }, [])
 
+  const selectCategory = (next: FilterCategory) => {
+    const state = filterStateForCategory(next, selectedIsImage)
+    setCategory(state.category)
+    setSelectedPresetId(state.presetId)
+    setParams(state.params)
+  }
+
   useEffect(() => {
-    if (!open) return
-    const firstApplicable = categoryPresets.find((preset) => isPresetApplicable(preset, selectedIsImage))
-    if (firstApplicable) selectPreset(firstApplicable)
-  }, [open, category, categoryPresets, selectedIsImage, selectPreset])
+    if (!selectedPreset) return
+    saveFilterGalleryState({
+      category,
+      presetId: selectedPreset.id,
+      params: mergePresetParams(selectedPreset, params),
+    })
+  }, [category, selectedPreset, params])
 
   useEffect(() => {
     if (!open) return
@@ -136,154 +150,157 @@ export function FilterGalleryModal({
     [refreshPreview],
   )
 
-  useEffect(() => {
-    if (open) dialogRef.current?.focus()
-  }, [open])
-
   if (!open) return null
 
   const canApply = Boolean(source && selectedPreset && isPresetApplicable(selectedPreset, selectedIsImage))
 
   return (
-    <div className="command-backdrop filter-gallery-backdrop" role="presentation" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        className="filter-gallery-modal glass-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="filter-gallery-title"
-        tabIndex={-1}
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => handleGalleryKeyDown(event, onClose)}
-      >
-        <header className="filter-gallery-header">
-          <div>
-            <h2 id="filter-gallery-title">Filter Gallery</h2>
-            <p className="hint filter-gallery-lede">
-              Blur, stylize, color, and film looks plus Carson print treatments. Live preview; applies as a removable stack.
-            </p>
-          </div>
-          <button type="button" className="icon-button" aria-label="Close filter gallery" onClick={onClose}>
-            <X size={16} />
-          </button>
-        </header>
+    <GalleryDialog labelledBy="filter-gallery-title" className="filter-gallery-modal" onClose={onClose}>
+      <header className="filter-gallery-header">
+        <div>
+          <h2 id="filter-gallery-title">Filter Gallery</h2>
+          <p className="hint filter-gallery-lede">
+            Blur, stylize, color, and film looks plus Carson print treatments. Live preview; applies as a removable stack.
+          </p>
+        </div>
+        <button type="button" className="icon-button" aria-label="Close filter gallery" onClick={onClose}>
+          <X size={16} />
+        </button>
+      </header>
 
-        {!source ? (
-          <p className="empty filter-gallery-empty">Select a layer first.</p>
-        ) : (
-          <div className="filter-gallery-layout">
-            <aside className="filter-gallery-sidebar">
-              <nav className="filter-gallery-categories" aria-label="Filter categories">
-                {FILTER_CATEGORIES.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={category === item.id ? 'active' : undefined}
-                    onClick={() => {
-                      setCategory(item.id)
-                      setSelectedPresetId(null)
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </nav>
-
-              <div className="filter-gallery-thumbs" role="listbox" aria-label={`${category} filters`}>
-                {categoryPresets.map((preset) => {
-                  const disabled = !isPresetApplicable(preset, selectedIsImage)
-                  const active = selectedPreset?.id === preset.id
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      className={`filter-gallery-thumb asset-thumb${active ? ' active' : ''}${disabled ? ' disabled' : ''}`}
-                      disabled={disabled}
-                      title={disabled ? 'Requires an image layer' : preset.name}
-                      onClick={() => selectPreset(preset)}
-                    >
-                      {thumbUrls[preset.id] ? (
-                        <span className="filter-gallery-thumb-paper">
-                          <img src={thumbUrls[preset.id]} alt="" style={{ mixBlendMode: previewBlendMode(preset) }} />
-                        </span>
-                      ) : (
-                        <div className="filter-gallery-thumb-placeholder" aria-hidden />
-                      )}
-                      <span>{preset.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </aside>
-
-            <div className="filter-gallery-preview">
-              {previewLoading ? <p className="hint filter-gallery-preview-status">Updating preview…</p> : null}
-              {previewUrl ? (
-                <img
-                  src={previewUrl}
-                  alt={selectedPreset ? `${selectedPreset.name} preview` : 'Filter preview'}
-                  style={{ mixBlendMode: selectedPreset ? previewBlendMode(selectedPreset) : undefined }}
-                />
-              ) : (
-                <div className="filter-gallery-preview-placeholder">
-                  {selectedPreset && !isPresetApplicable(selectedPreset, selectedIsImage)
-                    ? 'This filter needs an image layer.'
-                    : 'Preview'}
-                </div>
-              )}
-            </div>
-
-            <aside className="filter-gallery-params">
-              {selectedPreset ? (
-                <>
-                  <h3>{selectedPreset.name}</h3>
-                  {selectedPreset.description ? <p className="hint">{selectedPreset.description}</p> : null}
-                  {selectedPreset.treatmentType === 'fx' && !selectedIsImage ? (
-                    <p className="hint">Type and shapes are snapshotted to an image layer so pixel filters can run. Undo restores the original.</p>
-                  ) : null}
-                  {selectedPreset.paramDefs.length === 0 ? (
-                    <p className="hint">No adjustable parameters.</p>
-                  ) : (
-                    selectedPreset.paramDefs.map((param) => (
-                      <Slider
-                        key={param.key}
-                        label={param.label}
-                        value={params[param.key] ?? selectedPreset.defaultParams[param.key] ?? param.min}
-                        defaultValue={selectedPreset.defaultParams[param.key]}
-                        min={param.min}
-                        max={param.max}
-                        format={(value) => formatFilterParam(param, value)}
-                        onChange={(value) => setParams((current) => ({ ...current, [param.key]: value }))}
-                        onCommit={() => undefined}
-                      />
-                    ))
-                  )}
-                </>
-              ) : null}
-
-              <div className="button-row filter-gallery-actions">
+      {!source ? (
+        <p className="empty filter-gallery-empty">Select a layer first.</p>
+      ) : (
+        <div className="filter-gallery-layout">
+          <aside className="filter-gallery-sidebar">
+            <nav className="filter-gallery-categories" aria-label="Filter categories">
+              {FILTER_CATEGORIES.map((item) => (
                 <button
+                  key={item.id}
                   type="button"
-                  className="primary-button"
-                  disabled={!canApply}
-                  onClick={() => {
-                    if (!selectedPreset) return
-                    onApply(selectedPreset, mergePresetParams(selectedPreset, params))
-                    onClose()
-                  }}
+                  className={category === item.id ? 'active' : undefined}
+                  aria-pressed={category === item.id}
+                  onClick={() => selectCategory(item.id)}
                 >
-                  Apply filter
+                  {item.label}
                 </button>
-                <button type="button" onClick={onClose}>
-                  Cancel
-                </button>
+              ))}
+            </nav>
+
+            <div
+              className="filter-gallery-thumbs"
+              role="listbox"
+              aria-label={`${categoryLabel} filters`}
+              onKeyDown={(event) =>
+                handleGridKeyDown(event, (index) => {
+                  const preset = categoryPresets[index]
+                  if (preset) selectPreset(preset)
+                })
+              }
+            >
+              {categoryPresets.map((preset) => {
+                const disabled = !isPresetApplicable(preset, selectedIsImage)
+                const active = selectedPreset?.id === preset.id
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    aria-disabled={disabled || undefined}
+                    aria-describedby={disabled ? 'filter-gallery-needs-image' : undefined}
+                    tabIndex={active ? 0 : -1}
+                    className={`filter-gallery-thumb asset-thumb${active ? ' active' : ''}${disabled ? ' disabled' : ''}`}
+                    title={disabled ? 'Requires an image layer' : preset.name}
+                    onClick={() => selectPreset(preset)}
+                  >
+                    {thumbUrls[preset.id] ? (
+                      <span className="gallery-thumb-media filter-gallery-thumb-paper">
+                        <img src={thumbUrls[preset.id]} alt="" style={{ mixBlendMode: previewBlendMode(preset) }} />
+                      </span>
+                    ) : (
+                      <span className="gallery-thumb-media filter-gallery-thumb-placeholder" aria-hidden />
+                    )}
+                    <span>{preset.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </aside>
+
+          <div className="filter-gallery-preview">
+            {previewLoading ? <p className="hint filter-gallery-preview-status">Updating preview…</p> : null}
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt={selectedPreset ? `${selectedPreset.name} preview` : 'Filter preview'}
+                style={{ mixBlendMode: selectedPreset ? previewBlendMode(selectedPreset) : undefined }}
+              />
+            ) : (
+              <div className="filter-gallery-preview-placeholder">
+                {selectedPreset && !isPresetApplicable(selectedPreset, selectedIsImage)
+                  ? 'This filter needs an image layer.'
+                  : 'Preview'}
               </div>
-            </aside>
+            )}
           </div>
-        )}
-      </div>
-    </div>
+
+          <aside className="filter-gallery-params">
+            {selectedPreset ? (
+              <>
+                <h3>{selectedPreset.name}</h3>
+                {selectedPreset.description ? <p className="hint">{selectedPreset.description}</p> : null}
+                {!isPresetApplicable(selectedPreset, selectedIsImage) ? (
+                  <p className="hint filter-gallery-unavailable">
+                    Needs an image layer. Select a photo or placed image to use this filter.
+                  </p>
+                ) : null}
+                {selectedPreset.treatmentType === 'fx' && !selectedIsImage ? (
+                  <p className="hint">Type and shapes are snapshotted to an image layer so pixel filters can run. Undo restores the original.</p>
+                ) : null}
+                {selectedPreset.paramDefs.length === 0 ? (
+                  <p className="hint">No adjustable parameters.</p>
+                ) : (
+                  selectedPreset.paramDefs.map((param) => (
+                    <Slider
+                      key={param.key}
+                      label={param.label}
+                      value={params[param.key] ?? selectedPreset.defaultParams[param.key] ?? param.min}
+                      defaultValue={selectedPreset.defaultParams[param.key]}
+                      min={param.min}
+                      max={param.max}
+                      format={(value) => formatFilterParam(param, value)}
+                      onChange={(value) => setParams((current) => ({ ...current, [param.key]: value }))}
+                      onCommit={() => undefined}
+                    />
+                  ))
+                )}
+              </>
+            ) : null}
+
+            <div className="button-row filter-gallery-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!canApply}
+                onClick={() => {
+                  if (!selectedPreset) return
+                  onApply(selectedPreset, mergePresetParams(selectedPreset, params))
+                  onClose()
+                }}
+              >
+                Apply filter
+              </button>
+              <button type="button" onClick={onClose}>
+                Cancel
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+      <p id="filter-gallery-needs-image" hidden>
+        Needs an image layer.
+      </p>
+    </GalleryDialog>
   )
 }
