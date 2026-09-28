@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { FabricObject } from 'fabric'
 import { presetById } from './filterGallery'
 import {
   SNAPSHOT_MULTIPLIER,
+  clearFilterPreviewCache,
   debounce,
   previewBlendMode,
   previewMultiplier,
   previewPixelRatio,
+  renderOriginalPreview,
   scalePreviewParams,
 } from './filterPreview'
 
@@ -54,5 +57,41 @@ describe('debounce', () => {
     vi.advanceTimersByTime(200)
     expect(fn).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
+  })
+})
+
+describe('renderOriginalPreview', () => {
+  it('returns the shared source raster instead of rasterizing again', async () => {
+    // Node has no Image; a stand-in that "loads" as soon as it gets a src is enough here.
+    class FakeImage {
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      private url = ''
+      get src() {
+        return this.url
+      }
+      set src(value: string) {
+        this.url = value
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+    vi.stubGlobal('Image', FakeImage)
+    clearFilterPreviewCache()
+    const toDataURL = vi.fn(() => 'data:image/png;base64,ORIGINAL')
+    const layer = {
+      id: 'layer-1',
+      type: 'textbox',
+      scaleX: 1,
+      getBoundingRect: () => ({ left: 0, top: 0, width: 1280, height: 320 }),
+      toDataURL,
+    } as unknown as FabricObject
+
+    await expect(renderOriginalPreview(layer, 640)).resolves.toBe('data:image/png;base64,ORIGINAL')
+    await expect(renderOriginalPreview(layer, 640)).resolves.toBe('data:image/png;base64,ORIGINAL')
+    expect(toDataURL).toHaveBeenCalledTimes(1)
+    expect(toDataURL).toHaveBeenCalledWith({ format: 'png', multiplier: 0.5 })
+
+    clearFilterPreviewCache()
+    vi.unstubAllGlobals()
   })
 })

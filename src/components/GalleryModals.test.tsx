@@ -21,6 +21,7 @@ vi.mock('../lib/filterPreview', async (importOriginal) => {
         ? Promise.resolve(`data:thumb/${preset.id}`)
         : new Promise<string>((resolve, reject) => pendingPreviews.set(preset.id, { resolve, reject })),
     ),
+    renderOriginalPreview: vi.fn(() => Promise.resolve('data:original/layer')),
   }
 })
 import { TextureGalleryModal } from './TextureGalleryModal'
@@ -87,6 +88,73 @@ describe('FilterGalleryModal previews', () => {
     render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
     const option = screen.getByRole('option', { name: 'Motion blur' })
     await waitFor(() => expect(option.querySelector('img')?.getAttribute('src')).toBe('data:thumb/motion-blur'))
+  })
+})
+
+describe('FilterGalleryModal before/after', () => {
+  async function openWithPreview(id: string) {
+    pendingPreviews.clear()
+    const source = { id } as unknown as FabricObject
+    render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
+    await waitFor(() => expect(pendingPreviews.has('gaussian-soft')).toBe(true))
+    pendingPreviews.get('gaussian-soft')!.resolve('data:preview/soft')
+    await screen.findByRole('img', { name: 'Gaussian preview' })
+    const original = screen.getByRole('button', { name: 'Original' })
+    await waitFor(() => expect(original).toHaveProperty('disabled', false))
+    return original
+  }
+
+  it('shows the unfiltered layer while Original is held and restores the filter on release', async () => {
+    const user = userEvent.setup()
+    const original = await openWithPreview('layer-hold')
+    expect(original.getAttribute('aria-pressed')).toBe('false')
+
+    await user.pointer({ keys: '[MouseLeft>]', target: original })
+    expect(original.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('img', { name: 'Original layer, without the filter' }).getAttribute('src')).toBe(
+      'data:original/layer',
+    )
+    expect(screen.queryByRole('img', { name: 'Gaussian preview' })).toBeNull()
+    expect(document.querySelector('.filter-gallery-original-badge')?.textContent).toBe('Original')
+
+    // The click that follows the release must not latch it on.
+    await user.pointer({ keys: '[/MouseLeft]', target: original })
+    expect(original.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('img', { name: 'Gaussian preview' }).getAttribute('src')).toBe('data:preview/soft')
+    expect(document.querySelector('.filter-gallery-original-badge')).toBeNull()
+  })
+
+  it('toggles from the keyboard and lets go when focus leaves', async () => {
+    const user = userEvent.setup()
+    const original = await openWithPreview('layer-toggle')
+    original.focus()
+
+    await user.keyboard('{Enter}')
+    expect(original.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('img', { name: 'Original layer, without the filter' })).toBeTruthy()
+    await user.keyboard(' ')
+    expect(original.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('img', { name: 'Gaussian preview' })).toBeTruthy()
+
+    await user.keyboard(' ')
+    expect(original.getAttribute('aria-pressed')).toBe('true')
+    await user.tab()
+    expect(original.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('img', { name: 'Gaussian preview' })).toBeTruthy()
+  })
+})
+
+describe('FilterGalleryModal sliders', () => {
+  it('resets a slider to the preset default on double-click', () => {
+    const source = { id: 'layer-slider' } as unknown as FabricObject
+    render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
+    const radius = screen.getByRole('slider', { name: 'Radius' }) as HTMLInputElement
+    expect(radius.value).toBe('18')
+
+    fireEvent.change(radius, { target: { value: '64' } })
+    expect(radius.value).toBe('64')
+    fireEvent.doubleClick(radius.closest('.dial-bar')!)
+    expect(radius.value).toBe('18')
   })
 })
 
@@ -228,6 +296,28 @@ describe('Gallery dialog accessibility', () => {
     expect(screen.getByRole('listbox', { name: 'Adjust filters' })).toBeTruthy()
   })
 
+  it('files Grain under Look and Newsprint under Print in the chip bar', async () => {
+    const user = userEvent.setup()
+    const source = { id: 'layer-3b' } as unknown as FabricObject
+    render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
+    const chips = screen.getByRole('navigation', { name: 'Filter categories' })
+    expect(within(chips).getAllByRole('button').map((chip) => chip.textContent)).toEqual([
+      'Blur', 'Sharpen', 'Stylize', 'Adjust', 'Look', 'Print', 'Decay', 'Distress', 'Transform', 'Wash',
+    ])
+
+    await user.click(within(chips).getByRole('button', { name: 'Look' }))
+    expect(within(chips).getByRole('button', { name: 'Look' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(chips).getByRole('button', { name: 'Blur' }).getAttribute('aria-pressed')).toBe('false')
+    within(screen.getByRole('listbox', { name: 'Look filters' })).getByRole('option', { name: 'Grain' })
+
+    await user.click(within(chips).getByRole('button', { name: 'Print' }))
+    const print = screen.getByRole('listbox', { name: 'Print filters' })
+    within(print).getByRole('option', { name: 'Newsprint' })
+    // Print still opens on the photocopy generations.
+    expect(within(print).getAllByRole('option')[0]!.getAttribute('aria-selected')).toBe('true')
+    expect(within(print).getAllByRole('option')[0]!.textContent).toBe('Light copy')
+  })
+
   it('keeps image-only filters reachable and explains why they cannot apply', async () => {
     const user = userEvent.setup()
     const source = { id: 'layer-4' } as unknown as FabricObject
@@ -258,6 +348,21 @@ describe('Gallery memory', () => {
     expect(screen.getByRole('button', { name: 'Stylize' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('option', { name: 'Posterize' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('heading', { level: 3 }).textContent).toBe('Posterize')
+  })
+
+  it('reopens on a moved preset in its new category', async () => {
+    const user = userEvent.setup()
+    const source = { id: 'layer-5b' } as unknown as FabricObject
+    const first = render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Look' }))
+    await user.click(screen.getByRole('option', { name: 'Grain' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'Amount' }), { target: { value: '75' } })
+    first.unmount()
+
+    render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Look' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('option', { name: 'Grain' }).getAttribute('aria-selected')).toBe('true')
+    expect((screen.getByRole('slider', { name: 'Amount' }) as HTMLInputElement).value).toBe('75')
   })
 
   it('reopens the Texture Gallery on the last texture with its blend', async () => {

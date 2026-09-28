@@ -153,15 +153,6 @@ const PIXEL_PRESETS: FilterPreset[] = [
   fx('posterize', 'Posterize', 'stylize', 'posterize', { levels: 4 }, [LEVELS], 'Collapse tones into flat ink levels.'),
   fx('pixelate', 'Mosaic', 'stylize', 'pixelate', { blocksize: 10 }, [BLOCK], 'Block mosaic / pixelate.'),
   fx(
-    'halftone',
-    'Newsprint',
-    'stylize',
-    'halftone',
-    { blocksize: 6 },
-    [BLOCK],
-    'Harsh photocopy halftone: gray, mosaic, threshold.',
-  ),
-  fx(
     'watercolor',
     'Wash paint',
     'stylize',
@@ -178,13 +169,13 @@ const PIXEL_PRESETS: FilterPreset[] = [
   fx('invert', 'Invert', 'color', 'invert', {}, [], 'Negative / reverse film.'),
   fx('threshold', 'Threshold', 'color', 'threshold', {}, [], 'Hard black-and-white cut.'),
   fx('grayscale', 'Grayscale', 'color', 'grayscale', {}, [], 'Strip color.'),
-  fx('grain', 'Grain', 'color', 'grain', { amount: 40 }, [AMOUNT], 'Photographic noise overlay.'),
   fx('sepia', 'Sepia', 'film', 'sepia', {}, [], 'Classic warm print matrix.'),
   fx('vintage', 'Vintage', 'film', 'vintage', {}, [], 'Faded analog color matrix.'),
   fx('kodachrome', 'Kodachrome', 'film', 'kodachrome', {}, [], 'Saturated slide-film look.'),
   fx('polaroid', 'Polaroid', 'film', 'polaroid', {}, [], 'Instant-print color matrix.'),
   fx('technicolor', 'Technicolor', 'film', 'technicolor', {}, [], 'Three-strip process punch.'),
   fx('brownie', 'Brownie', 'film', 'brownie', {}, [], 'Warm box-camera cast.'),
+  fx('grain', 'Grain', 'film', 'grain', { amount: 40 }, [AMOUNT], 'Photographic noise overlay.'),
 ]
 
 const CARSON_PRESETS: FilterPreset[] = [
@@ -228,6 +219,16 @@ const CARSON_PRESETS: FilterPreset[] = [
     description: 'Nth-generation ruin.',
     scope: 'selection',
   },
+  // A pixel filter, listed after the photocopy generations so Print still opens on Light copy.
+  fx(
+    'halftone',
+    'Newsprint',
+    'print',
+    'halftone',
+    { blocksize: 6 },
+    [BLOCK],
+    'Harsh photocopy halftone: gray, mosaic, threshold.',
+  ),
   {
     id: 'decay-fresh',
     name: 'Fresh wear',

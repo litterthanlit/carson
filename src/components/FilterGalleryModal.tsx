@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { X } from 'lucide-react'
 import type { FabricObject } from 'fabric'
 import {
@@ -15,9 +15,11 @@ import {
   debounce,
   previewBlendMode,
   renderFilterPreview,
+  renderOriginalPreview,
   yieldToMain,
 } from '../lib/filterPreview'
 import { filterStateForCategory, loadFilterGalleryState, saveFilterGalleryState } from '../lib/galleryMemory'
+import { CategoryChips } from './CategoryChips'
 import { Slider } from './Slider'
 import { GalleryDialog } from './GalleryDialog'
 import { handleGridKeyDown } from './gridNavigation'
@@ -49,6 +51,9 @@ export function FilterGalleryModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
   const [previewLoading, setPreviewLoading] = useState(false)
+  // Before/after: the unfiltered layer, shown while "Original" is held (or toggled on by keyboard).
+  const [originalUrl, setOriginalUrl] = useState<string | null>(null)
+  const [showOriginal, setShowOriginal] = useState(false)
   // Only the newest preview request may write state; slower, older renders are dropped.
   const previewRequestRef = useRef(0)
 
@@ -85,6 +90,22 @@ export function FilterGalleryModal({
     clearFilterPreviewCache()
     setThumbUrls({})
     setPreviewUrl(null)
+    setOriginalUrl(null)
+    setShowOriginal(false)
+  }, [open, source])
+
+  // Fetched up front so pressing "Original" swaps at once; it is the raster the previews share.
+  useEffect(() => {
+    if (!open || !source) return
+    let cancelled = false
+    renderOriginalPreview(source, PREVIEW_PX)
+      .then((url) => {
+        if (!cancelled) setOriginalUrl(url)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
   }, [open, source])
 
   useEffect(() => {
@@ -152,6 +173,22 @@ export function FilterGalleryModal({
 
   if (!open) return null
 
+  // Pointer and touch press-and-hold to peek. A click with no pointer behind it (`detail` 0: Space,
+  // Enter, a screen reader's activate) toggles instead, and blur always lets go.
+  const holdOriginal = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    setShowOriginal(true)
+  }
+  const releaseOriginal = () => setShowOriginal(false)
+  const toggleOriginal = (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail === 0) setShowOriginal((current) => !current)
+  }
+  // Enter clicks on every key repeat; holding it should not flicker.
+  const ignoreRepeat = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault()
+  }
+
   const canApply = Boolean(source && selectedPreset && isPresetApplicable(selectedPreset, selectedIsImage))
 
   return (
@@ -173,19 +210,7 @@ export function FilterGalleryModal({
       ) : (
         <div className="filter-gallery-layout">
           <aside className="filter-gallery-sidebar">
-            <nav className="filter-gallery-categories" aria-label="Filter categories">
-              {FILTER_CATEGORIES.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={category === item.id ? 'active' : undefined}
-                  aria-pressed={category === item.id}
-                  onClick={() => selectCategory(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
+            <CategoryChips items={FILTER_CATEGORIES} active={category} ariaLabel="Filter categories" onSelect={selectCategory} />
 
             <div
               className="filter-gallery-thumbs"
@@ -230,7 +255,9 @@ export function FilterGalleryModal({
 
           <div className="filter-gallery-preview">
             {previewLoading ? <p className="hint filter-gallery-preview-status">Updating preview…</p> : null}
-            {previewUrl ? (
+            {showOriginal && originalUrl ? (
+              <img src={originalUrl} alt="Original layer, without the filter" />
+            ) : previewUrl ? (
               <img
                 src={previewUrl}
                 alt={selectedPreset ? `${selectedPreset.name} preview` : 'Filter preview'}
@@ -243,6 +270,28 @@ export function FilterGalleryModal({
                   : 'Preview'}
               </div>
             )}
+            {showOriginal ? (
+              <span className="filter-gallery-original-badge" aria-hidden>
+                Original
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="filter-gallery-original"
+              aria-pressed={showOriginal}
+              title="Hold to compare with the layer before the filter"
+              disabled={!originalUrl}
+              onPointerDown={holdOriginal}
+              onPointerUp={releaseOriginal}
+              onPointerCancel={releaseOriginal}
+              onLostPointerCapture={releaseOriginal}
+              onBlur={releaseOriginal}
+              onClick={toggleOriginal}
+              onKeyDown={ignoreRepeat}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              Original
+            </button>
           </div>
 
           <aside className="filter-gallery-params">

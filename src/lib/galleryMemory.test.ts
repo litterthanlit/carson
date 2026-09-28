@@ -33,6 +33,16 @@ describe('resolveFilterGalleryState', () => {
     expect(resolveFilterGalleryState({ category: 'wash', presetId: 'contrast' }, true).category).toBe('color')
   })
 
+  it('follows presets that moved category (Grain to Look, Newsprint to Print)', () => {
+    // State saved before the move still names the old category; it reopens where the preset lives now.
+    expect(
+      resolveFilterGalleryState({ category: 'color', presetId: 'grain', params: { amount: 70 } }, false),
+    ).toEqual({ category: 'film', presetId: 'grain', params: { amount: 70 } })
+    expect(
+      resolveFilterGalleryState({ category: 'stylize', presetId: 'halftone', params: { blocksize: 9 } }, false),
+    ).toEqual({ category: 'print', presetId: 'halftone', params: { blocksize: 9 } })
+  })
+
   it('falls back to the category’s first fitting filter when the remembered one does not fit', () => {
     // Cold wash is image-only; on a text layer the Wash category has nothing else, so it stays shown but unapplied.
     expect(resolveFilterGalleryState({ category: 'wash', presetId: 'cold-wash' }, false)).toMatchObject({

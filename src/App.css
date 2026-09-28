@@ -2354,18 +2354,63 @@ input[type='color'] {
   min-height: 0;
 }
 
+/*
+ * Category chips: one line however many categories exist; the extras scroll sideways. The edges
+ * fade only while there are more chips beyond them (CategoryChips toggles fade-start/fade-end).
+ */
 .filter-gallery-categories {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  --chip-fade-start: 0px;
+  --chip-fade-end: 0px;
+  position: relative;
+  display: flex;
   gap: 4px;
-  max-height: 220px;
-  overflow: auto;
+  min-width: 0;
+  /* Room for the focus ring, which the scroller would otherwise clip. */
+  padding: 2px 1px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 20px;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--chip-fade-start),
+    #000 calc(100% - var(--chip-fade-end)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--chip-fade-start),
+    #000 calc(100% - var(--chip-fade-end)),
+    transparent
+  );
+}
+
+.filter-gallery-categories::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-gallery-categories.fade-start {
+  --chip-fade-start: 20px;
+}
+
+.filter-gallery-categories.fade-end {
+  --chip-fade-end: 20px;
 }
 
 .filter-gallery-categories button {
-  text-align: left;
-  padding: 6px 8px;
+  flex: none;
+  height: 24px;
+  min-height: 0;
+  padding: 0 10px;
+  border-radius: 999px;
   font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  scroll-snap-align: start;
 }
 
 .filter-gallery-categories button.active {
@@ -2468,6 +2513,58 @@ input[type='color'] {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+/* Before/after: hold (or toggle from the keyboard) to see the layer without the filter. */
+.filter-gallery-original,
+.filter-gallery-original-badge {
+  position: absolute;
+  top: 8px;
+  z-index: 1;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 22px;
+}
+
+.filter-gallery-original {
+  right: 8px;
+  min-height: 0;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  background: rgb(20 20 24 / 0.55);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  /* Holding on touch must not scroll, select or open the callout menu. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.filter-gallery-original:hover:not(:disabled) {
+  background: rgb(20 20 24 / 0.72);
+  border-color: rgb(255 255 255 / 0.4);
+}
+
+.filter-gallery-original[aria-pressed='true'],
+.filter-gallery-original[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.filter-gallery-original:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.filter-gallery-original-badge {
+  left: 8px;
+  background: rgb(255 255 255 / 0.85);
+  color: #1c1c20;
+  font-weight: 600;
+  pointer-events: none;
 }
 
 .filter-gallery-preview-placeholder,

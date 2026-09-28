@@ -110,6 +110,14 @@ function sourceRaster(source: FabricObject, targetPx: number): Promise<SourceRas
   return pending
 }
 
+/**
+ * The layer with no filter, as a PNG data URL, for the before/after toggle. It is the raster every
+ * preset preview at `maxSize` is built from, so it costs nothing extra and lines up exactly.
+ */
+export async function renderOriginalPreview(source: FabricObject, maxSize = 320): Promise<string> {
+  return (await sourceRaster(source, maxSize)).element.src
+}
+
 function syntheticTreatment(
   type: Treatment['type'],
   params: Record<string, number>,

@@ -16,6 +16,15 @@ describe('filterGallery', () => {
     }
   })
 
+  it('files Grain under Look and Newsprint under Print', () => {
+    expect(presetById('grain')?.category).toBe('film')
+    expect(presetById('halftone')?.category).toBe('print')
+    expect(presetsForCategory('film').map((preset) => preset.id)).toContain('grain')
+    expect(presetsForCategory('print').map((preset) => preset.id)).toContain('halftone')
+    expect(presetsForCategory('color').map((preset) => preset.id)).not.toContain('grain')
+    expect(presetsForCategory('stylize').map((preset) => preset.id)).not.toContain('halftone')
+  })
+
   it('has unique preset ids', () => {
     const ids = FILTER_PRESETS.map((preset) => preset.id)
     expect(new Set(ids).size).toBe(ids.length)

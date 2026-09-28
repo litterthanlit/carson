@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
+import { CategoryChips } from './CategoryChips'
 import { Slider } from './Slider'
 import { GalleryDialog } from './GalleryDialog'
 import { handleGridKeyDown } from './gridNavigation'
@@ -135,19 +136,7 @@ export function TextureGalleryModal({ open, posterSnapshot = null, onPlace, onCl
       ) : (
         <div className="filter-gallery-layout">
           <aside className="filter-gallery-sidebar">
-            <nav className="filter-gallery-categories" aria-label="Texture categories">
-              {categories.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={category === item.id ? 'active' : undefined}
-                  aria-pressed={category === item.id}
-                  onClick={() => selectCategory(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
+            <CategoryChips items={categories} active={category} ariaLabel="Texture categories" onSelect={selectCategory} />
 
             <div
               className={`filter-gallery-thumbs${monochrome ? ' is-monochrome' : ''}`}
