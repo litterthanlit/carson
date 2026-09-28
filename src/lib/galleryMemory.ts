@@ -39,6 +39,8 @@ export type TextureGalleryState = {
   blend: string
   opacity: number
   fit: TextureFit
+  /** A studio preference, not a per-texture default: it carries across texture changes. */
+  monochrome: boolean
 }
 
 // Session fallback for when storage is unavailable (private mode, blocked site data).
@@ -124,7 +126,7 @@ export function saveFilterGalleryState(state: FilterGalleryState) {
 }
 
 /** State for a texture the user just picked: that texture's own blend, opacity and fit. */
-export function textureDefaults(texture: TextureAsset): Omit<TextureGalleryState, 'category'> {
+export function textureDefaults(texture: TextureAsset): Omit<TextureGalleryState, 'category' | 'monochrome'> {
   return {
     textureId: texture.id,
     blend: texture.defaultBlend,
@@ -133,11 +135,11 @@ export function textureDefaults(texture: TextureAsset): Omit<TextureGalleryState
   }
 }
 
-function firstTextureState(category: TextureCategory): TextureGalleryState {
+function firstTextureState(category: TextureCategory, monochrome: boolean): TextureGalleryState {
   const first = texturesForCategory(category)[0]
   return first
-    ? { category, ...textureDefaults(first) }
-    : { category, textureId: null, blend: 'multiply', opacity: 55, fit: 'cover' }
+    ? { category, ...textureDefaults(first), monochrome }
+    : { category, textureId: null, blend: 'multiply', opacity: 55, fit: 'cover', monochrome }
 }
 
 /**
@@ -150,10 +152,12 @@ export function resolveTextureGalleryState(
 ): TextureGalleryState {
   const data = record(saved)
   const fallbackCategory = categories[0]?.id ?? 'print'
+  // Grit reads as tone, not tint: textures default to monochrome until the user opts into color.
+  const monochrome = typeof data.monochrome === 'boolean' ? data.monochrome : true
   const texture = typeof data.textureId === 'string' ? textureById(data.textureId) : undefined
   if (!texture || !categories.some((item) => item.id === texture.category)) {
     const category = categories.find((item) => item.id === data.category)?.id ?? fallbackCategory
-    return firstTextureState(category)
+    return firstTextureState(category, monochrome)
   }
   const defaults = textureDefaults(texture)
   const blend = TEXTURE_BLEND_MODES.some((mode) => mode.value === data.blend) ? String(data.blend) : defaults.blend
@@ -162,7 +166,7 @@ export function resolveTextureGalleryState(
       ? Math.round(clamp(data.opacity, TEXTURE_OPACITY_MIN, TEXTURE_OPACITY_MAX))
       : defaults.opacity
   const fit = data.fit === 'cover' || data.fit === 'layer' ? data.fit : defaults.fit
-  return { category: texture.category, textureId: texture.id, blend, opacity, fit }
+  return { category: texture.category, textureId: texture.id, blend, opacity, fit, monochrome }
 }
 
 export function loadTextureGalleryState(categories: readonly { id: TextureCategory }[]) {

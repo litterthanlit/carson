@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FabricObject } from 'fabric'
 import type { FilterPreset } from '../lib/filterGallery'
 import { clearGalleryMemory, missingTextureIds } from '../lib/galleryMemory'
+import { populatedTextureCategories, texturesForCategory } from '../lib/textureGallery'
 import { FilterGalleryModal } from './FilterGalleryModal'
 
 type Deferred = { resolve: (url: string) => void; reject: (error: unknown) => void }
@@ -130,16 +131,39 @@ describe('TextureGalleryModal', () => {
     expect(screen.getByText(/Full-resolution file isn’t installed/)).toBeTruthy()
   })
 
-  it('disables placing when the full-resolution preview is missing', () => {
+  it('disables placing and explains when the full-resolution file is known to be missing', () => {
+    const first = texturesForCategory(populatedTextureCategories()[0]!.id)[0]!
+    missingTextureIds.add(first.id)
     render(<TextureGalleryModal open onPlace={vi.fn()} onClose={vi.fn()} />)
 
-    const dialog = screen.getByRole('dialog', { name: 'Texture Gallery' })
-    const preview = dialog.querySelector('.texture-gallery-preview img')
-    expect(preview).not.toBeNull()
-    fireEvent.error(preview!)
-
-    expect(screen.getByText(/Full-resolution file isn’t installed/)).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toMatch(/Full-resolution file isn’t installed/)
     expect(screen.getByRole('button', { name: 'Place texture' })).toHaveProperty('disabled', true)
+    // The composite still renders, from the thumbnail.
+    expect(screen.getByRole('img', { name: new RegExp(`^${first.name} over the poster`) })).toBeTruthy()
+  })
+
+  it('places textures in monochrome by default and remembers turning it off', async () => {
+    const user = userEvent.setup()
+    const onPlace = vi.fn().mockResolvedValue(undefined)
+    const first = render(<TextureGalleryModal open onPlace={onPlace} onClose={vi.fn()} />)
+    const toggle = screen.getByRole('switch', { name: 'Monochrome' })
+    expect(toggle).toHaveProperty('checked', true)
+    await user.click(screen.getByRole('button', { name: 'Place texture' }))
+    expect(onPlace.mock.calls[0]?.[0]).toMatchObject({ monochrome: true })
+
+    first.unmount()
+    render(<TextureGalleryModal open onPlace={onPlace} onClose={vi.fn()} />)
+    await user.click(screen.getByRole('switch', { name: 'Monochrome' }))
+    expect(screen.getByRole('img', { name: /over the poster/ }).getAttribute('aria-label')).not.toMatch(/monochrome/)
+    await user.click(screen.getByRole('button', { name: 'Place texture' }))
+    expect(onPlace.mock.calls[1]?.[0]).toMatchObject({ monochrome: false })
+  })
+
+  it('describes the live composite for screen readers', async () => {
+    const user = userEvent.setup()
+    render(<TextureGalleryModal open onPlace={vi.fn()} onClose={vi.fn()} />)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Blend' }), 'overlay')
+    expect(screen.getByRole('img', { name: /over the poster: Overlay, \d+% opacity, monochrome$/ })).toBeTruthy()
   })
 })
 

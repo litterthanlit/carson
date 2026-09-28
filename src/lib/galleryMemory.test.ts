@@ -64,10 +64,10 @@ describe('resolveTextureGalleryState', () => {
   it('restores the texture with the blend, opacity and fit last chosen for it', () => {
     expect(
       resolveTextureGalleryState(
-        { category: 'ink', textureId: inkTexture.id, blend: 'screen', opacity: 72, fit: 'layer' },
+        { category: 'ink', textureId: inkTexture.id, blend: 'screen', opacity: 72, fit: 'layer', monochrome: false },
         categories,
       ),
-    ).toEqual({ category: 'ink', textureId: inkTexture.id, blend: 'screen', opacity: 72, fit: 'layer' })
+    ).toEqual({ category: 'ink', textureId: inkTexture.id, blend: 'screen', opacity: 72, fit: 'layer', monochrome: false })
   })
 
   it('replaces invalid settings with the texture’s own defaults and clamps opacity', () => {
@@ -87,6 +87,14 @@ describe('resolveTextureGalleryState', () => {
       textureId: first.id,
       blend: first.defaultBlend,
     })
+  })
+
+  it('defaults textures to monochrome and keeps an explicit color choice', () => {
+    expect(resolveTextureGalleryState(null, categories).monochrome).toBe(true)
+    expect(resolveTextureGalleryState({ textureId: inkTexture.id, monochrome: 'yes' }, categories).monochrome).toBe(true)
+    expect(resolveTextureGalleryState({ category: 'paper', textureId: 'gone', monochrome: false }, categories).monochrome).toBe(
+      false,
+    )
   })
 
   it('opens on the first category with nothing stored', () => {
@@ -110,13 +118,14 @@ describe('gallery memory storage', () => {
       throw new DOMException('blocked', 'SecurityError')
     })
     const texture = texturesForCategory('grunge')[0]!
-    saveTextureGalleryState({ category: 'grunge', textureId: texture.id, blend: 'overlay', opacity: 40, fit: 'cover' })
+    saveTextureGalleryState({ category: 'grunge', textureId: texture.id, blend: 'overlay', opacity: 40, fit: 'cover', monochrome: false })
     expect(loadTextureGalleryState(categories)).toEqual({
       category: 'grunge',
       textureId: texture.id,
       blend: 'overlay',
       opacity: 40,
       fit: 'cover',
+      monochrome: false,
     })
   })
 

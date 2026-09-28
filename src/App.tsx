@@ -199,7 +199,8 @@ import type { TexturePlacement } from './components/TextureGalleryModal'
 import type { FilterPreset } from './lib/filterGallery'
 import { paramsForTreatment } from './lib/filterGallery'
 import { snapshotObjectToImage } from './lib/rasterizeLayer'
-import { coverScale, layerScale, textureUrl } from './lib/textureGallery'
+import { coverScale, texturePlacementTransform, textureUrl } from './lib/textureGallery'
+import type { PosterSnapshot } from './lib/texturePreview'
 import { useCanvasEvents } from './hooks/useCanvasEvents'
 import { usePathEditing } from './hooks/usePathEditing'
 import { useBezierPen, type BezierPenActions } from './hooks/useBezierPen'
@@ -384,6 +385,7 @@ function App() {
   const [performance, setPerformance] = useState(idlePerformance)
   const [filterGalleryOpen, setFilterGalleryOpen] = useState(false)
   const [textureGalleryOpen, setTextureGalleryOpen] = useState(false)
+  const [texturePosterSnapshot, setTexturePosterSnapshot] = useState<PosterSnapshot | null>(null)
   const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(null)
   const [customFonts, setCustomFonts] = useState<string[]>([])
   const [storedAssets, setStoredAssets] = useState<StoredAsset[]>([])
@@ -3902,6 +3904,19 @@ function App() {
   }
 
   function openTextureGallery() {
+    // The gallery composites textures over this snapshot, so the preview shows the real poster.
+    const canvas = canvasRef.current
+    let snapshot: PosterSnapshot | null = null
+    try {
+      if (canvas) {
+        const multiplier = Math.min(1, 900 / Math.max(poster.width, poster.height))
+        const url = canvas.toDataURL({ format: 'jpeg', quality: 0.85, multiplier })
+        snapshot = { url, width: poster.width, height: poster.height }
+      }
+    } catch {
+      // A tainted or unavailable canvas just means the preview falls back to plain paper.
+    }
+    setTexturePosterSnapshot(snapshot)
     setTextureGalleryOpen(true)
   }
 
@@ -3915,29 +3930,26 @@ function App() {
       setStatus(`Couldn’t load texture “${placement.texture.name}”`)
       throw error
     }
-    const imageWidth = image.width ?? 1
-    const imageHeight = image.height ?? 1
-    if (placement.fit === 'cover') {
-      const scale = coverScale(imageWidth, imageHeight, poster.width, poster.height)
-      image.set({
-        left: (poster.width - imageWidth * scale) / 2,
-        top: (poster.height - imageHeight * scale) / 2,
-        scaleX: scale,
-        scaleY: scale,
-        opacity: placement.opacity,
-        globalCompositeOperation: placement.blend as GlobalCompositeOperation,
-      })
-    } else {
-      const scale = layerScale(imageWidth, imageHeight, poster.width, poster.height)
-      image.set({
-        left: poster.width * 0.12,
-        top: poster.height * 0.2,
-        scaleX: scale,
-        scaleY: scale,
-        angle: -2,
-        opacity: placement.opacity,
-        globalCompositeOperation: placement.blend as GlobalCompositeOperation,
-      })
+    const transform = texturePlacementTransform(
+      placement.fit,
+      image.width ?? 1,
+      image.height ?? 1,
+      poster.width,
+      poster.height,
+    )
+    image.set({
+      left: transform.left,
+      top: transform.top,
+      scaleX: transform.scale,
+      scaleY: transform.scale,
+      angle: transform.angle,
+      opacity: placement.opacity,
+      globalCompositeOperation: placement.blend as GlobalCompositeOperation,
+    })
+    if (placement.monochrome) {
+      // A live filter, not baked pixels: the layer keeps its small URL source and can be undone.
+      image.filters = [new filters.Grayscale({ mode: 'luminosity' })]
+      image.applyFilters()
     }
     tagObject(image, 'image', placement.texture.name)
     canvas.add(image)
@@ -5275,6 +5287,7 @@ function App() {
         {textureGalleryOpen ? (
           <TextureGalleryModal
             open
+            posterSnapshot={texturePosterSnapshot}
             onPlace={placeTextureFromGallery}
             onClose={() => setTextureGalleryOpen(false)}
           />

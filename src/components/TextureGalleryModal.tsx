@@ -3,6 +3,8 @@ import { X } from 'lucide-react'
 import { Slider } from './Slider'
 import { GalleryDialog } from './GalleryDialog'
 import { handleGridKeyDown } from './gridNavigation'
+import { TexturePreview } from './TexturePreview'
+import type { PosterSnapshot, TexturePreviewSettings } from '../lib/texturePreview'
 import {
   TEXTURE_ASSETS,
   TEXTURE_BLEND_MODES,
@@ -27,16 +29,20 @@ export type TexturePlacement = {
   blend: string
   opacity: number
   fit: TextureFit
+  /** Desaturate with a live Grayscale filter so grit adds tone, not a color cast. */
+  monochrome: boolean
 }
 
 export type TextureGalleryModalProps = {
   open: boolean
+  /** The poster as it looks now; the preview composites textures over it. */
+  posterSnapshot?: PosterSnapshot | null
   /** Resolves once the texture is on the canvas; rejects if the file can't be loaded. */
   onPlace: (placement: TexturePlacement) => Promise<void>
   onClose: () => void
 }
 
-export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryModalProps) {
+export function TextureGalleryModal({ open, posterSnapshot = null, onPlace, onClose }: TextureGalleryModalProps) {
   const categories = useMemo(() => populatedTextureCategories(), [])
   // Reopen on the last texture with the blend, opacity and fit chosen for it.
   const [initial] = useState(() => loadTextureGalleryState(categories))
@@ -45,6 +51,7 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
   const [blend, setBlend] = useState(initial.blend)
   const [opacity, setOpacity] = useState(initial.opacity)
   const [fit, setFit] = useState<TextureFit>(initial.fit)
+  const [monochrome, setMonochrome] = useState(initial.monochrome)
   // Full-resolution rasters are gitignored, so a clone or deploy can list textures whose files are absent.
   const [missingIds, setMissingIds] = useState<ReadonlySet<string>>(() => new Set(missingTextureIds))
   const [placing, setPlacing] = useState(false)
@@ -83,7 +90,7 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
     setPlacing(true)
     setPlaceError(null)
     try {
-      await onPlace({ texture: selected, blend, opacity: opacity / 100, fit })
+      await onPlace({ texture: selected, blend, opacity: opacity / 100, fit, monochrome })
       onClose()
     } catch {
       markMissing(selected.id)
@@ -94,13 +101,19 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
   }
 
   useEffect(() => {
-    saveTextureGalleryState({ category, textureId: selected?.id ?? null, blend, opacity, fit })
-  }, [category, selected, blend, opacity, fit])
+    saveTextureGalleryState({ category, textureId: selected?.id ?? null, blend, opacity, fit, monochrome })
+  }, [category, selected, blend, opacity, fit, monochrome])
+
+  const previewSettings = useMemo<TexturePreviewSettings>(
+    () => ({ blend, opacity: opacity / 100, fit, monochrome }),
+    [blend, opacity, fit, monochrome],
+  )
 
   if (!open) return null
 
   const emptyLibrary = TEXTURE_ASSETS.length === 0
   const selectedMissing = selected ? missingIds.has(selected.id) : false
+  const blendLabel = TEXTURE_BLEND_MODES.find((mode) => mode.value === blend)?.label ?? blend
 
   return (
     <GalleryDialog
@@ -137,7 +150,7 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
             </nav>
 
             <div
-              className="filter-gallery-thumbs"
+              className={`filter-gallery-thumbs${monochrome ? ' is-monochrome' : ''}`}
               role="listbox"
               aria-label={`${categoryLabel} textures`}
               onKeyDown={(event) =>
@@ -170,25 +183,25 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
             </div>
           </aside>
 
-          <div className={`filter-gallery-preview texture-gallery-preview${selected?.hasAlpha ? ' checker' : ''}`}>
-            {selected && !selectedMissing ? (
-              <img
-                key={selected.id}
-                src={textureUrl(selected.src)}
-                alt={selected.name}
-                onError={() => markMissing(selected.id)}
+          <div className="filter-gallery-preview texture-gallery-preview">
+            {selected ? (
+              <TexturePreview
+                texture={selected}
+                posterSnapshot={posterSnapshot}
+                settings={previewSettings}
+                missing={selectedMissing}
+                onMissing={markMissing}
+                label={`${selected.name} over the poster: ${blendLabel}, ${opacity}% opacity${monochrome ? ', monochrome' : ''}`}
               />
-            ) : selected ? (
-              <div className="filter-gallery-preview-placeholder texture-gallery-missing">
-                <p>
-                  Full-resolution file isn’t installed.
-                  <br />
-                  Run <code>npm run import-textures</code> to load your library.
-                </p>
-              </div>
             ) : (
               <div className="filter-gallery-preview-placeholder">Preview</div>
             )}
+            {selected && selectedMissing ? (
+              <p className="texture-gallery-missing" role="status">
+                Full-resolution file isn’t installed, so this preview uses the thumbnail. Run{' '}
+                <code>npm run import-textures</code> to load your library.
+              </p>
+            ) : null}
           </div>
 
           <aside className="filter-gallery-params">
@@ -217,6 +230,7 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
                   <button
                     type="button"
                     className={fit === 'cover' ? 'active' : undefined}
+                    aria-pressed={fit === 'cover'}
                     onClick={() => setFit('cover')}
                   >
                     Cover poster
@@ -224,11 +238,27 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
                   <button
                     type="button"
                     className={fit === 'layer' ? 'active' : undefined}
+                    aria-pressed={fit === 'layer'}
                     onClick={() => setFit('layer')}
                   >
                     Place as layer
                   </button>
                 </div>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={monochrome}
+                    aria-describedby="texture-gallery-monochrome-hint"
+                    onChange={(event) => setMonochrome(event.target.checked)}
+                  />
+                  <span>Monochrome</span>
+                </label>
+                <p id="texture-gallery-monochrome-hint" className="hint texture-gallery-switch-hint">
+                  {monochrome
+                    ? 'Grit adds tone only. Turn off to keep the scan’s color.'
+                    : 'Keeping the scan’s color. It will tint the poster.'}
+                </p>
               </>
             ) : null}
 

@@ -2518,17 +2518,6 @@ input[type='color'] {
   }
 }
 
-.texture-gallery-preview.checker {
-  background-color: #d7d0c4;
-  background-image:
-    linear-gradient(45deg, #c4bdb0 25%, transparent 25%),
-    linear-gradient(-45deg, #c4bdb0 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #c4bdb0 75%),
-    linear-gradient(-45deg, transparent 75%, #c4bdb0 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
-}
-
 .texture-gallery-modal .filter-gallery-params .preset-row {
   grid-template-columns: 1fr 1fr;
 }
@@ -4178,11 +4167,37 @@ input[type='checkbox']:disabled {
   outline-offset: 1px;
 }
 
-.texture-gallery-missing p {
-  max-width: 32ch;
+.texture-gallery-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Sits over the preview instead of replacing it: the thumbnail still shows the composition. */
+.texture-gallery-missing {
+  position: absolute;
+  inset: auto 12px 12px;
   margin: 0;
-  text-align: center;
-  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: rgb(20 20 20 / 0.78);
+  color: #f6f1e6;
+  font-size: 11px;
+  line-height: 1.45;
+  backdrop-filter: blur(6px);
+}
+
+.texture-gallery-missing code {
+  color: inherit;
+}
+
+.texture-gallery-switch-hint {
+  margin: -4px 0 0;
+}
+
+.filter-gallery-thumbs.is-monochrome .gallery-thumb-media img {
+  filter: grayscale(1);
 }
 
 .texture-gallery-error {
