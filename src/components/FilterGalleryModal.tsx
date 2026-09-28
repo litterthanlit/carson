@@ -12,6 +12,7 @@ import {
 } from '../lib/filterGallery'
 import { clearFilterPreviewCache, debounce, renderFilterPreview } from '../lib/filterPreview'
 import { Slider } from './Slider'
+import { handleGalleryKeyDown } from './galleryKeys'
 
 export type FilterGalleryModalProps = {
   open: boolean
@@ -105,14 +106,8 @@ export function FilterGalleryModal({
   }, [open, source, selectedPreset, params, refreshPreview])
 
   useEffect(() => {
-    if (!open) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    dialogRef.current?.focus()
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [open, onClose])
+    if (open) dialogRef.current?.focus()
+  }, [open])
 
   if (!open) return null
 
@@ -124,9 +119,11 @@ export function FilterGalleryModal({
         ref={dialogRef}
         className="filter-gallery-modal glass-panel"
         role="dialog"
+        aria-modal="true"
         aria-labelledby="filter-gallery-title"
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => handleGalleryKeyDown(event, onClose)}
       >
         <header className="filter-gallery-header">
           <div>

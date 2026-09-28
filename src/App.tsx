@@ -1014,6 +1014,8 @@ function App() {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      // A modal dialog owns the keyboard; editor shortcuts must not act on the poster behind it.
+      if (document.querySelector('[aria-modal="true"]')) return
       const actions = keyActionsRef.current
       const meta = event.metaKey || event.ctrlKey
       if (meta) {
@@ -3906,7 +3908,13 @@ function App() {
   async function placeTextureFromGallery(placement: TexturePlacement) {
     const canvas = canvasRef.current
     if (!canvas) return
-    const image = await FabricImage.fromURL(textureUrl(placement.texture.src), { crossOrigin: 'anonymous' })
+    let image: FabricImage
+    try {
+      image = await FabricImage.fromURL(textureUrl(placement.texture.src), { crossOrigin: 'anonymous' })
+    } catch (error) {
+      setStatus(`Couldn’t load texture “${placement.texture.name}”`)
+      throw error
+    }
     const imageWidth = image.width ?? 1
     const imageHeight = image.height ?? 1
     if (placement.fit === 'cover') {
@@ -5267,7 +5275,7 @@ function App() {
         {textureGalleryOpen ? (
           <TextureGalleryModal
             open
-            onPlace={(placement) => void placeTextureFromGallery(placement)}
+            onPlace={placeTextureFromGallery}
             onClose={() => setTextureGalleryOpen(false)}
           />
         ) : null}

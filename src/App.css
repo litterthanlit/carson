@@ -4101,3 +4101,15 @@ input[type='checkbox']:disabled {
   outline: 2px solid #fff;
   outline-offset: 1px;
 }
+
+.texture-gallery-missing p {
+  max-width: 32ch;
+  margin: 0;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.texture-gallery-error {
+  margin: 0;
+  color: var(--danger, #b42318);
+}

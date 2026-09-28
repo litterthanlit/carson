@@ -1,6 +1,6 @@
 # Carson — Filter & Texture Gallery Audit
 
-*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. This pass only reports issues. Nothing is fixed yet.*
+*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3 are fixed in a follow-up commit on `claude/filter-texture-gallery-audit-p0scb6` (see §1a). Everything else is still open.*
 
 ---
 
@@ -22,6 +22,18 @@ Both problems were reproduced in the browser. Everything else is a correctness, 
 | C1 | **Global shortcuts leak through the modals.** The editor's `keydown` handler (`App.tsx:1016`) has no "modal open" guard. `isTypingContext` only exempts inputs and `[role=listbox]`. The dialog itself gets focus on open (`dialogRef.current?.focus()`), and so do the category buttons, fit buttons and Apply. From any of those, Delete/Backspace deletes the layer, arrow keys nudge it, and `T`, `R`, `G`, `V`, Cmd+Z and Cmd+D all act on the poster behind the dialog. | With the Filter Gallery open on `Oversized headline`, pressing **Backspace** took the layer count **from 22 to 21**. The status bar read "Deleted layer", and the gallery switched to "Select a layer first." | Add one `modalOpenRef` (or a `data-modal-open` check on `document.body`) and return early from the editor handler when it is set. Better long term: a shared `<Dialog>` primitive that stops key events from propagating. See §5. |
 | C2 | **Escape doesn't close the Filter Gallery. It empties it instead.** The editor handler runs first and calls `actions.deselect()`, so `source` becomes `null`. The modal's own window listener never closes the dialog, which is left showing "Select a layer first." with only the ✕ button. It is also probably removed during dispatch: `onClose` is a new arrow on every App render, so the effect re-subscribes. | Drive: `Escape closes: false`, and the dialog text became "…Select a layer first." | Handle Escape in the dialog's own `onKeyDown` with `stopPropagation()`, and pass a stable `onClose` (`useCallback`). C1's guard also covers this. |
 | C3 | **Placing a texture fails on any clone or deploy, with no feedback.** `.gitignore` excludes `public/textures/full/`, but the committed `textureCatalog.generated.ts` lists all 89 entries with `src: "textures/full/…"`. `placeTextureFromGallery` has no `try/catch`. It is invoked as `void placeTextureFromGallery(...)`, and the modal closes before the load settles. | Drive: the large preview is a broken image (alt "Print 1"). Clicking **Place texture** closed the modal, left the layer count unchanged (21 → 21), and threw an uncaught `fabric: Error loading …/textures/full/print-1.jpg`. No status message appeared. | Short term: catch the error, keep the modal open, and show "Full-resolution file not installed — run `npm run import-textures`". Mark entries whose full file is missing (a HEAD probe on open, or an `available` flag written by the importer). Long term: see §5. |
+
+### 1a. Shipped
+
+| # | Fix | Verification |
+|---|---|---|
+| C1 | Both gallery dialogs carry `aria-modal="true"` and stop key events from propagating (`components/galleryKeys.ts`). The editor's window `keydown` handler returns early while any `[aria-modal="true"]` element is mounted. | Drive: Backspace, → and T with the Filter Gallery open leave the layer count at 22 → 22 and the selection unchanged. |
+| C2 | Escape is handled by the dialog's own `onKeyDown`. The window listener and its per-render re-subscription are gone. | Drive: Escape closes both galleries, and `Oversized headline` stays selected. |
+| C3 | `onPlace` now returns a promise. The modal waits for it, shows "Placing…", and stays open with an alert if loading fails. `placeTextureFromGallery` sets a status message and rethrows. When the full-size preview fails to load, the texture is marked missing: Place is disabled and the preview explains how to run `npm run import-textures`. | Drive on a fresh clone: the missing-file notice is shown, Place is disabled, and there are no uncaught page errors. |
+
+Tests: `components/GalleryModals.test.tsx` has 5 tests. 4 of them fail against the old components. The 5th covers the success path, which already worked. Full suite 414/414 ✓, `tsc -b` ✓, `npm run build` ✓, lint clean apart from the existing `usePathEditing.ts` warning.
+
+The importer-side `available` flag suggested in C3 wasn't needed: detecting missing files at runtime handles a clone, a deploy and a partial import the same way.
 
 ---
 
