@@ -17,6 +17,7 @@ import {
   renderFilterPreview,
   yieldToMain,
 } from '../lib/filterPreview'
+import { filterStateForCategory, loadFilterGalleryState, saveFilterGalleryState } from '../lib/galleryMemory'
 import { Slider } from './Slider'
 import { GalleryDialog } from './GalleryDialog'
 import { handleGridKeyDown } from './gridNavigation'
@@ -40,9 +41,11 @@ export function FilterGalleryModal({
   onApply,
   onClose,
 }: FilterGalleryModalProps) {
-  const [category, setCategory] = useState<FilterCategory>('blur')
-  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null)
-  const [params, setParams] = useState<Record<string, number>>({})
+  // Reopen on the last filter and settings, as long as that filter still fits this layer.
+  const [initial] = useState(() => loadFilterGalleryState(selectedIsImage))
+  const [category, setCategory] = useState<FilterCategory>(initial.category)
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(initial.presetId)
+  const [params, setParams] = useState<Record<string, number>>(initial.params)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -61,11 +64,21 @@ export function FilterGalleryModal({
     setParams({ ...preset.defaultParams })
   }, [])
 
+  const selectCategory = (next: FilterCategory) => {
+    const state = filterStateForCategory(next, selectedIsImage)
+    setCategory(state.category)
+    setSelectedPresetId(state.presetId)
+    setParams(state.params)
+  }
+
   useEffect(() => {
-    if (!open) return
-    const firstApplicable = categoryPresets.find((preset) => isPresetApplicable(preset, selectedIsImage))
-    if (firstApplicable) selectPreset(firstApplicable)
-  }, [open, category, categoryPresets, selectedIsImage, selectPreset])
+    if (!selectedPreset) return
+    saveFilterGalleryState({
+      category,
+      presetId: selectedPreset.id,
+      params: mergePresetParams(selectedPreset, params),
+    })
+  }, [category, selectedPreset, params])
 
   useEffect(() => {
     if (!open) return
@@ -167,10 +180,7 @@ export function FilterGalleryModal({
                   type="button"
                   className={category === item.id ? 'active' : undefined}
                   aria-pressed={category === item.id}
-                  onClick={() => {
-                    setCategory(item.id)
-                    setSelectedPresetId(null)
-                  }}
+                  onClick={() => selectCategory(item.id)}
                 >
                   {item.label}
                 </button>

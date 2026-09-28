@@ -1,6 +1,6 @@
 # Carson — Filter & Texture Gallery Audit
 
-*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3, H1–H7, A1–A7 and L6 are fixed in follow-up commits on `claude/filter-texture-gallery-audit-p0scb6` (see §1a, §2a and §3a). Everything else is still open.*
+*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3, H1–H7, A1–A7, I1 and L6 are fixed in follow-up commits on `claude/filter-texture-gallery-audit-p0scb6` (see §1a, §2a and §3a). Everything else is still open.*
 
 ---
 
@@ -100,6 +100,8 @@ Both galleries now render inside one `GalleryDialog` component (`components/Gall
 The native dialog lets Tab reach the browser's own controls after the last element, instead of trapping focus completely. That is the HTML spec's intended behavior, and it lets keyboard users reach the address bar.
 
 `.command-backdrop` is still used by the Command palette, Comps and the other dialogs. Moving them onto `GalleryDialog` is a mechanical follow-up.
+
+| I1 | `lib/galleryMemory.ts` stores each gallery's last state in `localStorage` (`carson.filterGallery.v1`, `carson.textureGallery.v1`). If storage is blocked, it keeps a copy for the session instead. The Filter Gallery reopens on the last category, filter and slider values. The Texture Gallery reopens on the last texture with the blend, opacity and fit chosen for it. Every field is validated on read. Params are clamped to their slider range. A filter that no longer fits the layer, such as Cold wash on type, falls back to the first fitting filter in its category. A removed texture falls back to its category's first texture. Choosing a *different* texture still applies that texture's own defaults. Textures whose full-size file failed to load are remembered for the session. The "pick the first filter or texture" logic moved from a mount effect into the category click, so it no longer overwrites the restored choice. | Unit tests for validation, fallbacks, round-trip, blocked storage and corrupt JSON. Component tests for reopening both galleries. Drive: Motion blur with Distance 41 (default 36), and Paper Texture 191 with Overlay and "Place as layer", both survive close and reopen *and* a full page reload. |
 
 ---
 

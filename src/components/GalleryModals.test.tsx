@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FabricObject } from 'fabric'
 import type { FilterPreset } from '../lib/filterGallery'
+import { clearGalleryMemory, missingTextureIds } from '../lib/galleryMemory'
 import { FilterGalleryModal } from './FilterGalleryModal'
 
 type Deferred = { resolve: (url: string) => void; reject: (error: unknown) => void }
@@ -27,6 +28,8 @@ import { TextureGalleryModal } from './TextureGalleryModal'
 const editorKeydown = vi.fn()
 
 beforeEach(() => {
+  clearGalleryMemory()
+  missingTextureIds.clear()
   editorKeydown.mockReset()
   window.addEventListener('keydown', editorKeydown)
 })
@@ -215,6 +218,48 @@ describe('Gallery dialog accessibility', () => {
     expect(coldWash.getAttribute('aria-selected')).toBe('true')
     expect(screen.getByText(/Select a photo or placed image/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Apply filter' })).toHaveProperty('disabled', true)
+  })
+})
+
+describe('Gallery memory', () => {
+  it('reopens the Filter Gallery on the last category and filter', async () => {
+    const user = userEvent.setup()
+    const source = { id: 'layer-5' } as unknown as FabricObject
+    const first = render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Stylize' }))
+    await user.click(screen.getByRole('option', { name: 'Posterize' }))
+    first.unmount()
+
+    render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Stylize' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('option', { name: 'Posterize' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('heading', { level: 3 }).textContent).toBe('Posterize')
+  })
+
+  it('reopens the Texture Gallery on the last texture with its blend', async () => {
+    const user = userEvent.setup()
+    const first = render(<TextureGalleryModal open onPlace={vi.fn()} onClose={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Ink' }))
+    const picked = within(screen.getByRole('listbox', { name: 'Ink textures' })).getAllByRole('option')[2]!
+    await user.click(picked)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Blend' }), 'screen')
+    const pickedName = picked.textContent
+    first.unmount()
+
+    render(<TextureGalleryModal open onPlace={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Ink' }).getAttribute('aria-pressed')).toBe('true')
+    const selected = within(screen.getByRole('listbox', { name: 'Ink textures' })).getByRole('option', { selected: true })
+    expect(selected.textContent).toBe(pickedName)
+    expect((screen.getByRole('combobox', { name: 'Blend' }) as HTMLSelectElement).value).toBe('screen')
+  })
+
+  it('still switches to a texture’s own defaults when you pick a different one', async () => {
+    const user = userEvent.setup()
+    render(<TextureGalleryModal open onPlace={vi.fn()} onClose={vi.fn()} />)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Blend' }), 'lighten')
+    const options = within(screen.getByRole('listbox')).getAllByRole('option')
+    await user.click(options[1]!)
+    expect((screen.getByRole('combobox', { name: 'Blend' }) as HTMLSelectElement).value).not.toBe('lighten')
   })
 })
 

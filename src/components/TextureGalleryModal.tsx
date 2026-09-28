@@ -13,6 +13,14 @@ import {
   type TextureCategory,
   type TextureFit,
 } from '../lib/textureGallery'
+import {
+  TEXTURE_OPACITY_MAX,
+  TEXTURE_OPACITY_MIN,
+  loadTextureGalleryState,
+  missingTextureIds,
+  saveTextureGalleryState,
+  textureDefaults,
+} from '../lib/galleryMemory'
 
 export type TexturePlacement = {
   texture: TextureAsset
@@ -30,13 +38,15 @@ export type TextureGalleryModalProps = {
 
 export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryModalProps) {
   const categories = useMemo(() => populatedTextureCategories(), [])
-  const [category, setCategory] = useState<TextureCategory>(categories[0]?.id ?? 'print')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [blend, setBlend] = useState('multiply')
-  const [opacity, setOpacity] = useState(55)
-  const [fit, setFit] = useState<TextureFit>('cover')
+  // Reopen on the last texture with the blend, opacity and fit chosen for it.
+  const [initial] = useState(() => loadTextureGalleryState(categories))
+  const [category, setCategory] = useState<TextureCategory>(initial.category)
+  const [selectedId, setSelectedId] = useState<string | null>(initial.textureId)
+  const [blend, setBlend] = useState(initial.blend)
+  const [opacity, setOpacity] = useState(initial.opacity)
+  const [fit, setFit] = useState<TextureFit>(initial.fit)
   // Full-resolution rasters are gitignored, so a clone or deploy can list textures whose files are absent.
-  const [missingIds, setMissingIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [missingIds, setMissingIds] = useState<ReadonlySet<string>>(() => new Set(missingTextureIds))
   const [placing, setPlacing] = useState(false)
   const [placeError, setPlaceError] = useState<string | null>(null)
 
@@ -48,14 +58,23 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
   )
 
   const selectTexture = useCallback((texture: TextureAsset) => {
-    setSelectedId(texture.id)
-    setBlend(texture.defaultBlend)
-    setOpacity(Math.round(texture.defaultOpacity * 100))
-    setFit(texture.hasAlpha ? 'layer' : 'cover')
+    const defaults = textureDefaults(texture)
+    setSelectedId(defaults.textureId)
+    setBlend(defaults.blend)
+    setOpacity(defaults.opacity)
+    setFit(defaults.fit)
     setPlaceError(null)
   }, [])
 
+  const selectCategory = (next: TextureCategory) => {
+    setCategory(next)
+    const first = texturesForCategory(next)[0]
+    if (first) selectTexture(first)
+    else setSelectedId(null)
+  }
+
   const markMissing = useCallback((id: string) => {
+    missingTextureIds.add(id)
     setMissingIds((current) => (current.has(id) ? current : new Set(current).add(id)))
   }, [])
 
@@ -75,10 +94,8 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
   }
 
   useEffect(() => {
-    if (!open) return
-    const first = categoryTextures[0]
-    if (first) selectTexture(first)
-  }, [open, category, categoryTextures, selectTexture])
+    saveTextureGalleryState({ category, textureId: selected?.id ?? null, blend, opacity, fit })
+  }, [category, selected, blend, opacity, fit])
 
   if (!open) return null
 
@@ -112,10 +129,7 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
                   type="button"
                   className={category === item.id ? 'active' : undefined}
                   aria-pressed={category === item.id}
-                  onClick={() => {
-                    setCategory(item.id)
-                    setSelectedId(null)
-                  }}
+                  onClick={() => selectCategory(item.id)}
                 >
                   {item.label}
                 </button>
@@ -194,8 +208,8 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
                 <Slider
                   label="Opacity"
                   value={opacity}
-                  min={8}
-                  max={100}
+                  min={TEXTURE_OPACITY_MIN}
+                  max={TEXTURE_OPACITY_MAX}
                   onChange={setOpacity}
                   onCommit={() => undefined}
                 />
