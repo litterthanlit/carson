@@ -1,6 +1,6 @@
 # Carson — Filter & Texture Gallery Audit
 
-*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3 and H1–H6 are fixed in follow-up commits on `claude/filter-texture-gallery-audit-p0scb6` (see §1a and §2a). Everything else is still open.*
+*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3, H1–H7, A1–A7 and L6 are fixed in follow-up commits on `claude/filter-texture-gallery-audit-p0scb6` (see §1a, §2a and §3a). Everything else is still open.*
 
 ---
 
@@ -80,6 +80,26 @@ Remaining limitation: 3×3 convolution kernels (Sharpen, Unsharp, Emboss, Find e
 | I1 | State resets on every open. The components are only mounted while open (`{filterGalleryOpen ? <… open /> : null}`), so category, selection and blend choice are lost, and every `if (!open)` branch is dead code. | Either keep them mounted and honor `open`, or lift "last category / last preset" into App or `localStorage`. |
 | I2 | The Texture Gallery preview shows the raw texture. Blend and opacity changes aren't previewed at all. | Composite the texture over a poster snapshot with the chosen `globalCompositeOperation` and opacity (a cheap 2D canvas draw). |
 | I3 | Filter params can't be reset per slider, and there is no before/after toggle. | Add a press-and-hold "Original" button over the preview (a Photoshop pattern), and use Slider's `defaultValue` for double-click reset. |
+
+### 3a. Shipped
+
+Both galleries now render inside one `GalleryDialog` component (`components/GalleryDialog.tsx`), and grid keyboard handling lives in `components/gridNavigation.ts`.
+
+| # | Fix | Verification |
+|---|---|---|
+| A1 | `GalleryDialog` is a native `<dialog>` opened with `showModal()`. It sits in the top layer, and the editor behind it is inert, so neither pointer nor Tab can reach the canvas. Escape (via `cancel` and `keydown`) and a backdrop click call `onClose`. On unmount, focus returns to the element that opened it. It keeps `aria-modal="true"`, so the editor's shortcut guard from C1 still applies. | Drive: `:modal` matches. 30 Tab presses stayed inside the dialog except one stop on `BODY`, which is the browser's own stop before its address bar (native `showModal` behavior); the next Tab comes back in. A backdrop click closes the dialog and focus lands back on the Instruments button. Component test: focus returns to the control that opened it. |
+| A2 | Tiles use a roving tabindex: only the selected tile is a Tab stop. Arrow keys, Home and End move focus and selection together, and the column count is read from the rendered grid, so the 3-column mobile layout also works. | Unit tests for `nextGridIndex`. Component test: → ↓ End Home in the texture grid. Drive: → then ↓ lands on tile index 3 and selects it. |
+| A3 | The listbox label uses the visible category name ("Adjust filters", "Print textures"). | Component test. |
+| A4 | Category buttons carry `aria-pressed`. | Component test. |
+| A5 | Image-only filters use `aria-disabled` plus `aria-describedby` instead of `disabled`. They stay focusable and selectable, the params panel explains "Needs an image layer…", and Apply stays disabled. | Component test and drive: Cold wash is selectable on a text layer, and Apply is disabled. |
+| A6 | Covered in the previous commit: the preview's `alt` names the preset. | — |
+| A7 | The selected tile has a 2 px accent ring (`#1473e6` on the light panel, above 3:1). Keyboard focus shows a separate 2 px outline with a 2 px offset. The open animation respects `prefers-reduced-motion`. | Drive screenshot. |
+| H7 | Tiles are flex columns with a square `.gallery-thumb-media` box that doesn't shrink, and the grid uses `grid-auto-rows: max-content`. Root cause: an overflowing grid only gives `auto` rows their *minimum* size, and the image box's minimum had collapsed. | Drive: no tile rectangles overlap, and texture tiles are square with visible names. |
+| L6 | Texture thumbnails use `loading="lazy"` and `decoding="async"`. | — |
+
+The native dialog lets Tab reach the browser's own controls after the last element, instead of trapping focus completely. That is the HTML spec's intended behavior, and it lets keyboard users reach the address bar.
+
+`.command-backdrop` is still used by the Command palette, Comps and the other dialogs. Moving them onto `GalleryDialog` is a mechanical follow-up.
 
 ---
 

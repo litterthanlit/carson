@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FabricObject } from 'fabric'
@@ -139,3 +139,82 @@ describe('TextureGalleryModal', () => {
     expect(screen.getByRole('button', { name: 'Place texture' })).toHaveProperty('disabled', true)
   })
 })
+
+describe('Gallery dialog accessibility', () => {
+  it('returns focus to the control that opened it', () => {
+    const { rerender } = render(<button type="button">Open textures</button>)
+    const opener = screen.getByRole('button', { name: 'Open textures' })
+    opener.focus()
+    rerender(
+      <>
+        <button type="button">Open textures</button>
+        <TextureGalleryModal open onPlace={vi.fn()} onClose={vi.fn()} />
+      </>,
+    )
+    expect(document.activeElement).toBe(screen.getByRole('dialog', { name: 'Texture Gallery' }))
+    rerender(<button type="button">Open textures</button>)
+    expect(document.activeElement).toBe(opener)
+  })
+
+  it('closes on a backdrop click but not on clicks inside the panel', () => {
+    const onClose = vi.fn()
+    render(<TextureGalleryModal open onPlace={vi.fn()} onClose={onClose} />)
+    fireEvent.click(screen.getByRole('heading', { name: 'Texture Gallery' }))
+    expect(onClose).not.toHaveBeenCalled()
+    // ::backdrop clicks target the dialog element itself, outside its box.
+    fireEvent.click(screen.getByRole('dialog', { name: 'Texture Gallery' }), { clientX: -40, clientY: -40 })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves through the texture grid with arrow keys, Home and End, one Tab stop', async () => {
+    const user = userEvent.setup()
+    render(<TextureGalleryModal open onPlace={vi.fn()} onClose={vi.fn()} />)
+    const grid = screen.getByRole('listbox', { name: 'Print textures' })
+    const options = within(grid).getAllByRole('option')
+    expect(options.length).toBeGreaterThan(3)
+    expect(options.filter((option) => option.tabIndex === 0)).toHaveLength(1)
+
+    options[0]!.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(document.activeElement).toBe(options[1])
+    expect(options[1]!.getAttribute('aria-selected')).toBe('true')
+    expect(options[1]!.tabIndex).toBe(0)
+    expect(options[0]!.tabIndex).toBe(-1)
+    expect(screen.getByRole('heading', { level: 3 }).textContent).toBe(options[1]!.textContent)
+
+    await user.keyboard('{ArrowDown}')
+    expect(document.activeElement).toBe(options[3])
+    await user.keyboard('{End}')
+    expect(document.activeElement).toBe(options[options.length - 1])
+    await user.keyboard('{Home}')
+    expect(document.activeElement).toBe(options[0])
+  })
+
+  it('labels categories by their visible names and marks the active one', async () => {
+    const user = userEvent.setup()
+    const source = { id: 'layer-3' } as unknown as FabricObject
+    render(<FilterGalleryModal open source={source} selectedIsImage onApply={vi.fn()} onClose={vi.fn()} />)
+    const adjust = screen.getByRole('button', { name: 'Adjust' })
+    expect(adjust.getAttribute('aria-pressed')).toBe('false')
+    await user.click(adjust)
+    expect(adjust.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('listbox', { name: 'Adjust filters' })).toBeTruthy()
+  })
+
+  it('keeps image-only filters reachable and explains why they cannot apply', async () => {
+    const user = userEvent.setup()
+    const source = { id: 'layer-4' } as unknown as FabricObject
+    render(<FilterGalleryModal open source={source} selectedIsImage={false} onApply={vi.fn()} onClose={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Wash' }))
+    const coldWash = screen.getByRole('option', { name: 'Cold wash' })
+    expect(coldWash.getAttribute('aria-disabled')).toBe('true')
+    expect(coldWash.hasAttribute('disabled')).toBe(false)
+    expect(coldWash.getAttribute('aria-describedby')).toBe('filter-gallery-needs-image')
+
+    await user.click(coldWash)
+    expect(coldWash.getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByText(/Select a photo or placed image/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Apply filter' })).toHaveProperty('disabled', true)
+  })
+})
+
