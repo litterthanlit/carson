@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { Slider } from './Slider'
+import { handleGalleryKeyDown } from './galleryKeys'
 import {
   TEXTURE_ASSETS,
   TEXTURE_BLEND_MODES,
@@ -21,7 +22,8 @@ export type TexturePlacement = {
 
 export type TextureGalleryModalProps = {
   open: boolean
-  onPlace: (placement: TexturePlacement) => void
+  /** Resolves once the texture is on the canvas; rejects if the file can't be loaded. */
+  onPlace: (placement: TexturePlacement) => Promise<void>
   onClose: () => void
 }
 
@@ -33,6 +35,10 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
   const [blend, setBlend] = useState('multiply')
   const [opacity, setOpacity] = useState(55)
   const [fit, setFit] = useState<TextureFit>('cover')
+  // Full-resolution rasters are gitignored, so a clone or deploy can list textures whose files are absent.
+  const [missingIds, setMissingIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [placing, setPlacing] = useState(false)
+  const [placeError, setPlaceError] = useState<string | null>(null)
 
   const categoryTextures = useMemo(() => texturesForCategory(category), [category])
   const selected = useMemo(
@@ -45,7 +51,27 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
     setBlend(texture.defaultBlend)
     setOpacity(Math.round(texture.defaultOpacity * 100))
     setFit(texture.hasAlpha ? 'layer' : 'cover')
+    setPlaceError(null)
   }, [])
+
+  const markMissing = useCallback((id: string) => {
+    setMissingIds((current) => (current.has(id) ? current : new Set(current).add(id)))
+  }, [])
+
+  const place = async () => {
+    if (!selected || placing) return
+    setPlacing(true)
+    setPlaceError(null)
+    try {
+      await onPlace({ texture: selected, blend, opacity: opacity / 100, fit })
+      onClose()
+    } catch {
+      markMissing(selected.id)
+      setPlaceError(`Couldn’t load “${selected.name}”.`)
+    } finally {
+      setPlacing(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -54,18 +80,13 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
   }, [open, category, categoryTextures, selectTexture])
 
   useEffect(() => {
-    if (!open) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    dialogRef.current?.focus()
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [open, onClose])
+    if (open) dialogRef.current?.focus()
+  }, [open])
 
   if (!open) return null
 
   const emptyLibrary = TEXTURE_ASSETS.length === 0
+  const selectedMissing = selected ? missingIds.has(selected.id) : false
 
   return (
     <div className="command-backdrop filter-gallery-backdrop" role="presentation" onClick={onClose}>
@@ -73,9 +94,11 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
         ref={dialogRef}
         className="filter-gallery-modal texture-gallery-modal glass-panel"
         role="dialog"
+        aria-modal="true"
         aria-labelledby="texture-gallery-title"
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => handleGalleryKeyDown(event, onClose)}
       >
         <header className="filter-gallery-header">
           <h2 id="texture-gallery-title">Texture Gallery</h2>
@@ -129,8 +152,21 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
             </aside>
 
             <div className={`filter-gallery-preview texture-gallery-preview${selected?.hasAlpha ? ' checker' : ''}`}>
-              {selected ? (
-                <img src={textureUrl(selected.src)} alt={selected.name} />
+              {selected && !selectedMissing ? (
+                <img
+                  key={selected.id}
+                  src={textureUrl(selected.src)}
+                  alt={selected.name}
+                  onError={() => markMissing(selected.id)}
+                />
+              ) : selected ? (
+                <div className="filter-gallery-preview-placeholder texture-gallery-missing">
+                  <p>
+                    Full-resolution file isn’t installed.
+                    <br />
+                    Run <code>npm run import-textures</code> to load your library.
+                  </p>
+                </div>
               ) : (
                 <div className="filter-gallery-preview-placeholder">Preview</div>
               )}
@@ -177,23 +213,21 @@ export function TextureGalleryModal({ open, onPlace, onClose }: TextureGalleryMo
                 </>
               ) : null}
 
+              {placeError ? (
+                <p className="hint texture-gallery-error" role="alert">
+                  {placeError}
+                </p>
+              ) : null}
+
               <div className="button-row filter-gallery-actions">
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={!selected}
-                  onClick={() => {
-                    if (!selected) return
-                    onPlace({
-                      texture: selected,
-                      blend,
-                      opacity: opacity / 100,
-                      fit,
-                    })
-                    onClose()
-                  }}
+                  disabled={!selected || selectedMissing || placing}
+                  aria-busy={placing}
+                  onClick={() => void place()}
                 >
-                  Place texture
+                  {placing ? 'Placing…' : 'Place texture'}
                 </button>
                 <button type="button" onClick={onClose}>
                   Cancel

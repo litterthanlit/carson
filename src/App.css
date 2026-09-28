@@ -2360,6 +2360,18 @@ input[type='color'] {
   padding-right: 2px;
 }
 
+/* Show the whole layer on the preview paper; multiply-mode previews blend against it. */
+.filter-gallery-thumb-paper {
+  display: block;
+  border-radius: 6px;
+  background: #f6f1e6;
+}
+
+.filter-gallery-thumb-paper img {
+  display: block;
+  object-fit: contain;
+}
+
 .filter-gallery-thumb.active {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
@@ -4100,4 +4112,16 @@ input[type='checkbox']:disabled {
   background: var(--accent);
   outline: 2px solid #fff;
   outline-offset: 1px;
+}
+
+.texture-gallery-missing p {
+  max-width: 32ch;
+  margin: 0;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.texture-gallery-error {
+  margin: 0;
+  color: var(--danger, #b42318);
 }
