@@ -31,11 +31,18 @@ export type CollageLightOptions = {
 }
 
 /** Layers in the stack that can cast a shadow: paper, not ink. */
-export function castsCollageShadow(object: { type?: string; kind?: unknown; globalCompositeOperation?: string }): boolean {
+export function castsCollageShadow(object: {
+  type?: string
+  kind?: unknown
+  globalCompositeOperation?: string
+  collageFlat?: unknown
+}): boolean {
   if (object.kind === 'adjustment' || object.kind === 'group') return false
+  // Tape lies flat; a peeled scar sits below the surface.
+  if (object.collageFlat) return false
   if (object.type === 'textbox' || object.type === 'i-text' || object.type === 'text' || object.type === 'line') return false
-  // Multiply layers are printed onto what's below, not pasted on it.
-  if (object.globalCompositeOperation === 'multiply') return false
+  // Blended layers (multiply print, the hard-light crumple) act on what's below; only pasted paper stands up.
+  if (object.globalCompositeOperation && object.globalCompositeOperation !== 'source-over') return false
   return true
 }
 

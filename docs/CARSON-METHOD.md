@@ -27,7 +27,10 @@ A field guide to the method behind the tool. Each claim is marked **sourced** (C
 | Type behind, between and over the scraps *(sourced, secondary)* | **Built** | **Weave through**: the biggest word in a selection goes over one scrap and under the next, cut on each scrap's real (torn) outline, living in the word's mask. `src/lib/weave.ts` |
 | Photographs the loose arrangement for real shadows and depth *(sourced)* | **Built** | **Photograph the collage**: one light; each scrap's shadow distance, softness and density follow how many sheets it lies on, plus seeded curl. Ink casts nothing. Live drop-shadow styles. `src/lib/collageLight.ts` |
 | Cut-and-tape tiled printouts (the Beach Culture "Mixed Messages" title, printed over 4 sheets) *(sourced)* | Gap | Tiled-print enlarger: split a layer across N "printer pages" with seams, overlaps and slight misalignment. |
-| Masking tape holding pieces down *(inferred)* | Partly | Masking tape paper exists; tape doesn't yet snap across the edge of two scraps. |
+| Masking tape holding pieces down *(inferred)* | **Built** | **Masking tape**: creped, half-translucent — print shows through greyed, overlaps read denser; straight factory edges, fibrous torn ends. |
+| Clear packing tape over the collage *(inferred from his work)* | **Built** | **Packing tape**: amber film, soft gloss ribbons, wrinkles, trapped air, sawtooth dispenser ends. |
+| Paper torn off, leaving a scar *(inferred)* | **Built** | **Peeled patch**: the fibrous white body of the sheet, flecks of lost print, an inner shadow where the top layer stands proud. |
+| A sheet that has been folded and crushed (the Ray Gun paste-ups) *(inferred)* | **Built** | **Crumple the sheet** (Assets / ⌘K): long folds plus short wrinkles as a faceted relief, lit from one window and laid on in hard-light. `src/lib/materials.ts` |
 
 ## 3. Copier and scanner — the Copy Machine
 

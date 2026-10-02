@@ -45,5 +45,8 @@ describe('collage light', () => {
     expect(castsCollageShadow({ type: 'textbox' })).toBe(false)
     expect(castsCollageShadow({ type: 'line' })).toBe(false)
     expect(castsCollageShadow({ type: 'image', globalCompositeOperation: 'multiply' })).toBe(false)
+    expect(castsCollageShadow({ type: 'image', collageFlat: true })).toBe(false)
+    expect(castsCollageShadow({ type: 'image', globalCompositeOperation: 'hard-light' })).toBe(false)
+    expect(castsCollageShadow({ type: 'image', globalCompositeOperation: 'source-over' })).toBe(true)
   })
 })

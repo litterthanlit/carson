@@ -23,6 +23,8 @@ export type FoundPaperKind =
   | 'tape'
   | 'black'
   | 'poster'
+  | 'packing'
+  | 'peel'
 
 export type FoundPaperSpec = {
   kind: FoundPaperKind
@@ -35,6 +37,14 @@ export type FoundPaperSpec = {
   /** Blend the scrap is pasted with. */
   blend: 'source-over' | 'multiply'
   opacity: number
+  /** Edge shape: torn all round (paper), straight with fibrous ends (masking tape), sawtooth ends (packing tape). */
+  outline?: 'torn' | 'tape' | 'saw'
+  /** Paint the pale fibrous core along the tear. Tapes don't have one. */
+  rim?: boolean
+  /** Fibre grain strength; 0 for clear film. */
+  grain?: number
+  /** Lies flat or sits below the surface (tape, a peeled scar): casts no shadow when photographed. */
+  flat?: boolean
 }
 
 export const FOUND_PAPERS: FoundPaperSpec[] = [
@@ -45,9 +55,11 @@ export const FOUND_PAPERS: FoundPaperSpec[] = [
   { kind: 'newsprint', label: 'Newsprint', width: [0.3, 0.42], height: [0.3, 0.42], roughness: 0.05, blend: 'source-over', opacity: 1 },
   { kind: 'graph', label: 'Graph paper', width: [0.24, 0.34], height: [0.2, 0.3], roughness: 0.05, blend: 'source-over', opacity: 1 },
   { kind: 'ticket', label: 'Ticket stub', width: [0.2, 0.26], height: [0.08, 0.11], roughness: 0.04, blend: 'source-over', opacity: 1 },
-  { kind: 'tape', label: 'Masking tape', width: [0.18, 0.3], height: [0.035, 0.05], roughness: 0.16, blend: 'multiply', opacity: 0.9 },
+  { kind: 'tape', label: 'Masking tape', width: [0.22, 0.4], height: [0.06, 0.085], roughness: 0.16, blend: 'source-over', opacity: 1, outline: 'tape', rim: false, grain: 0.02, flat: true },
   { kind: 'black', label: 'Black paper', width: [0.1, 0.2], height: [0.14, 0.3], roughness: 0.06, blend: 'source-over', opacity: 1 },
   { kind: 'poster', label: 'Poster fragment', width: [0.3, 0.44], height: [0.24, 0.36], roughness: 0.06, blend: 'source-over', opacity: 1 },
+  { kind: 'packing', label: 'Packing tape', width: [0.32, 0.55], height: [0.13, 0.16], roughness: 0.04, blend: 'source-over', opacity: 1, outline: 'saw', rim: false, grain: 0, flat: true },
+  { kind: 'peel', label: 'Peeled patch', width: [0.14, 0.28], height: [0.12, 0.24], roughness: 0.09, blend: 'source-over', opacity: 1, flat: true },
 ]
 
 export function foundPaperSpec(kind: FoundPaperKind): FoundPaperSpec {
@@ -93,16 +105,74 @@ const between = (random: Random, low: number, high: number) => low + random() * 
 export function paintFoundPaper(ctx: Ctx, kind: FoundPaperKind, width: number, height: number, seed: number) {
   const spec = foundPaperSpec(kind)
   const random = createSeededRandom(seed ^ 0x5bd1e995)
-  const outline = tornOutline(width, height, seed, spec.roughness)
+  const outline =
+    spec.outline === 'tape' || spec.outline === 'saw'
+      ? tapeOutline(width, height, seed, spec.outline)
+      : tornOutline(width, height, seed, spec.roughness)
 
   ctx.save()
   tracePath(ctx, outline)
   ctx.clip()
   PAINTERS[kind](ctx, width, height, random)
-  paperGrain(ctx, width, height, random, kind === 'black' ? 0.05 : 0.035)
+  if (kind === 'peel') {
+    // The layer around the scar stands proud of it: a soft shadow just inside the tear.
+    // Inner shadow: fill everything *outside* the scar (clipped away, so unseen)
+    // and let only its shadow fall inside, offset away from the light.
+    const short = Math.min(width, height)
+    ctx.save()
+    ctx.shadowColor = 'rgba(45,35,20,0.45)'
+    ctx.shadowBlur = short * 0.05
+    ctx.shadowOffsetX = short * 0.012
+    ctx.shadowOffsetY = short * 0.018
+    ctx.fillStyle = '#000'
+    ctx.beginPath()
+    ctx.rect(-width, -height, width * 3, height * 3)
+    outline.forEach((point, index) => (index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y)))
+    ctx.closePath()
+    ctx.fill('evenodd')
+    ctx.restore()
+  }
+  const grain = spec.grain ?? (kind === 'black' ? 0.05 : 0.035)
+  if (grain > 0) paperGrain(ctx, width, height, random, grain)
   ctx.restore()
 
-  tornRim(ctx, outline, width, height, random, kind)
+  if (spec.rim !== false) tornRim(ctx, outline, width, height, random, kind)
+}
+
+/**
+ * Tape keeps its factory edges along its length; only the ends are torn —
+ * fibrous for masking tape, the dispenser's sawtooth for packing tape.
+ */
+export function tapeOutline(width: number, height: number, seed: number, style: 'tape' | 'saw') {
+  const random = createSeededRandom(seed ^ 0x2c1b3c6d)
+  const edge = height * 0.04
+  const reach = height * (style === 'saw' ? 0.09 : 0.14)
+  const points: { x: number; y: number }[] = []
+  const end = (x: number, fromY: number, toY: number, outward: number) => {
+    const steps = style === 'saw' ? 14 + Math.floor(random() * 6) : 22
+    let drift = 0
+    for (let i = 0; i <= steps; i++) {
+      const y = fromY + ((toY - fromY) * i) / steps
+      if (style === 'saw') {
+        // Dispenser teeth: alternate in and out, a little uneven.
+        const tooth = i % 2 === 0 ? 0 : reach * (0.6 + random() * 0.5)
+        points.push({ x: x - outward * tooth, y })
+      } else {
+        drift = drift * 0.55 + (random() - 0.5) * reach
+        points.push({ x: x - outward * Math.abs(drift) - outward * random() * reach * 0.25, y })
+      }
+    }
+  }
+  const left = reach
+  const right = width - reach
+  // Long edges: straight, with the slightest wander of a hand-pulled strip.
+  const wander = () => (random() - 0.5) * edge * 0.3
+  points.push({ x: left, y: edge + wander() })
+  points.push({ x: right, y: edge + wander() })
+  end(right, edge, height - edge, -1)
+  points.push({ x: left, y: height - edge + wander() })
+  end(left, height - edge, edge, 1)
+  return points
 }
 
 function tornOutline(width: number, height: number, seed: number, roughness: number) {
@@ -383,12 +453,147 @@ const PAINTERS: Record<FoundPaperKind, (ctx: Ctx, width: number, height: number,
     text(ctx, `${Math.floor(between(random, 1, 40))}`, stub + width * 0.04, height * 0.62, height * 0.36, HEAVY, ink)
   },
 
-  tape(ctx, width, height) {
-    fill(ctx, 'rgba(226,211,164,0.86)', width, height)
-    // Crepe ridges across the tape.
-    for (let x = 0; x < width; x += Math.max(2, height * 0.05)) {
-      ctx.fillStyle = 'rgba(160,140,90,0.12)'
-      ctx.fillRect(x, 0, Math.max(1, height * 0.015), height)
+  tape(ctx, width, height, random) {
+    // Masking tape is a creped, half-translucent paper: print shows through it,
+    // greyed and softened, and two strips laid over each other read denser.
+    fill(ctx, 'rgba(218,200,150,0.58)', width, height)
+    // Crepe: fine irregular ridges across the strip.
+    let x = 0
+    while (x < width) {
+      const ridge = Math.max(1, height * between(random, 0.004, 0.012))
+      ctx.fillStyle = random() < 0.5 ? `rgba(150,125,70,${between(random, 0.02, 0.06)})` : `rgba(255,248,226,${between(random, 0.04, 0.1)})`
+      ctx.fillRect(x, 0, ridge, height)
+      x += ridge + height * between(random, 0.006, 0.03)
+    }
+    // Lengthwise mottle where the adhesive is thicker.
+    for (let blot = 0; blot < 6; blot++) {
+      const gradient = ctx.createRadialGradient(random() * width, height / 2, 0, random() * width, height / 2, height * between(random, 0.8, 2))
+      gradient.addColorStop(0, 'rgba(180,150,90,0.12)')
+      gradient.addColorStop(1, 'rgba(180,150,90,0)')
+      ctx.fillStyle = gradient
+      ctx.fillRect(0, 0, width, height)
+    }
+    // Factory edges catch a little more adhesive and dirt.
+    ctx.fillStyle = 'rgba(140,115,65,0.14)'
+    ctx.fillRect(0, height * 0.04, width, Math.max(1, height * 0.025))
+    ctx.fillRect(0, height * 0.935, width, Math.max(1, height * 0.025))
+  },
+
+  packing(ctx, width, height, random) {
+    // Clear film: almost nothing but a faint amber cast…
+    fill(ctx, 'rgba(236,224,188,0.14)', width, height)
+    // …and light. Gloss bands run the length of the tape, soft-edged: paint
+    // them small and let the upscale blur them.
+    const small = document.createElement('canvas')
+    small.width = Math.max(8, Math.round(width / 10))
+    small.height = Math.max(4, Math.round(height / 10))
+    const glossCtx = small.getContext('2d')
+    if (glossCtx) {
+      const bands = 2 + Math.floor(random() * 3)
+      for (let band = 0; band < bands; band++) {
+        const centre = between(random, 0.15, 0.85) * small.height
+        const thickness = between(random, 0.04, 0.16) * small.height
+        const phase = random() * Math.PI * 2
+        const waves = between(random, 0.5, 1.5)
+        const swell = between(random, 0.5, 1.2)
+        // A smooth ribbon: the film's gloss follows the gentle wave of the tape.
+        const ribbon = (i: number) => centre + Math.sin((i / 24) * Math.PI * 2 * waves + phase) * small.height * 0.08
+        const half = (i: number) => (thickness / 2) * (1 + (swell - 1) * Math.sin((i / 24) * Math.PI))
+        glossCtx.fillStyle = `rgba(255,255,255,${between(random, 0.35, 0.8)})`
+        glossCtx.beginPath()
+        for (let i = 0; i <= 24; i++) {
+          const gx = (i / 24) * small.width
+          if (i === 0) glossCtx.moveTo(gx, ribbon(i) - half(i))
+          else glossCtx.lineTo(gx, ribbon(i) - half(i))
+        }
+        for (let i = 24; i >= 0; i--) glossCtx.lineTo((i / 24) * small.width, ribbon(i) + half(i))
+        glossCtx.closePath()
+        glossCtx.fill()
+      }
+      ctx.save()
+      ctx.globalAlpha = 0.55
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(small, 0, 0, width, height)
+      ctx.restore()
+    }
+    // Wrinkles where the tape went down crooked: a lit side and a shaded side.
+    const wrinkles = 6 + Math.floor(random() * 10)
+    for (let wrinkle = 0; wrinkle < wrinkles; wrinkle++) {
+      const x = random() * width
+      const y = random() * height
+      const angle = (random() < 0.7 ? Math.PI / 2 : 0) + (random() - 0.5) * 1.1
+      const length = height * between(random, 0.25, 1.1)
+      const dx = Math.cos(angle) * length / 2
+      const dy = Math.sin(angle) * length / 2
+      const offset = Math.max(1, height * 0.012)
+      ctx.lineCap = 'round'
+      ctx.strokeStyle = `rgba(255,255,255,${between(random, 0.35, 0.7)})`
+      ctx.lineWidth = Math.max(1, height * 0.008)
+      ctx.beginPath()
+      ctx.moveTo(x - dx, y - dy)
+      ctx.quadraticCurveTo(x + (random() - 0.5) * length * 0.3, y + (random() - 0.5) * length * 0.3, x + dx, y + dy)
+      ctx.stroke()
+      ctx.strokeStyle = `rgba(40,30,15,${between(random, 0.12, 0.25)})`
+      ctx.beginPath()
+      ctx.moveTo(x - dx + offset, y - dy + offset)
+      ctx.lineTo(x + dx + offset, y + dy + offset)
+      ctx.stroke()
+    }
+    // Trapped air.
+    const bubbles = 2 + Math.floor(random() * 6)
+    for (let bubble = 0; bubble < bubbles; bubble++) {
+      const bx = random() * width
+      const by = between(random, 0.15, 0.85) * height
+      const r = height * between(random, 0.02, 0.07)
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+      ctx.lineWidth = Math.max(1, r * 0.12)
+      ctx.beginPath()
+      ctx.ellipse(bx, by, r * 1.4, r, random() * Math.PI, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+    // The film's factory edges: a bright line with a hairline shadow.
+    for (const y of [height * 0.04, height * 0.96]) {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)'
+      ctx.fillRect(0, y - height * 0.006, width, Math.max(1, height * 0.012))
+      ctx.fillStyle = 'rgba(30,20,10,0.12)'
+      ctx.fillRect(0, y + height * 0.008, width, Math.max(1, height * 0.008))
+    }
+  },
+
+  peel(ctx, width, height, random) {
+    // Where a printed top layer was ripped away: the white fibrous body of the sheet.
+    fill(ctx, '#f3f2ec', width, height)
+    const short = Math.min(width, height)
+    for (let fibre = 0; fibre < (width * height) / 350; fibre++) {
+      const x = random() * width
+      const y = random() * height
+      const length = short * between(random, 0.005, 0.03)
+      const angle = random() * Math.PI
+      ctx.strokeStyle = random() < 0.5 ? 'rgba(120,115,100,0.1)' : 'rgba(255,255,255,0.6)'
+      ctx.lineWidth = Math.max(0.6, short * 0.002)
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.quadraticCurveTo(x + (random() - 0.5) * length, y + (random() - 0.5) * length, x + Math.cos(angle) * length, y + Math.sin(angle) * length)
+      ctx.stroke()
+    }
+    // Flecks of the lost print still clinging on.
+    const ink = pick(random, ['rgba(20,20,20,0.8)', 'rgba(205,35,30,0.8)', 'rgba(40,70,150,0.75)'])
+    for (let fleck = 0; fleck < 40; fleck++) {
+      const along = random()
+      const side = Math.floor(random() * 4)
+      const x = side === 0 ? along * width : side === 1 ? width * between(random, 0.85, 1) : side === 2 ? along * width : width * between(random, 0, 0.15)
+      const y = side === 1 || side === 3 ? along * height : side === 0 ? height * between(random, 0, 0.15) : height * between(random, 0.85, 1)
+      const size = short * between(random, 0.004, 0.02)
+      ctx.fillStyle = ink
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + size, y + size * (random() - 0.2))
+      ctx.lineTo(x + size * random(), y + size)
+      ctx.closePath()
+      ctx.fill()
     }
   },
 

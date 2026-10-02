@@ -21,6 +21,7 @@ Open the local URL Vite prints.
 - Weave a word through collage scraps — over one, under the next, cut along each scrap's edge
 - Tear the edges of any layer so a scan becomes a pasted paper scrap
 - Found paper: receipts, envelopes, carbon invoices, kraft, newsprint, tickets, tape — pasted already torn
+- Real materials: crumple the whole sheet (lit folds and wrinkles), clear packing tape, translucent masking tape, peeled-paper scars
 - Photograph the collage: one light, each scrap's shadow set by how many sheets it lies on
 - Copy Machine: a physical toner copier — dot gain, halftone, scan drift, streaks, lid edge, copy-of-a-copy generations
 - Typography controls for font, size, spacing, line height, skew, stretch, color, opacity, and blend mode

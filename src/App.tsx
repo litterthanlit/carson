@@ -137,6 +137,7 @@ import {
   tornEdgeClip,
 } from './lib/weave'
 import { castsCollageShadow, planCollageLight } from './lib/collageLight'
+import { paintCrumple } from './lib/materials'
 import {
   FOUND_PAPER_FONTS,
   FOUND_PAPERS,
@@ -3100,6 +3101,43 @@ function App() {
     setStatus(`Lit ${scraps.length} scraps from one light — photograph again to re-light`)
   }
 
+  /**
+   * Crumple the whole sheet: a fold-and-wrinkle relief lit from one side, laid
+   * over the poster in hard-light. Run again to re-crumple (it replaces itself).
+   */
+  async function crumpleSheet() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const scale = Math.min(1, 1400 / Math.max(poster.width, poster.height))
+    const element = document.createElement('canvas')
+    element.width = Math.max(8, Math.round(poster.width * scale))
+    element.height = Math.max(8, Math.round(poster.height * scale))
+    const context = element.getContext('2d')
+    if (!context) return
+    setStatus('Crumpling the sheet…')
+    // Let the status paint before the relief blocks the thread for a moment.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    paintCrumple(context, element.width, element.height, newSeed(), 60)
+    const image = await FabricImage.fromURL(element.toDataURL('image/webp', 0.92), { crossOrigin: 'anonymous' })
+    for (const old of canvas.getObjects().filter((object) => readObjectProp(object, 'crumpleLayer'))) canvas.remove(old)
+    image.set({
+      originX: 'left',
+      originY: 'top',
+      left: 0,
+      top: 0,
+      scaleX: poster.width / element.width,
+      scaleY: poster.height / element.height,
+      globalCompositeOperation: 'hard-light',
+      opacity: 0.9,
+      crumpleLayer: true,
+    } as Partial<FabricObject>)
+    tagObject(image, 'image', 'Crumpled sheet')
+    canvas.add(image)
+    canvas.requestRenderAll()
+    commitHistory('Crumpled the sheet')
+    setStatus('Crumpled the sheet — crumple again for new creases')
+  }
+
   /** Paste a torn scrap of found paper — painted fresh, so each click is a new tear. */
   async function insertFoundPaper(kind: FoundPaperKind) {
     const canvas = canvasRef.current
@@ -3127,7 +3165,8 @@ function App() {
       angle: (random() - 0.5) * 8,
       opacity: spec.opacity,
       globalCompositeOperation: spec.blend,
-    })
+      collageFlat: spec.flat || undefined,
+    } as Partial<FabricObject>)
     tagObject(image, 'image', spec.label)
     canvas.add(image)
     canvas.setActiveObject(image)
@@ -5383,6 +5422,20 @@ function App() {
     },
     { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => void unweaveSelected() },
     {
+      id: 'crumple-sheet',
+      label: 'Crumple the sheet',
+      keywords: ['crumple', 'crease', 'fold', 'wrinkle', 'paper', 'texture', 'real', 'material'],
+      scope: 'canvas',
+      run: () => void crumpleSheet(),
+    },
+    {
+      id: 'crop-marks',
+      label: 'Add crop marks',
+      keywords: ['crop', 'trim', 'registration', 'marks', 'print', 'proof'],
+      scope: 'canvas',
+      run: () => addCropMarks(),
+    },
+    {
       id: 'photograph-collage',
       label: 'Photograph the collage',
       keywords: ['shadow', 'light', 'depth', 'lift', 'phone', 'photo', 'collage', 'paper', 'scan'],
@@ -6039,6 +6092,8 @@ function App() {
           onClipSelectionToShape={() => void clipSelectionToShape()}
           onInsertFoundPaper={(kind) => void insertFoundPaper(kind)}
           onPhotographCollage={() => photographCollage()}
+          onCrumpleSheet={() => void crumpleSheet()}
+          onAddCropMarks={() => addCropMarks()}
           onWeaveSelection={() => void weaveSelection()}
           onUnweaveLayer={() => void unweaveSelected()}
           onTearEdges={() => void tearSelectedEdges()}

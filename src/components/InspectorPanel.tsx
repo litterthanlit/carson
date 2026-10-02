@@ -189,6 +189,8 @@ export type InspectorPanelProps = {
   onInsertAsset: (asset: StoredAsset) => void
   onInsertFoundPaper: (kind: FoundPaperKind) => void
   onPhotographCollage: () => void
+  onCrumpleSheet: () => void
+  onAddCropMarks: () => void
   onInsertComponent: (componentId: string) => void
   onSaveSelectionAsComponent: () => void
   canGroupLayers: boolean
@@ -378,6 +380,8 @@ export function InspectorPanel({
   onInsertAsset,
   onInsertFoundPaper,
   onPhotographCollage,
+  onCrumpleSheet,
+  onAddCropMarks,
   onInsertComponent,
   onSaveSelectionAsComponent,
   canGroupLayers,
@@ -1863,6 +1867,15 @@ export function InspectorPanel({
           <div className="button-row">
             <button type="button" title="One light over the board: each scrap casts a shadow by how many sheets it lies on" onClick={onPhotographCollage}>
               Photograph the collage
+            </button>
+          </div>
+          <h3 className="property-kicker">The sheet</h3>
+          <div className="button-row">
+            <button type="button" title="Fold, ball up and flatten the poster: creases lit from one side" onClick={onCrumpleSheet}>
+              Crumple
+            </button>
+            <button type="button" title="Trim marks and registration targets, as on a proof" onClick={onAddCropMarks}>
+              Crop marks
             </button>
           </div>
           {savedInstruments.length > 0 ? (

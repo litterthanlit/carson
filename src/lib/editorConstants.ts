@@ -29,6 +29,8 @@ export const HISTORY_PROPS = [
   'badCropTreatmentId',
   'glyphSourceId',
   'letterBreakSourceId',
+  'crumpleLayer',
+  'collageFlat',
   'letterBreakTreatmentId',
   'glyphTreatmentId',
   'scrapeTreatmentId',
