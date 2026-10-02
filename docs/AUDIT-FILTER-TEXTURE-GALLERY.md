@@ -182,10 +182,10 @@ Drive: Chromium (SwiftShader WebGL) at 1440×960, wreck poster, `Oversized headl
 | Riso | 1.69 | 1.69, `Risograph` |
 | RGB split | 1.71 | 1.71, `RgbSplit` |
 | Threshold (level 50) | 1.38 | — |
-| Chunky dither | 3.88 | 3.88, `BayerDither` |
+| Chunky dither | 2.53 | 2.53, `BayerDither` |
 | Halftone dots | 2.83 | 2.83, `HalftoneDots` |
 | Scan lines | 2.95 | 2.95, `ScanLines` |
-| Bayer dither | 6.94 | 6.94 |
+| Bayer dither | 6.94 | 6.94, `BayerDither` |
 
 Bayer dither is the one result over 4/255. Its 8 px cells are 1.26 px in the preview, and the canvas aliases rather than averages when it downsamples the applied raster, so both show the same 1-bit texture, but a pixel out of phase. Fading the preview to its mean tone instead pushed Δ to 16 and looked less like the canvas.
 
