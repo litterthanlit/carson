@@ -37,7 +37,7 @@ import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
 import { hasWeave } from '../lib/weave'
-import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
+import { COPY_MACHINE_DEFAULTS, MAX_COPY_GENERATIONS } from '../lib/copyMachine'
 import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
 import type { Gesture } from '../lib/gestures'
@@ -762,6 +762,43 @@ export function InspectorPanel({
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { voids: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Streaks"
+                          value={treatment.params.streaks ?? COPY_MACHINE_DEFAULTS.streaks}
+                          defaultValue={COPY_MACHINE_DEFAULTS.streaks}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { streaks: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Lid edge"
+                          value={treatment.params.edge ?? COPY_MACHINE_DEFAULTS.edge}
+                          defaultValue={COPY_MACHINE_DEFAULTS.edge}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { edge: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Generations"
+                          value={treatment.params.generations ?? COPY_MACHINE_DEFAULTS.generations}
+                          defaultValue={COPY_MACHINE_DEFAULTS.generations}
+                          min={1}
+                          max={MAX_COPY_GENERATIONS}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { generations: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Copy size"
+                          value={treatment.params.copyScale ?? COPY_MACHINE_DEFAULTS.copyScale}
+                          defaultValue={COPY_MACHINE_DEFAULTS.copyScale}
+                          min={50}
+                          max={200}
+                          format={formatPercent}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { copyScale: value })}
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                         <Slider

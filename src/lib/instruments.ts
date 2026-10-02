@@ -81,7 +81,7 @@ export const INSTRUMENTS: Instrument[] = [
     treatmentType: 'copy-machine',
     defaultParams: copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS),
     scope: 'layer',
-    tensionKeys: ['contrast', 'grain', 'voids', 'wobble', 'wobbleFreq', 'drag', 'bands', 'ghost', 'ghostOffset'],
+    tensionKeys: ['contrast', 'grain', 'voids', 'wobble', 'wobbleFreq', 'drag', 'bands', 'streaks', 'edge', 'ghost', 'ghostOffset'],
   },
   {
     id: 'misprint',

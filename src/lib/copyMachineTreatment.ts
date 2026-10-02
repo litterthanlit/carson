@@ -9,6 +9,7 @@ import {
   copyMachineGhostOpacity,
   copyMachineParamsFromRecord,
   copyMachinePixelScale,
+  isOpaqueSource,
   renderCopyMachineGhostPass,
   scaleCopyMachineParams,
   type CopyMachineParams,
@@ -251,7 +252,8 @@ export function resolveCopyMachineGhostParams(treatments: Treatment[]): {
 async function placeCompanionImage(
   canvas: Canvas,
   dataUrl: string,
-  source: FabricObject,
+  /** A copied sheet covers what's below; copied type overprints it. */
+  blend: 'multiply' | 'source-over',
   bounds: { left: number; top: number; width: number; height: number },
   options: {
     left: number
@@ -266,12 +268,14 @@ async function placeCompanionImage(
   image.set({
     left: options.left,
     top: options.top,
-    angle: source.angle ?? 0,
+    // The raster already carries the layer's rotation (toCanvasElement renders it
+    // into the axis-aligned bounds), so placing it rotated again would spin it twice.
+    angle: 0,
     scaleX: bounds.width / Math.max(1, image.width),
     scaleY: bounds.height / Math.max(1, image.height),
     originX: 'left',
     originY: 'top',
-    globalCompositeOperation: 'multiply',
+    globalCompositeOperation: blend,
     opacity: options.opacity,
     selectable: false,
     evented: false,
@@ -322,12 +326,13 @@ export async function renderCopyMachineTreatment(
   }
 
   const bounds = source.getBoundingRect()
+  const blend = sourcePixels && isOpaqueSource(sourcePixels) ? 'source-over' : 'multiply'
   const sourceIndex = canvas.getObjects().indexOf(source)
 
-  const main = await placeCompanionImage(canvas, dataUrl, source, bounds, {
+  const main = await placeCompanionImage(canvas, dataUrl, blend, bounds, {
     left: bounds.left,
     top: bounds.top,
-    opacity: 0.94,
+    opacity: blend === 'source-over' ? 1 : 0.94,
     tagKey: COPY_MACHINE_SOURCE_ID_KEY,
     sourceId,
     insertIndex: sourceIndex,
@@ -343,7 +348,7 @@ export async function renderCopyMachineTreatment(
       const ghostPixels = renderCopyMachineGhostPass(ghostSource, ghostParams, ghostRandom)
       const { dx, dy } = copyMachineGhostDelta(ghostParams.ghostOffset)
       const mainIndex = canvas.getObjects().indexOf(main)
-      await placeCompanionImage(canvas, imageDataToDataUrl(ghostPixels), source, bounds, {
+      await placeCompanionImage(canvas, imageDataToDataUrl(ghostPixels), 'multiply', bounds, {
         left: bounds.left + dx,
         top: bounds.top + dy,
         opacity: ghostOpacity,
