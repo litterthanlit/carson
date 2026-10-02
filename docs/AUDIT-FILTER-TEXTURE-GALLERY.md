@@ -146,3 +146,53 @@ The native dialog lets Tab reach the browser's own controls after the last eleme
 - **The misleading bits:** filter previews are made from a small, low-res copy of your layer. Some effects (motion blur) look much stronger in the preview than on the poster, see-through areas show as white, and switching quickly can briefly show the wrong filter.
 - **The polish:** screen-reader and keyboard users can't get around the grid well, most textures are called "Print 1"-style names, and the texture grid tiles overlap.
 - **The durable fix:** build one well-behaved "picker window" that every dialog uses, store textures somewhere the app can always reach, and generate previews the same way the real filter runs, just smaller.
+
+---
+
+## 7. Filter expansion
+
+Six print-process filters, plus a Level param on Threshold. Each is a Fabric filter in `lib/printFilters.ts` with a Canvas2D path and a GLSL shader, registered with the class registry so applied treatments rebuild after reload. Pixel-measured params are listed in `PIXEL_PARAMS` (`lib/filterPreview.ts`) so previews scale them. Discrete params, such as an ink pair, are palette indices; `FilterParamDef.labels` names them in the gallery slider, the Inspector and the treatment chip.
+
+| Filter | Category | Params | Presets |
+|---|---|---|---|
+| Halftone dots | Print | Cell size (px), Screen angle (°), Contrast (%) | Halftone dots (28 px, 45°), Coarse screen (64 px, 15°) |
+| Riso | Print | Inks (Fluoro Pink + Blue, Black + Red, Teal + Orange, Black + Yellow, Purple + Fluoro Orange), Misregister (px), Grain (%) | Riso, Riso black + red |
+| Bayer dither | Print | Scale (px), Threshold (%) | Bayer dither (8 px), Chunky dither (18 px) |
+| Duotone | Look | Palette (Black / Paper, Navy / Cream, Red / Paper, Blue / Pink, Green / Lemon), Contrast (%) | Navy duotone, Red duotone |
+| RGB split | Distress | Distance (px), Angle (°) | RGB split (16 px), Channel drift (40 px, 60°) |
+| Scan lines | Distress | Spacing (px), Darkness (%), Jitter (%) | Scan lines (24 px), Torn scan (40 px, heavy jitter) |
+| Threshold | Adjust | Level (%) | Threshold (50) |
+
+How they behave:
+
+- **Ink over paper.** Ink is composed over white, then un-composited. Transparent areas stay clear, and ink that lands past a shape (a riso fringe, an RGB fringe, a dot at a glyph edge) is ink-coloured and opaque only where it covers. White paper appears only under a layer's solid areas, so anti-aliased edges never get a pale rim.
+- **Determinism.** Grain and row jitter hash coordinates; there is no `Math.random()`. Grain cells are relative to the layer, so the 640 px preview and the full-size result share the same pattern.
+- **Small patterns.** Once dots or scan lines are smaller than a couple of pixels, they fade to their mean tone instead of aliasing. Dither fades only below 1.5 px; see the Δ note below.
+- **Threshold compatibility.** Saved Threshold treatments have no level. They, and the new default of 50, build the original `BlackWhite` + `Contrast(0.2)` stack, so saved posters render exactly as before. Any other level moves the same ramp with a `ColorMatrix`.
+
+**Fixed along the way: fx on big layers came back cropped.** Type and shapes were snapshotted at 2×, and Fabric's WebGL backend draws its last pass into a single 4096 px tile. On the wreck poster, `Oversized headline` snapshots to 7720 px, and every fx (Grayscale too) lost everything past x = 4096. `snapshotMultiplier()` (`lib/rasterizeLayer.ts`) now keeps 2× where it fits and otherwise picks the largest multiplier inside `config.textureSize`, and `previewPixelRatio()` uses the same value. Grayscale on the headline went from mean Δ 9.0 to 1.3.
+
+### Verification
+
+Drive: Chromium (SwiftShader WebGL) at 1440×960, wreck poster, `Oversized headline` selected. Each preset was applied from the gallery. The layer was isolated on white and framed so its bounds cover exactly the preview's 640×343 lower-canvas pixels, then compared with the preview. The poster was then reloaded, reopened from Home ("Recover Untitled poster"), and measured again.
+
+| Filter (preset) | Mean \|ΔRGB\| preview vs canvas | After reload |
+|---|---|---|
+| Duotone (Navy duotone) | 1.14 | 1.14, filter `Duotone` rebuilt |
+| Riso | 1.69 | 1.69, `Risograph` |
+| RGB split | 1.71 | 1.71, `RgbSplit` |
+| Threshold (level 50) | 1.38 | — |
+| Chunky dither | 3.88 | 3.88, `BayerDither` |
+| Halftone dots | 2.83 | 2.83, `HalftoneDots` |
+| Scan lines | 2.95 | 2.95, `ScanLines` |
+| Bayer dither | 6.94 | 6.94 |
+
+Bayer dither is the one result over 4/255. Its 8 px cells are 1.26 px in the preview, and the canvas aliases rather than averages when it downsamples the applied raster, so both show the same 1-bit texture, but a pixel out of phase. Fading the preview to its mean tone instead pushed Δ to 16 and looked less like the canvas.
+
+Timing: preview `applyFilters()` on the 640×343 raster in Chromium (WebGL) takes a median of 3–4 ms for every new filter, at most 23 ms (the first render, which includes compiling the shader). With the 120 ms debounce, a slider step shows its new preview about 220–290 ms after the key press. The Canvas2D fallback on a 640×343 buffer (Node, jsdom), median / max: halftone 20 / 34 ms, riso 28 / 32 ms, RGB split 18 / 22 ms, dither 10 / 13 ms, scan lines 6 / 12 ms, duotone 2 ms.
+
+Undo/redo: applying Halftone dots then RGB split, then Ctrl+Z ×2 and Ctrl+Shift+Z, steps the filter stack `[HalftoneDots, RgbSplit]` → `[HalftoneDots]` → `[]` → `[HalftoneDots]`. No page errors in any run.
+
+Tests: `lib/printFilters.test.ts` (27) covers each CPU path on tiny buffers: known output, alpha, determinism, edge values, and serialization round-trips. `filterGallery`, `filterPreview` and `pixelFilters` tests cover registry coverage, `PIXEL_PARAMS`, palette labels, the Threshold compatibility, and the snapshot cap. Full suite 494/494 ✓, `tsc -b` ✓, `npm run build` ✓, lint clean apart from the existing `usePathEditing.ts` warning.
+
+Thumbnails (144 px) render pixel params at about 1/30 of the applied size, so the pattern filters show as plain tone in the tile grid. That matches how the result looks at that size, and it is the same for Mosaic and Newsprint.
