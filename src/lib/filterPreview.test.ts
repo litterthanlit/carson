@@ -46,6 +46,19 @@ describe('filterPreview sizing', () => {
     const gaussian = { radius: 18 }
     expect(scalePreviewParams('gaussian-blur', gaussian, 0.25)).toBe(gaussian)
     expect(scalePreviewParams(undefined, gaussian, 0.25)).toBe(gaussian)
+    // Print-process filters: sizes scale; angles, palettes and percentages do not.
+    expect(scalePreviewParams('halftone-dots', { cell: 28, angle: 45, contrast: 25 }, 0.25)).toEqual({
+      cell: 7,
+      angle: 45,
+      contrast: 25,
+    })
+    expect(scalePreviewParams('risograph', { inks: 3, offset: 20, grain: 35 }, 0.5)).toEqual({
+      inks: 3,
+      offset: 10,
+      grain: 35,
+    })
+    const duotone = { palette: 1, contrast: 30 }
+    expect(scalePreviewParams('duotone', duotone, 0.25)).toBe(duotone)
   })
 
   it('multiplies print treatments over the preview paper', () => {

@@ -17,10 +17,15 @@ const MIN_MULTIPLIER = 0.02
 const MAX_MULTIPLIER = 2
 
 /** Fx params measured in raster pixels. Everything else is relative to the layer or unitless. */
-const PIXEL_PARAMS: Partial<Record<FxKind, readonly string[]>> = {
+export const PIXEL_PARAMS: Partial<Record<FxKind, readonly string[]>> = {
   'motion-blur': ['distance'],
   pixelate: ['blocksize'],
   halftone: ['blocksize'],
+  'halftone-dots': ['cell'],
+  risograph: ['offset'],
+  dither: ['scale'],
+  'rgb-split': ['distance'],
+  'scan-lines': ['spacing'],
 }
 
 /** Treatments that composite with multiply on the canvas; the preview image should too. */

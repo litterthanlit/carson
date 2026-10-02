@@ -1,5 +1,6 @@
 import type { FxKind } from './pixelFilters'
 import { isFxKind } from './pixelFilters'
+import { DUOTONE_PALETTES, RISO_INKS } from './printFilters'
 import type { TreatmentType } from './treatments'
 
 export type FilterCategory =
@@ -61,6 +62,32 @@ const LEVELS: FilterParamDef = { key: 'levels', label: 'Levels', min: 2, max: 16
 const BLOCK: FilterParamDef = { key: 'blocksize', label: 'Cell size', min: 2, max: 48 }
 const SIGNED: FilterParamDef = { key: 'amount', label: 'Amount', min: -100, max: 100 }
 const HUE: FilterParamDef = { key: 'angle', label: 'Hue', min: -180, max: 180, format: 'degrees' }
+const THRESHOLD_LEVEL: FilterParamDef = { key: 'level', label: 'Level', min: 0, max: 100, format: 'percent' }
+const DOT_CELL: FilterParamDef = { key: 'cell', label: 'Cell size', min: 4, max: 120 }
+const SCREEN_ANGLE: FilterParamDef = { key: 'angle', label: 'Screen angle', min: 0, max: 90, format: 'degrees' }
+const RISO_INK_PAIR: FilterParamDef = {
+  key: 'inks',
+  label: 'Inks',
+  min: 0,
+  max: RISO_INKS.length - 1,
+  labels: RISO_INKS.map((pair) => pair.name),
+}
+const RISO_OFFSET: FilterParamDef = { key: 'offset', label: 'Misregister', min: 0, max: 120 }
+const RISO_GRAIN: FilterParamDef = { key: 'grain', label: 'Grain', min: 0, max: 100, format: 'percent' }
+const DUOTONE_PALETTE: FilterParamDef = {
+  key: 'palette',
+  label: 'Palette',
+  min: 0,
+  max: DUOTONE_PALETTES.length - 1,
+  labels: DUOTONE_PALETTES.map((palette) => palette.name),
+}
+const TONE_CONTRAST: FilterParamDef = { key: 'contrast', label: 'Contrast', min: 0, max: 100, format: 'percent' }
+const DITHER_SCALE: FilterParamDef = { key: 'scale', label: 'Scale', min: 1, max: 32 }
+const DITHER_THRESHOLD: FilterParamDef = { key: 'threshold', label: 'Threshold', min: 0, max: 100, format: 'percent' }
+const SPLIT_DISTANCE: FilterParamDef = { key: 'distance', label: 'Distance', min: 0, max: 120 }
+const SCAN_SPACING: FilterParamDef = { key: 'spacing', label: 'Spacing', min: 4, max: 96 }
+const SCAN_DARKNESS: FilterParamDef = { key: 'darkness', label: 'Darkness', min: 0, max: 100, format: 'percent' }
+const SCAN_JITTER: FilterParamDef = { key: 'jitter', label: 'Jitter', min: 0, max: 100, format: 'percent' }
 
 function fx(
   id: string,
@@ -169,7 +196,15 @@ const PIXEL_PRESETS: FilterPreset[] = [
   fx('vibrance', 'Vibrance', 'color', 'vibrance', { amount: 24 }, [SIGNED], 'Saturate muted colors first.'),
   fx('hue', 'Hue shift', 'color', 'hue', { angle: 30 }, [HUE], 'Rotate hue around the wheel.'),
   fx('invert', 'Invert', 'color', 'invert', {}, [], 'Negative / reverse film.'),
-  fx('threshold', 'Threshold', 'color', 'threshold', {}, [], 'Hard black-and-white cut.'),
+  fx(
+    'threshold',
+    'Threshold',
+    'color',
+    'threshold',
+    { level: 50 },
+    [THRESHOLD_LEVEL],
+    'Hard black-and-white cut. Raise the level to drop more into black.',
+  ),
   fx('grayscale', 'Grayscale', 'color', 'grayscale', {}, [], 'Strip color.'),
   fx('sepia', 'Sepia', 'film', 'sepia', {}, [], 'Classic warm print matrix.'),
   fx('vintage', 'Vintage', 'film', 'vintage', {}, [], 'Faded analog color matrix.'),
@@ -178,6 +213,24 @@ const PIXEL_PRESETS: FilterPreset[] = [
   fx('technicolor', 'Technicolor', 'film', 'technicolor', {}, [], 'Three-strip process punch.'),
   fx('brownie', 'Brownie', 'film', 'brownie', {}, [], 'Warm box-camera cast.'),
   fx('grain', 'Grain', 'film', 'grain', { amount: 40 }, [AMOUNT], 'Photographic noise overlay.'),
+  fx(
+    'duotone-navy',
+    'Navy duotone',
+    'film',
+    'duotone',
+    { palette: 1, contrast: 30 },
+    [DUOTONE_PALETTE, TONE_CONTRAST],
+    'Two-ink print: shadows in one ink, highlights in another.',
+  ),
+  fx(
+    'duotone-red',
+    'Red duotone',
+    'film',
+    'duotone',
+    { palette: 2, contrast: 45 },
+    [DUOTONE_PALETTE, TONE_CONTRAST],
+    'Protest-flyer red over paper, with the mids pushed apart.',
+  ),
 ]
 
 const CARSON_PRESETS: FilterPreset[] = [
@@ -231,6 +284,60 @@ const CARSON_PRESETS: FilterPreset[] = [
     [BLOCK],
     'Harsh photocopy halftone: gray, mosaic, threshold.',
   ),
+  fx(
+    'halftone-dots',
+    'Halftone dots',
+    'print',
+    'halftone-dots',
+    { cell: 28, angle: 45, contrast: 25 },
+    [DOT_CELL, SCREEN_ANGLE, TONE_CONTRAST],
+    'Round AM dots on a rotated screen. Black ink on paper.',
+  ),
+  fx(
+    'halftone-coarse',
+    'Coarse screen',
+    'print',
+    'halftone-dots',
+    { cell: 64, angle: 15, contrast: 45 },
+    [DOT_CELL, SCREEN_ANGLE, TONE_CONTRAST],
+    'A newspaper photo blown up past the point of sense.',
+  ),
+  fx(
+    'risograph',
+    'Riso',
+    'print',
+    'risograph',
+    { inks: 0, offset: 20, grain: 35 },
+    [RISO_INK_PAIR, RISO_OFFSET, RISO_GRAIN],
+    'Two-drum riso: fluoro pink over blue, a little off register.',
+  ),
+  fx(
+    'riso-black-red',
+    'Riso black + red',
+    'print',
+    'risograph',
+    { inks: 1, offset: 40, grain: 55 },
+    [RISO_INK_PAIR, RISO_OFFSET, RISO_GRAIN],
+    'Black and red drums, badly registered, ink running thin.',
+  ),
+  fx(
+    'dither',
+    'Bayer dither',
+    'print',
+    'dither',
+    { scale: 8, threshold: 50 },
+    [DITHER_SCALE, DITHER_THRESHOLD],
+    '1-bit ordered dither, like an early desktop screen grab.',
+  ),
+  fx(
+    'dither-chunky',
+    'Chunky dither',
+    'print',
+    'dither',
+    { scale: 18, threshold: 55 },
+    [DITHER_SCALE, DITHER_THRESHOLD],
+    'Big 1-bit cells: bitmap type off a fax.',
+  ),
   {
     id: 'decay-fresh',
     name: 'Fresh wear',
@@ -276,6 +383,42 @@ const CARSON_PRESETS: FilterPreset[] = [
     paramDefs: [{ key: 'intensity', label: 'Intensity', min: 0, max: 100 }],
     scope: 'selection',
   },
+  fx(
+    'rgb-split',
+    'RGB split',
+    'distress',
+    'rgb-split',
+    { distance: 16, angle: 0 },
+    [SPLIT_DISTANCE, ANGLE],
+    'Red and blue plates slip apart: chromatic aberration.',
+  ),
+  fx(
+    'rgb-split-drift',
+    'Channel drift',
+    'distress',
+    'rgb-split',
+    { distance: 40, angle: 60 },
+    [SPLIT_DISTANCE, ANGLE],
+    'A wide, diagonal split, like a scan that moved mid-pass.',
+  ),
+  fx(
+    'scan-lines',
+    'Scan lines',
+    'distress',
+    'scan-lines',
+    { spacing: 24, darkness: 55, jitter: 20 },
+    [SCAN_SPACING, SCAN_DARKNESS, SCAN_JITTER],
+    'Copier banding: dark lines over paper, gaps through ink.',
+  ),
+  fx(
+    'scan-lines-torn',
+    'Torn scan',
+    'distress',
+    'scan-lines',
+    { spacing: 40, darkness: 70, jitter: 75 },
+    [SCAN_SPACING, SCAN_DARKNESS, SCAN_JITTER],
+    'Heavy bands and rows that slip sideways, like a misfed sheet.',
+  ),
   {
     id: 'scatter-drift',
     name: 'Drift',
