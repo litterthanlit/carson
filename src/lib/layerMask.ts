@@ -3,7 +3,7 @@
  * White / opaque = reveal, transparent = conceal. Strokes and clip shapes
  * stay on the object so invert / bypass / undo never flatten the source.
  */
-import { classRegistry, FabricImage, Point, util, type FabricObject } from 'fabric'
+import { classRegistry, FabricImage, Group, Point, Polygon, util, type FabricObject } from 'fabric'
 
 export const LAYER_MASK_KEY = 'layerMask'
 
@@ -40,6 +40,8 @@ export type MaskRegion = {
   inverted?: boolean
   /** Number of strokes painted before this region, so strokes and regions replay in order. */
   at: number
+  /** Cut made by Weave; re-weaving replaces these and leaves the user's own regions alone. */
+  weave?: boolean
 }
 
 export type LayerMask = {
@@ -49,9 +51,13 @@ export type LayerMask = {
   clipGeom?: ClipGeom | null
   strokes: MaskStroke[]
   regions?: MaskRegion[]
+  /** Which crossings the last weave sent under (0 = first, 1 = second). */
+  weaveParity?: 0 | 1
 }
 
 const MAX_RASTER = 512
+/** Hard-edged outlines (torn edges, weave cuts) need more pixels to stay crisp at poster scale. */
+const MAX_RASTER_HARD_EDGE = 1024
 
 export function emptyLayerMask(): LayerMask {
   return { enabled: true, inverted: false, clipJson: null, clipGeom: null, strokes: [] }
@@ -69,6 +75,7 @@ export function readLayerMask(object: FabricObject | null): LayerMask | null {
     clipGeom: record.clipGeom ?? null,
     strokes: Array.isArray(record.strokes) ? record.strokes : [],
     regions: Array.isArray(record.regions) ? record.regions : [],
+    weaveParity: record.weaveParity === 1 ? 1 : record.weaveParity === 0 ? 0 : undefined,
   }
 }
 
@@ -82,6 +89,7 @@ export function hasMaskContent(mask: LayerMask | null): mask is LayerMask {
 }
 
 export function layerMaskLabel(mask: LayerMask): string {
+  if (mask.regions?.some((region) => region.weave)) return 'Mask·weave'
   const regions = mask.regions?.length ?? 0
   if (regions > 0 && !mask.clipGeom && !mask.clipJson && mask.strokes.length === 0) {
     return regions === 1 ? 'Mask·selection' : `Mask·${regions} selections`
@@ -390,12 +398,49 @@ function imageDataToElement(image: ImageData): HTMLCanvasElement | null {
   return element
 }
 
-function rasterSize(width: number, height: number) {
-  const scale = Math.min(1, MAX_RASTER / Math.max(width, height))
+function rasterCap(mask: LayerMask) {
+  const hardEdged = mask.clipGeom?.kind === 'polygon' || (mask.regions ?? []).some((region) => region.weave)
+  return hardEdged ? MAX_RASTER_HARD_EDGE : MAX_RASTER
+}
+
+function rasterSize(width: number, height: number, cap = MAX_RASTER) {
+  const scale = Math.min(1, cap / Math.max(width, height))
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
   }
+}
+
+/**
+ * Hard polygon masks — a torn edge alone, or a weave cut alone — clip as vectors
+ * so their edges stay sharp at print size. Anything painted or feathered, or
+ * the two combined, falls back to the raster mask.
+ */
+export function vectorMaskClip(mask: LayerMask, size: { width: number; height: number }): FabricObject | null {
+  if (mask.strokes.length > 0 || mask.clipJson) return null
+  const regions = mask.regions ?? []
+  const toLocal = (points: { x: number; y: number }[]) =>
+    points.map((point) => ({ x: (point.x - 0.5) * size.width, y: (point.y - 0.5) * size.height }))
+  const polygon = (points: { x: number; y: number }[]) =>
+    new Polygon(toLocal(points), { fill: '#000', strokeWidth: 0, objectCaching: false })
+  const chrome = { selectable: false, evented: false } as const
+
+  if (regions.length === 0 && mask.clipGeom?.kind === 'polygon' && (mask.clipGeom.points?.length ?? 0) >= 3) {
+    const clip = polygon(mask.clipGeom.points ?? [])
+    clip.set({ ...chrome, inverted: mask.inverted } as Partial<FabricObject>)
+    return clip
+  }
+  const weaveOnly =
+    !mask.clipGeom &&
+    regions.length > 0 &&
+    regions.every((region) => region.weave && region.op === 'conceal' && !region.feather && !region.inverted && region.points.length >= 3)
+  if (weaveOnly) {
+    // The weave conceals the union of these outlines, so the clip is that union, inverted.
+    const clip = new Group(regions.map((region) => polygon(region.points)), { objectCaching: false })
+    clip.set({ ...chrome, inverted: !mask.inverted } as Partial<FabricObject>)
+    return clip
+  }
+  return null
 }
 
 export async function applyLayerMask(object: FabricObject): Promise<void> {
@@ -420,8 +465,15 @@ export async function applyLayerMask(object: FabricObject): Promise<void> {
     }
   }
 
+  const vector = vectorMaskClip(mask, objectUnscaledSize(object))
+  if (vector) {
+    object.set({ clipPath: vector, objectCaching: true } as Partial<FabricObject>)
+    object.dirty = true
+    return
+  }
+
   const size = objectUnscaledSize(object)
-  const raster = rasterSize(size.width, size.height)
+  const raster = rasterSize(size.width, size.height, rasterCap(mask))
   const image = rasterizeLayerMask(mask, raster.width, raster.height)
   const element = imageDataToElement(image)
   if (!element) return

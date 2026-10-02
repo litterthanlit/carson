@@ -17,6 +17,8 @@ Open the local URL Vite prints.
 - Move, resize, rotate, duplicate, delete, and reorder layers
 - Slice selected layers into strips or columns
 - Scatter selected layers for controlled layout accidents
+- Weave a word through collage scraps — over one, under the next, cut along each scrap's edge
+- Tear the edges of any layer so a scan becomes a pasted paper scrap
 - Typography controls for font, size, spacing, line height, skew, stretch, color, opacity, and blend mode
 - Local image upload with grayscale, contrast, threshold, blur, and noise effects
 - Poster presets plus custom size

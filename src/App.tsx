@@ -123,6 +123,17 @@ import {
   writeLayerMask,
   type MaskRegion,
 } from './lib/layerMask'
+import {
+  applyWeaveToMask,
+  hasWeave,
+  layerOutline,
+  nextWeaveParity,
+  outlinesOverlap,
+  pickWeaveThread,
+  planWeave,
+  removeWeaveFromMask,
+  tornEdgeClip,
+} from './lib/weave'
 import type { PathEditActions } from './hooks/usePathEditing'
 import { applyPathData, isPathClosed, type PathData } from './lib/pathEditing'
 import {
@@ -2051,6 +2062,95 @@ function App() {
     canvas.requestRenderAll()
     commitObjectPatchHistoryRef.current(objectId, 'Applied clipping mask', before, captureObjectPatch(content))
     syncSelected()
+  }
+
+  /**
+   * Thread the biggest word in the selection through the scraps it crosses:
+   * over one, under the next, cut along each scrap's real (torn) outline.
+   */
+  async function weaveSelection() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const picked = canvas.getActiveObjects()
+    if (picked.length < 2) {
+      setStatus('Select a word and the scraps it crosses (Shift+click), then Weave')
+      return
+    }
+    // Leave the selection first so every layer reports absolute coordinates.
+    canvas.discardActiveObject()
+    const objects = picked.filter((object) => !object.group)
+    const thread = pickWeaveThread(objects)
+    if (!thread) return
+    const threadOutline = layerOutline(thread)
+    const crossings = objects
+      .filter((object) => object !== thread)
+      .map((object) => ({ object, id: String(readObjectProp(object, 'id') ?? ''), outline: layerOutline(object) }))
+      .filter((crossing) => outlinesOverlap(threadOutline, crossing.outline))
+    const threadName = String(readObjectProp(thread, 'name') ?? 'layer')
+    if (crossings.length === 0) {
+      canvas.setActiveObject(thread)
+      canvas.requestRenderAll()
+      setStatus(`${threadName} doesn't cross the other selected layers — overlap them first`)
+      return
+    }
+    const mask = readLayerMask(thread) ?? emptyLayerMask()
+    const plan = planWeave(thread.angle ?? 0, crossings, nextWeaveParity(mask))
+    writeLayerMask(
+      thread,
+      applyWeaveToMask(mask, plan, (point) => canvasPointToMaskLocal(thread, point.x, point.y)),
+    )
+    await applyLayerMask(thread)
+    // Sit just above the highest scrap it crosses; the mask does the "under".
+    const stack = canvas.getObjects()
+    const highest = Math.max(...crossings.map((crossing) => stack.indexOf(crossing.object)))
+    if (stack.indexOf(thread) < highest) canvas.moveObjectTo(thread, highest)
+    invalidateLayerThumbnail(String(readObjectProp(thread, 'id') ?? ''))
+    canvas.setActiveObject(thread)
+    canvas.requestRenderAll()
+    commitHistory(`Wove ${threadName} through ${crossings.length} layers`)
+    const under = plan.crossings.filter((crossing) => crossing.under).length
+    setStatus(`Wove ${threadName}: under ${under}, over ${crossings.length - under} — weave again to swap`)
+  }
+
+  async function unweaveSelected() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    const mask = readLayerMask(object)
+    if (!canvas || !object || !mask || !hasWeave(mask)) return
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    writeLayerMask(object, removeWeaveFromMask(mask))
+    await applyLayerMask(object)
+    canvas.requestRenderAll()
+    invalidateLayerThumbnail(objectId)
+    commitObjectPatchHistoryRef.current(objectId, 'Removed weave', before, captureObjectPatch(object))
+    syncSelected()
+  }
+
+  /** Rip the edges of the selected layer — a scan becomes a pasted scrap. Run again to re-rip. */
+  async function tearSelectedEdges() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') {
+      setStatus('Select one layer to tear its edges')
+      return
+    }
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    const size = objectUnscaledSize(object)
+    const mask = readLayerMask(object) ?? emptyLayerMask()
+    writeLayerMask(object, {
+      ...mask,
+      enabled: true,
+      clipJson: null,
+      clipGeom: tornEdgeClip(size.width, size.height, newSeed()),
+    })
+    await applyLayerMask(object)
+    canvas.requestRenderAll()
+    invalidateLayerThumbnail(objectId)
+    commitObjectPatchHistoryRef.current(objectId, 'Tore edges', before, captureObjectPatch(object))
+    syncSelected()
+    setStatus('Tore the edges — tear again for a different rip')
   }
 
   function paintBrushMask() {
@@ -5126,6 +5226,23 @@ function App() {
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
+    {
+      id: 'weave',
+      label: 'Weave type through scraps',
+      keywords: ['weave', 'over', 'under', 'collage', 'interleave', 'behind', 'mask'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => void weaveSelection(),
+    },
+    { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => void unweaveSelected() },
+    {
+      id: 'tear-edges',
+      label: 'Tear edges',
+      keywords: ['tear', 'torn', 'rip', 'paper', 'scrap', 'collage', 'mask'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => void tearSelectedEdges(),
+    },
     { id: 'paint-mask', label: 'Paint layer mask', keywords: ['mask', 'brush', 'eraser', 'alpha'], scope: 'selection', disabled: !selected, run: () => paintBrushMask() },
     { id: 'invert-mask', label: 'Invert layer mask', keywords: ['mask', 'invert'], scope: 'selection', disabled: !selected, run: () => void invertSelectedMask() },
     { id: 'clear-mask', label: 'Remove layer mask', keywords: ['mask', 'clear', 'remove'], scope: 'selection', disabled: !selected, run: () => void clearSelectedMask() },
@@ -5352,6 +5469,8 @@ function App() {
           onTogglePencilMode={handleTogglePencilMode}
           onImageInputChange={(file) => void handleImageFile(file)}
           onClipToShape={() => void clipSelectionToShape()}
+          onWeave={() => void weaveSelection()}
+          onTearEdges={() => void tearSelectedEdges()}
           onBrushMask={() => void paintBrushMask()}
           onWhiteScrapes={() => addWhiteScrapes()}
           selectMode={selectMode}
@@ -5756,6 +5875,9 @@ function App() {
           onAlignSelection={alignSelection}
           onDistributeSelection={distributeSelection}
           onClipSelectionToShape={() => void clipSelectionToShape()}
+          onWeaveSelection={() => void weaveSelection()}
+          onUnweaveLayer={() => void unweaveSelected()}
+          onTearEdges={() => void tearSelectedEdges()}
           gridOverlay={gridOverlay}
           onGridOverlayChange={patchGridOverlay}
           onGridTensionChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}

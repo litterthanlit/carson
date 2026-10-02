@@ -36,6 +36,7 @@ import { formatCmyk, gamutReadout } from '../lib/cmykPreview'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
+import { hasWeave } from '../lib/weave'
 import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
 import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
@@ -198,6 +199,9 @@ export type InspectorPanelProps = {
   onAlignSelection: (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void
   onDistributeSelection: (mode: 'horizontal' | 'vertical') => void
   onClipSelectionToShape: () => void
+  onWeaveSelection: () => void
+  onUnweaveLayer: () => void
+  onTearEdges: () => void
   gridOverlay: GridOverlay
   onGridOverlayChange: (patch: Partial<GridOverlay>) => void
   onGridTensionChange: (value: number) => void
@@ -382,6 +386,9 @@ export function InspectorPanel({
   onAlignSelection,
   onDistributeSelection,
   onClipSelectionToShape,
+  onWeaveSelection,
+  onUnweaveLayer,
+  onTearEdges,
   gridOverlay,
   onGridOverlayChange,
   onGridTensionChange,
@@ -1622,6 +1629,16 @@ export function InspectorPanel({
                     </button>
                   </div>
                   <div className="button-row">
+                    <button type="button" title="Rip this layer's edges like torn paper — again for a new rip" onClick={onTearEdges}>
+                      Tear edges
+                    </button>
+                    {hasWeave(layerMask) ? (
+                      <button type="button" title="Remove the over/under cut from Weave" onClick={onUnweaveLayer}>
+                        Unweave
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="button-row">
                     <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onInvertLayerMask}>
                       Invert
                     </button>
@@ -1976,6 +1993,15 @@ export function InspectorPanel({
             </button>
             <button type="button" onClick={onClipSelectionToShape}>
               Clip to shape
+            </button>
+          </div>
+          <h3>Collage</h3>
+          <p className="hint">
+            Weave threads the biggest word over and under the layers it crosses. Weave again to swap.
+          </p>
+          <div className="button-row">
+            <button type="button" onClick={onWeaveSelection}>
+              Weave through
             </button>
           </div>
           <h3>Variations</h3>
