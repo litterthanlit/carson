@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { FabricObject } from 'fabric'
+import { config, type FabricObject } from 'fabric'
 import { presetById } from './filterGallery'
 import {
   SNAPSHOT_MULTIPLIER,
@@ -11,6 +11,7 @@ import {
   renderOriginalPreview,
   scalePreviewParams,
 } from './filterPreview'
+import { snapshotMultiplier } from './rasterizeLayer'
 
 describe('filterPreview sizing', () => {
   it('renders the long side at the target size, within bounds', () => {
@@ -27,6 +28,16 @@ describe('filterPreview sizing', () => {
     // An image shown at 25% holds 4 element pixels per poster unit.
     expect(previewPixelRatio(0.5, true, 0.25)).toBe(0.125)
     expect(previewPixelRatio(0.5, true, -0.25)).toBe(0.125)
+    // A layer too big for one WebGL tile is snapshotted smaller, and the preview follows.
+    expect(previewPixelRatio(0.2, false, 1, 1)).toBe(0.2)
+  })
+
+  it('snapshots big layers small enough for one WebGL filter tile', () => {
+    expect(snapshotMultiplier(800, 300)).toBe(SNAPSHOT_MULTIPLIER)
+    const big = snapshotMultiplier(3860, 2070)
+    expect(big).toBeLessThan(SNAPSHOT_MULTIPLIER)
+    expect(3860 * big).toBeLessThanOrEqual(config.textureSize)
+    expect(snapshotMultiplier(2070, 3860)).toBe(big)
   })
 
   it('scales only pixel-measured params', () => {
