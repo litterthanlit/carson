@@ -134,6 +134,7 @@ import {
   removeWeaveFromMask,
   tornEdgeClip,
 } from './lib/weave'
+import { castsCollageShadow, planCollageLight } from './lib/collageLight'
 import {
   FOUND_PAPER_FONTS,
   FOUND_PAPERS,
@@ -3023,6 +3024,45 @@ function App() {
     commitHistory(`Inserted asset “${asset.name}”`)
   }
 
+  /**
+   * Light the paste-up like Carson's phone photos of his collages: one light,
+   * each scrap's shadow set by how many sheets it lies on. Works on the
+   * selection, or on every scrap when nothing is selected. Run again to re-light.
+   */
+  function photographCollage() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const picked = canvas.getActiveObjects()
+    canvas.discardActiveObject()
+    const stack = canvas.getObjects()
+    const pool = (picked.length > 0 ? picked : getSelectableLayerObjects()).filter(
+      (object) => !object.group && object.visible !== false && castsCollageShadow(object as never),
+    )
+    if (pool.length === 0) {
+      setStatus('Nothing to light — paste some paper first')
+      return
+    }
+    const scraps = pool.map((object) => ({
+      object,
+      id: String(readObjectProp(object, 'id') ?? ''),
+      outline: layerOutline(object),
+      stackIndex: stack.indexOf(object),
+    }))
+    const plan = planCollageLight(scraps, { seed: newSeed(), scale: layerStyleScale(poster.width, poster.height) })
+    for (const scrap of scraps) {
+      const shadow = plan.get(scrap.id)
+      if (!shadow) continue
+      writeLayerStyle(scrap.object, { ...(readLayerStyle(scrap.object) ?? {}), dropShadow: shadow })
+      invalidateLayerThumbnail(scrap.id)
+    }
+    if (picked.length > 0) {
+      canvas.setActiveObject(picked.length === 1 ? picked[0] : new ActiveSelection(picked, { canvas }))
+    }
+    canvas.requestRenderAll()
+    commitHistory(`Photographed ${scraps.length} scraps`)
+    setStatus(`Lit ${scraps.length} scraps from one light — photograph again to re-light`)
+  }
+
   /** Paste a torn scrap of found paper — painted fresh, so each click is a new tear. */
   async function insertFoundPaper(kind: FoundPaperKind) {
     const canvas = canvasRef.current
@@ -5278,6 +5318,13 @@ function App() {
       run: () => void weaveSelection(),
     },
     { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => void unweaveSelected() },
+    {
+      id: 'photograph-collage',
+      label: 'Photograph the collage',
+      keywords: ['shadow', 'light', 'depth', 'lift', 'phone', 'photo', 'collage', 'paper', 'scan'],
+      scope: 'canvas',
+      run: () => photographCollage(),
+    },
     ...FOUND_PAPERS.map((paper) => ({
       id: `found-paper-${paper.kind}`,
       label: `Paste ${paper.label.toLowerCase()}`,
@@ -5926,6 +5973,7 @@ function App() {
           onDistributeSelection={distributeSelection}
           onClipSelectionToShape={() => void clipSelectionToShape()}
           onInsertFoundPaper={(kind) => void insertFoundPaper(kind)}
+          onPhotographCollage={() => photographCollage()}
           onWeaveSelection={() => void weaveSelection()}
           onUnweaveLayer={() => void unweaveSelected()}
           onTearEdges={() => void tearSelectedEdges()}

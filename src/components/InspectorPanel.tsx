@@ -187,6 +187,7 @@ export type InspectorPanelProps = {
   documentMeta: DocumentMeta | null
   onInsertAsset: (asset: StoredAsset) => void
   onInsertFoundPaper: (kind: FoundPaperKind) => void
+  onPhotographCollage: () => void
   onInsertComponent: (componentId: string) => void
   onSaveSelectionAsComponent: () => void
   canGroupLayers: boolean
@@ -375,6 +376,7 @@ export function InspectorPanel({
   documentMeta,
   onInsertAsset,
   onInsertFoundPaper,
+  onPhotographCollage,
   onInsertComponent,
   onSaveSelectionAsComponent,
   canGroupLayers,
@@ -1800,6 +1802,11 @@ export function InspectorPanel({
               </button>
             ))}
           </div>
+          <div className="button-row">
+            <button type="button" title="One light over the board: each scrap casts a shadow by how many sheets it lies on" onClick={onPhotographCollage}>
+              Photograph the collage
+            </button>
+          </div>
           {savedInstruments.length > 0 ? (
             <>
               <h3 className="property-kicker">Instruments</h3>
@@ -2056,6 +2063,9 @@ export function InspectorPanel({
           <div className="button-row">
             <button type="button" onClick={onWeaveSelection}>
               Weave through
+            </button>
+            <button type="button" title="Light the selected scraps from one light" onClick={onPhotographCollage}>
+              Photograph
             </button>
           </div>
           <h3>Variations</h3>

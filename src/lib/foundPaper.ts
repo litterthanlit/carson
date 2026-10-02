@@ -196,7 +196,8 @@ const PAINTERS: Record<FoundPaperKind, (ctx: Ctx, width: number, height: number,
     text(ctx, '- - - - - - - - - - - - - - - -', width / 2, y, size, MONO, ink(0.5), 'center')
     const lines = 6 + Math.floor(random() * 8)
     let total = 0
-    for (let line = 0; line < lines && y < height * 0.78; line++) {
+    // Leave room under the items for the total and the barcode.
+    for (let line = 0; line < lines && y < height * 0.66; line++) {
       y += size * 1.35
       const price = between(random, 0.5, 24)
       total += price
@@ -209,10 +210,10 @@ const PAINTERS: Record<FoundPaperKind, (ctx: Ctx, width: number, height: number,
     y += size * 1.6
     text(ctx, 'TOTAL', pad, y, size * 1.25, MONO, ink(0.9), 'left', 700)
     text(ctx, total.toFixed(2), width - pad, y, size * 1.25, MONO, ink(0.9), 'right', 700)
-    // Barcode.
+    // Barcode, when the strip is long enough to carry one.
     let x = pad
-    const barTop = Math.min(height * 0.9, y + size * 1.8)
-    while (x < width - pad) {
+    const barTop = y + size * 1.8
+    while (barTop + size * 2.4 < height * 0.92 && x < width - pad) {
       const bar = width * between(random, 0.004, 0.018)
       ctx.fillStyle = ink(0.75)
       ctx.fillRect(x, barTop, bar, size * 2.4)
