@@ -37,6 +37,7 @@ import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
 import { hasWeave } from '../lib/weave'
+import { FOUND_PAPERS, type FoundPaperKind } from '../lib/foundPaper'
 import { COPY_MACHINE_DEFAULTS, MAX_COPY_GENERATIONS } from '../lib/copyMachine'
 import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
@@ -185,6 +186,7 @@ export type InspectorPanelProps = {
   storedAssets: StoredAsset[]
   documentMeta: DocumentMeta | null
   onInsertAsset: (asset: StoredAsset) => void
+  onInsertFoundPaper: (kind: FoundPaperKind) => void
   onInsertComponent: (componentId: string) => void
   onSaveSelectionAsComponent: () => void
   canGroupLayers: boolean
@@ -372,6 +374,7 @@ export function InspectorPanel({
   storedAssets,
   documentMeta,
   onInsertAsset,
+  onInsertFoundPaper,
   onInsertComponent,
   onSaveSelectionAsComponent,
   canGroupLayers,
@@ -1783,6 +1786,20 @@ export function InspectorPanel({
         <div className="panel-section">
           <h2>Asset library</h2>
           <p className="hint">Images and components insert onto the canvas. Instruments and Gestures play on the selection.</p>
+          <h3 className="property-kicker">Found paper</h3>
+          <p className="hint">Torn scraps to build a collage from. Click again for a different tear.</p>
+          <div className="preset-row" role="group" aria-label="Found paper">
+            {FOUND_PAPERS.map((paper) => (
+              <button
+                key={paper.kind}
+                type="button"
+                title={`Paste a torn ${paper.label.toLowerCase()}`}
+                onClick={() => onInsertFoundPaper(paper.kind)}
+              >
+                {paper.label}
+              </button>
+            ))}
+          </div>
           {savedInstruments.length > 0 ? (
             <>
               <h3 className="property-kicker">Instruments</h3>

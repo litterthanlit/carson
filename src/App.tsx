@@ -134,6 +134,14 @@ import {
   removeWeaveFromMask,
   tornEdgeClip,
 } from './lib/weave'
+import {
+  FOUND_PAPER_FONTS,
+  FOUND_PAPERS,
+  foundPaperSize,
+  foundPaperSpec,
+  paintFoundPaper,
+  type FoundPaperKind,
+} from './lib/foundPaper'
 import type { PathEditActions } from './hooks/usePathEditing'
 import { applyPathData, isPathClosed, type PathData } from './lib/pathEditing'
 import {
@@ -3015,6 +3023,41 @@ function App() {
     commitHistory(`Inserted asset “${asset.name}”`)
   }
 
+  /** Paste a torn scrap of found paper — painted fresh, so each click is a new tear. */
+  async function insertFoundPaper(kind: FoundPaperKind) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const spec = foundPaperSpec(kind)
+    const seed = newSeed()
+    const size = foundPaperSize(kind, seed, poster.width)
+    await Promise.all(FOUND_PAPER_FONTS.map((family) => document.fonts.load(`400 32px "${family}"`).catch(() => [])))
+    const element = document.createElement('canvas')
+    element.width = size.rasterWidth
+    element.height = size.rasterHeight
+    const context = element.getContext('2d')
+    if (!context) return
+    paintFoundPaper(context, kind, element.width, element.height, seed)
+    // WebP keeps the alpha tear and stays light in undo history; Safari falls back to PNG.
+    const image = await FabricImage.fromURL(element.toDataURL('image/webp', 0.9), { crossOrigin: 'anonymous' })
+    const random = createSeededRandom(seed)
+    image.set({
+      originX: 'center',
+      originY: 'center',
+      left: poster.width * (0.3 + random() * 0.4),
+      top: poster.height * (0.25 + random() * 0.5),
+      scaleX: size.width / element.width,
+      scaleY: size.height / element.height,
+      angle: (random() - 0.5) * 8,
+      opacity: spec.opacity,
+      globalCompositeOperation: spec.blend,
+    })
+    tagObject(image, 'image', spec.label)
+    canvas.add(image)
+    canvas.setActiveObject(image)
+    canvas.requestRenderAll()
+    commitHistory(`Pasted ${spec.label.toLowerCase()}`)
+  }
+
   function applyGradientFill(kind: 'linear' | 'radial' = 'linear') {
     const object = activeObject()
     if (!object || selectedIsImage) return
@@ -5235,6 +5278,13 @@ function App() {
       run: () => void weaveSelection(),
     },
     { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => void unweaveSelected() },
+    ...FOUND_PAPERS.map((paper) => ({
+      id: `found-paper-${paper.kind}`,
+      label: `Paste ${paper.label.toLowerCase()}`,
+      keywords: ['found paper', 'scrap', 'collage', 'paper', 'torn', paper.kind],
+      scope: 'canvas' as const,
+      run: () => void insertFoundPaper(paper.kind),
+    })),
     {
       id: 'tear-edges',
       label: 'Tear edges',
@@ -5875,6 +5925,7 @@ function App() {
           onAlignSelection={alignSelection}
           onDistributeSelection={distributeSelection}
           onClipSelectionToShape={() => void clipSelectionToShape()}
+          onInsertFoundPaper={(kind) => void insertFoundPaper(kind)}
           onWeaveSelection={() => void weaveSelection()}
           onUnweaveLayer={() => void unweaveSelected()}
           onTearEdges={() => void tearSelectedEdges()}
