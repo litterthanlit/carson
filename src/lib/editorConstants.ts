@@ -28,6 +28,8 @@ export const HISTORY_PROPS = [
   'badCropSourceId',
   'badCropTreatmentId',
   'glyphSourceId',
+  'letterBreakSourceId',
+  'letterBreakTreatmentId',
   'glyphTreatmentId',
   'scrapeTreatmentId',
   'scrapeFragment',

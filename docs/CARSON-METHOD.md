@@ -58,7 +58,7 @@ Gaps, in order of value:
 
 Documented: the Bryan Ferry interview set entirely in Zapf Dingbats, with a legible reprint at the back *(sourced — [Ray Gun](https://en.wikipedia.org/wiki/Ray_Gun_(magazine)), [Eye](https://eyemagazine.com/review/article/who-cares-if-you-read))*; lines of type that "bashed into each other", light-on-dark and dark-on-dark, stories read across the gutter, inconsistent mastheads ("rAY GUn, RAYGUN") *(sourced — [Joe Clark](https://joeclark.org/design/davidcarson.html))*; irregular columns pushing off the page *(sourced — EBSCO)*. Extreme tracking, negative leading, type cut into strips and giant cropped letters are **inferred** from the work.
 
-Already in the app: glyph break, type strips, slice, misprint, stretch/skew, negative leading, rotated columns. Gaps: **letter break into bars** (a glyph split into its strokes and pulled apart, like the "h" and "y" in the reference poster), **per-letter case/font mixing**, **dingbat swap** that keeps the real text and an optional legible reprint.
+Already in the app: glyph break, type strips, slice, misprint, stretch/skew, negative leading, rotated columns, and **Letter break** (Instruments → Type, or ⌘K): each glyph is cut where its ink density jumps — a stem's edge where the arch leaves it, the top of a bowl — so an "h" comes apart as stem | arch / leg. Pieces slide along the cut that freed them, cuts leave a white kerf, some pieces go missing. Pieces stay vector, the text stays editable, and a woven word stays woven (`src/lib/letterBreak.ts`, `src/lib/letterBreakTreatment.ts`). Gaps: **per-letter case/font mixing**, **dingbat swap** that keeps the real text and an optional legible reprint.
 
 ## 5. Colour
 

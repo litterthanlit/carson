@@ -63,7 +63,9 @@ import {
   addTreatment,
   captureTransformBaseline,
   patchTransformBaseline,
+  readTransformBaseline,
   readTreatments,
+  updateTreatment,
   writeTreatments,
   type Treatment,
 } from './lib/treatments'
@@ -172,6 +174,8 @@ import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, 
 import { omitDecayMarkFragmentsFromCanvasJSON } from './lib/decayMarksTreatment'
 import { misprintParamsFromGeneration, omitMisprintFragmentsFromCanvasJSON } from './lib/misprintTreatment'
 import { omitTypeStripFragmentsFromCanvasJSON } from './lib/typeStripsTreatment'
+import { isLetterBreakStale, letterBreakSourceIdOf, omitLetterBreakPiecesFromCanvasJSON } from './lib/letterBreakTreatment'
+import { LETTER_BREAK_DEFAULTS } from './lib/letterBreak'
 import { PRESS_CHECK_DEFAULTS, pressCheckParamsToRecord } from './lib/pressCheck'
 import { omitPressCheckFragmentsFromCanvasJSON, rebakePressCheckTreatments } from './lib/pressCheckTreatment'
 import { getInstrument, instrumentUsesTension, resolveInstrumentParams, type InstrumentId } from './lib/instruments'
@@ -734,6 +738,28 @@ function App() {
     installDynamicBackstore(canvas, () => backstoreScaleRef.current)
     // Dev-only handle for debugging and browser-driven verification.
     if (import.meta.env.DEV) (window as unknown as { __carsonCanvas?: Canvas }).__carsonCanvas = canvas
+
+    // A broken word re-cuts itself after a drag, an edit or an undo moves its source.
+    let recutting = false
+    canvas.on('after:render', () => {
+      if (recutting || (canvas as unknown as { _currentTransform?: unknown })._currentTransform) return
+      const stale = canvas.getObjects().find(isLetterBreakStale)
+      if (!stale) return
+      // The user moved it: that pose is the new resting place, unless Scatter owns the pose.
+      if (!readTreatments(stale).some((item) => item.type === 'scatter' && item.enabled)) {
+        patchTransformBaseline(stale, {
+          left: stale.left ?? 0,
+          top: stale.top ?? 0,
+          angle: stale.angle ?? 0,
+          scaleX: stale.scaleX ?? 1,
+          scaleY: stale.scaleY ?? 1,
+        })
+      }
+      recutting = true
+      void refreshTreatmentStackRef.current(stale).finally(() => {
+        recutting = false
+      })
+    })
     canvasRef.current = canvas
     registerCanvasEvents(canvas)
     detailOverlayRef.current = installDetailOverlay(canvas, visibleDetailViewport)
@@ -1519,7 +1545,7 @@ function App() {
     const canvas = canvasRef.current
     if (!canvas) return {}
     return omitPressCheckFragmentsFromCanvasJSON(
-      omitTypeStripFragmentsFromCanvasJSON(
+      omitLetterBreakPiecesFromCanvasJSON(omitTypeStripFragmentsFromCanvasJSON(
         omitMisprintFragmentsFromCanvasJSON(
           omitDecayMarkFragmentsFromCanvasJSON(
             omitCopyMachineCompanionsFromCanvasJSON(
@@ -1527,7 +1553,7 @@ function App() {
             ),
           ),
         ),
-      ),
+      )),
     )
   }
 
@@ -2087,7 +2113,12 @@ function App() {
     }
     // Leave the selection first so every layer reports absolute coordinates.
     canvas.discardActiveObject()
-    const objects = picked.filter((object) => !object.group)
+    // A broken word weaves as its source; its pieces follow on re-render.
+    const sourceFor = (object: FabricObject) => {
+      const sourceId = letterBreakSourceIdOf(object)
+      return sourceId ? (findObjectById(sourceId) ?? object) : object
+    }
+    const objects = [...new Set(picked.map(sourceFor))].filter((object) => !object.group)
     const thread = pickWeaveThread(objects)
     if (!thread) return
     const threadOutline = layerOutline(thread)
@@ -2113,6 +2144,9 @@ function App() {
     const stack = canvas.getObjects()
     const highest = Math.max(...crossings.map((crossing) => stack.indexOf(crossing.object)))
     if (stack.indexOf(thread) < highest) canvas.moveObjectTo(thread, highest)
+    if (readTreatments(thread).some((item) => item.type === 'letter-break' && item.enabled)) {
+      await refreshTreatmentStack(thread)
+    }
     invalidateLayerThumbnail(String(readObjectProp(thread, 'id') ?? ''))
     canvas.setActiveObject(thread)
     canvas.requestRenderAll()
@@ -2130,6 +2164,9 @@ function App() {
     const before = captureObjectPatch(object)
     writeLayerMask(object, removeWeaveFromMask(mask))
     await applyLayerMask(object)
+    if (readTreatments(object).some((item) => item.type === 'letter-break' && item.enabled)) {
+      await refreshTreatmentStack(object)
+    }
     canvas.requestRenderAll()
     invalidateLayerThumbnail(objectId)
     commitObjectPatchHistoryRef.current(objectId, 'Removed weave', before, captureObjectPatch(object))
@@ -4453,6 +4490,25 @@ function App() {
     })
   }
 
+  /** Cut each letter into its strokes and pull them apart. Run again for a new break. */
+  function letterBreakSelected(seed = newSeed()) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type !== 'textbox') {
+      setStatus('Select a text layer to break its letters')
+      return
+    }
+    const existing = readTreatments(object).find((item) => item.type === 'letter-break')
+    if (!readTransformBaseline(object)) captureTransformBaseline(object)
+    if (existing) updateTreatment(object, existing.id, { seed })
+    else addTreatment(object, 'letter-break', { ...LETTER_BREAK_DEFAULTS }, seed)
+    void refreshTreatmentStack(object).then(() => {
+      setInspectorTab('treatments')
+      commitHistory(`Broke letters #${seed}`)
+      setStatus('Broke the letters into their strokes — break again for a new cut')
+    })
+  }
+
   async function cloneTypeAsTexture() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -5317,6 +5373,14 @@ function App() {
       disabled: !selected,
       run: () => void weaveSelection(),
     },
+    {
+      id: 'letter-break',
+      label: 'Letter break',
+      keywords: ['break', 'letters', 'strokes', 'cut', 'split', 'type', 'fragment', 'scalpel'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => letterBreakSelected(),
+    },
     { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => void unweaveSelected() },
     {
       id: 'photograph-collage',
@@ -5623,6 +5687,7 @@ function App() {
             onTearCollage={() => void tearCollageSelected()}
             onAddCropMarks={addCropMarks}
             onBreakSelectedType={() => breakSelectedType()}
+            onLetterBreak={() => letterBreakSelected()}
             onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
             onApplyXerox={() => void applyXeroxToSelected()}
             onApplyCopyMachine={() => void applyCopyMachineToSelected()}

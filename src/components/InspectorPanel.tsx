@@ -38,6 +38,7 @@ import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
 import { hasWeave } from '../lib/weave'
 import { FOUND_PAPERS, type FoundPaperKind } from '../lib/foundPaper'
+import { LETTER_BREAK_DEFAULTS, MAX_BREAK_DEPTH } from '../lib/letterBreak'
 import { COPY_MACHINE_DEFAULTS, MAX_COPY_GENERATIONS } from '../lib/copyMachine'
 import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
@@ -822,6 +823,63 @@ export function InspectorPanel({
                           min={0}
                           max={24}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { ghostOffset: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                      </div>
+                    ) : treatment.type === 'letter-break' ? (
+                      <div className="treatment-params nested">
+                        <Slider
+                          label="Letters"
+                          value={treatment.params.letters ?? LETTER_BREAK_DEFAULTS.letters}
+                          defaultValue={LETTER_BREAK_DEFAULTS.letters}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { letters: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Cuts"
+                          value={treatment.params.depth ?? LETTER_BREAK_DEFAULTS.depth}
+                          defaultValue={LETTER_BREAK_DEFAULTS.depth}
+                          min={1}
+                          max={MAX_BREAK_DEPTH}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { depth: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Gap"
+                          value={treatment.params.gap ?? LETTER_BREAK_DEFAULTS.gap}
+                          defaultValue={LETTER_BREAK_DEFAULTS.gap}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { gap: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Slide"
+                          value={treatment.params.shift ?? LETTER_BREAK_DEFAULTS.shift}
+                          defaultValue={LETTER_BREAK_DEFAULTS.shift}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { shift: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Missing"
+                          value={treatment.params.drop ?? LETTER_BREAK_DEFAULTS.drop}
+                          defaultValue={LETTER_BREAK_DEFAULTS.drop}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { drop: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Across ↔ along"
+                          value={treatment.params.axis ?? LETTER_BREAK_DEFAULTS.axis}
+                          defaultValue={LETTER_BREAK_DEFAULTS.axis}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { axis: value })}
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                       </div>

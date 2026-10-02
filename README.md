@@ -17,6 +17,7 @@ Open the local URL Vite prints.
 - Move, resize, rotate, duplicate, delete, and reorder layers
 - Slice selected layers into strips or columns
 - Scatter selected layers for controlled layout accidents
+- Letter break: cut each glyph into its strokes and pull them apart — vector, editable, weave-aware
 - Weave a word through collage scraps — over one, under the next, cut along each scrap's edge
 - Tear the edges of any layer so a scan becomes a pasted paper scrap
 - Found paper: receipts, envelopes, carbon invoices, kraft, newsprint, tickets, tape — pasted already torn

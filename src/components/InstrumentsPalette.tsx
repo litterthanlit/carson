@@ -69,6 +69,7 @@ export type InstrumentsPaletteProps = {
   onTearCollage: () => void
   onAddCropMarks: () => void
   onBreakSelectedType: () => void
+  onLetterBreak: () => void
   onCloneTypeAsTexture: () => void
   onApplyXerox: () => void
   onApplyCopyMachine: () => void
@@ -137,6 +138,7 @@ export function InstrumentsPalette({
   onTearCollage,
   onAddCropMarks,
   onBreakSelectedType,
+  onLetterBreak,
   onCloneTypeAsTexture,
   onApplyXerox,
   onApplyCopyMachine,
@@ -309,6 +311,9 @@ export function InstrumentsPalette({
           </button>
           <button type="button" title="Break the selected text into loose letters" onClick={onBreakSelectedType} disabled={!selectedIsText}>
             <Spline size={16} /> Break letters <ScopeSel />
+          </button>
+          <button type="button" title="Cut each letter into its strokes and pull them apart" onClick={onLetterBreak} disabled={!selectedIsText}>
+            <Scissors size={16} /> Letter break <ScopeSel />
           </button>
           <button type="button" title="Bury a ghost copy of the selected text" onClick={onCloneTypeAsTexture} disabled={!selectedIsText}>
             <Layers size={16} /> Bury type <ScopeSel />

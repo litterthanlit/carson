@@ -88,6 +88,14 @@ import {
   renderTypeStripsTreatment,
   type TypeStripFragmentTagger,
 } from './typeStripsTreatment'
+import {
+  LETTER_BREAK_SOURCE_ID_KEY,
+  LETTER_BREAK_TREATMENT_ID_KEY,
+  removeLetterBreakPieces,
+  removeLetterBreakPiecesForSource,
+  renderLetterBreakTreatment,
+  type LetterBreakTagger,
+} from './letterBreakTreatment'
 import { scaleTreatmentParams } from './instruments'
 
 export type TreatmentType =
@@ -102,6 +110,7 @@ export type TreatmentType =
   | 'tear'
   | 'bad-crop'
   | 'glyph-break'
+  | 'letter-break'
   | 'scrape'
   | 'press-check'
   | 'copy-machine'
@@ -133,11 +142,12 @@ const ARTIFACT_TYPES = new Set<TreatmentType>([
   'tear',
   'bad-crop',
   'glyph-break',
+  'letter-break',
   'decay-marks',
   'misprint',
   'type-strips',
 ])
-const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'type-strips'])
+const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'letter-break', 'type-strips'])
 
 const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
   slice: SLICE_SOURCE_ID_KEY,
@@ -145,6 +155,7 @@ const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
   tear: TEAR_SOURCE_ID_KEY,
   'bad-crop': BAD_CROP_SOURCE_ID_KEY,
   'glyph-break': GLYPH_SOURCE_ID_KEY,
+  'letter-break': LETTER_BREAK_SOURCE_ID_KEY,
   'decay-marks': DECAY_MARK_SOURCE_ID_KEY,
   misprint: MISPRINT_SOURCE_ID_KEY,
   'type-strips': TYPE_STRIP_SOURCE_ID_KEY,
@@ -156,6 +167,7 @@ const ARTIFACT_TREATMENT_KEYS: Partial<Record<TreatmentType, string>> = {
   tear: TEAR_TREATMENT_ID_KEY,
   'bad-crop': BAD_CROP_TREATMENT_ID_KEY,
   'glyph-break': GLYPH_TREATMENT_ID_KEY,
+  'letter-break': LETTER_BREAK_TREATMENT_ID_KEY,
   'decay-marks': DECAY_MARK_TREATMENT_ID_KEY,
   misprint: MISPRINT_TREATMENT_ID_KEY,
   'type-strips': TYPE_STRIP_TREATMENT_ID_KEY,
@@ -199,7 +211,7 @@ export function captureTransformBaseline(object: FabricObject): TransformBaselin
 /** Rewrite pose on an existing baseline so treatments re-apply from the new composition. */
 export function patchTransformBaseline(
   object: FabricObject,
-  pose: Pick<TransformBaseline, 'left' | 'top' | 'angle'>,
+  pose: Pick<TransformBaseline, 'left' | 'top' | 'angle'> & Partial<Pick<TransformBaseline, 'scaleX' | 'scaleY'>>,
 ): TransformBaseline | null {
   const current = readTransformBaseline(object)
   if (!current) return null
@@ -208,6 +220,8 @@ export function patchTransformBaseline(
     left: pose.left,
     top: pose.top,
     angle: pose.angle,
+    scaleX: pose.scaleX ?? current.scaleX,
+    scaleY: pose.scaleY ?? current.scaleY,
   }
   object.set({ transformBaseline: baseline } as Partial<FabricObject>)
   return baseline
@@ -296,6 +310,8 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Bad crop·${sliceDirectionFromParams(treatment.params) === 'vertical' ? 'V' : 'H'}`
     case 'glyph-break':
       return `Glyphs·${treatment.params.intensity ?? 70}`
+    case 'letter-break':
+      return `Letter break·#${treatment.seed}`
     case 'scrape':
       return `Scrape·${treatment.params.count ?? 7}`
     case 'press-check':
@@ -449,6 +465,7 @@ function removeAllArtifactsForSource(canvas: Canvas, sourceId: string) {
   removeTearFragmentsForSource(canvas, sourceId)
   removeBadCropFragmentsForSource(canvas, sourceId)
   removeGlyphFragmentsForSource(canvas, sourceId)
+  removeLetterBreakPiecesForSource(canvas, sourceId)
   removeDecayMarkFragmentsForSource(canvas, sourceId)
   removeMisprintFragmentsForSource(canvas, sourceId)
   removeTypeStripFragmentsForSource(canvas, sourceId)
@@ -460,6 +477,7 @@ export type ArtifactFragmentTaggers = {
   tear: TearFragmentTagger
   badCrop: BadCropFragmentTagger
   glyph: GlyphFragmentTagger
+  letterBreak: LetterBreakTagger
   decayMarks: DecayMarkFragmentTagger
   misprint: MisprintFragmentTagger
   typeStrips: TypeStripFragmentTagger
@@ -500,6 +518,10 @@ export async function renderTreatmentStackOnCanvas(
     if (treatment.enabled) renderGlyphBreakTreatment(canvas, object, treatment, taggers.glyph)
     else removeGlyphFragments(canvas, treatment.id)
   }
+  for (const treatment of treatments.filter((item) => item.type === 'letter-break')) {
+    if (treatment.enabled) renderLetterBreakTreatment(canvas, object, treatment, taggers.letterBreak)
+    else removeLetterBreakPieces(canvas, treatment.id)
+  }
   for (const treatment of treatments.filter((item) => item.type === 'decay-marks')) {
     if (treatment.enabled) renderDecayMarksTreatment(canvas, object, treatment, taggers.decayMarks, tensionScale)
     else removeDecayMarkFragments(canvas, treatment.id)
@@ -519,7 +541,8 @@ export async function renderTreatmentStackOnCanvas(
   } else {
     const copySourceId = String((object as unknown as Record<string, unknown>).id ?? '')
     removeCopyMachineCompanions(canvas, copySourceId)
-    restoreCopyMachineSource(object)
+    // Another artifact treatment (slice, letter break, …) may be hiding the source on purpose.
+    if (!enabledArtifacts) restoreCopyMachineSource(object)
   }
 
   if (!enabledArtifacts) {
