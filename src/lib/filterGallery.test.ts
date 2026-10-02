@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   FILTER_CATEGORIES,
   FILTER_PRESETS,
+  formatFilterParam,
   isPresetApplicable,
   mergePresetParams,
   presetById,
@@ -69,5 +70,16 @@ describe('filterGallery', () => {
     expect(motion?.fxKind).toBe('motion-blur')
     expect(motion?.paramDefs.map((param) => param.key)).toEqual(['distance', 'angle'])
     expect(isPresetApplicable(motion!, false)).toBe(true)
+  })
+
+  it('formats params by unit, or by name for discrete options', () => {
+    expect(formatFilterParam({ key: 'angle', label: 'Angle', min: 0, max: 360, format: 'degrees' }, 44.6)).toBe('45°')
+    expect(formatFilterParam({ key: 'amount', label: 'Amount', min: 0, max: 100, format: 'percent' }, 30)).toBe('30%')
+    const inks = { key: 'inks', label: 'Inks', min: 0, max: 2, labels: ['Pink + Blue', 'Black + Red', 'Teal + Orange'] }
+    expect(formatFilterParam(inks, 0)).toBe('Pink + Blue')
+    expect(formatFilterParam(inks, 1.4)).toBe('Black + Red')
+    // Out-of-range values (a stale saved index, a typed number) clamp to the nearest name.
+    expect(formatFilterParam(inks, -3)).toBe('Pink + Blue')
+    expect(formatFilterParam(inks, 9)).toBe('Teal + Orange')
   })
 })

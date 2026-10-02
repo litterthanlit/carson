@@ -22,6 +22,8 @@ export type FilterParamDef = {
   min: number
   max: number
   format?: FilterParamFormat
+  /** Names for a discrete param such as a palette index: value `i` reads as `labels[i]`. */
+  labels?: readonly string[]
 }
 
 export type FilterPreset = {
@@ -367,6 +369,7 @@ export function defaultsForFx(fxKind: string | undefined): Record<string, number
 
 export function formatFilterParam(param: FilterParamDef, value: number): string {
   const rounded = Math.round(value)
+  if (param.labels) return param.labels[Math.min(param.labels.length - 1, Math.max(0, rounded))] ?? String(rounded)
   if (param.format === 'degrees') return `${rounded}°`
   if (param.format === 'percent') return `${rounded}%`
   return String(rounded)
