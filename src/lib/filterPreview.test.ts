@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
+import { config, type FabricObject } from 'fabric'
 import { presetById } from './filterGallery'
 import {
   SNAPSHOT_MULTIPLIER,
+  clearFilterPreviewCache,
   debounce,
   previewBlendMode,
   previewMultiplier,
   previewPixelRatio,
+  renderOriginalPreview,
   scalePreviewParams,
 } from './filterPreview'
+import { snapshotMultiplier } from './rasterizeLayer'
 
 describe('filterPreview sizing', () => {
   it('renders the long side at the target size, within bounds', () => {
@@ -24,6 +28,16 @@ describe('filterPreview sizing', () => {
     // An image shown at 25% holds 4 element pixels per poster unit.
     expect(previewPixelRatio(0.5, true, 0.25)).toBe(0.125)
     expect(previewPixelRatio(0.5, true, -0.25)).toBe(0.125)
+    // A layer too big for one WebGL tile is snapshotted smaller, and the preview follows.
+    expect(previewPixelRatio(0.2, false, 1, 1)).toBe(0.2)
+  })
+
+  it('snapshots big layers small enough for one WebGL filter tile', () => {
+    expect(snapshotMultiplier(800, 300)).toBe(SNAPSHOT_MULTIPLIER)
+    const big = snapshotMultiplier(3860, 2070)
+    expect(big).toBeLessThan(SNAPSHOT_MULTIPLIER)
+    expect(3860 * big).toBeLessThanOrEqual(config.textureSize)
+    expect(snapshotMultiplier(2070, 3860)).toBe(big)
   })
 
   it('scales only pixel-measured params', () => {
@@ -32,6 +46,19 @@ describe('filterPreview sizing', () => {
     const gaussian = { radius: 18 }
     expect(scalePreviewParams('gaussian-blur', gaussian, 0.25)).toBe(gaussian)
     expect(scalePreviewParams(undefined, gaussian, 0.25)).toBe(gaussian)
+    // Print-process filters: sizes scale; angles, palettes and percentages do not.
+    expect(scalePreviewParams('halftone-dots', { cell: 28, angle: 45, contrast: 25 }, 0.25)).toEqual({
+      cell: 7,
+      angle: 45,
+      contrast: 25,
+    })
+    expect(scalePreviewParams('risograph', { inks: 3, offset: 20, grain: 35 }, 0.5)).toEqual({
+      inks: 3,
+      offset: 10,
+      grain: 35,
+    })
+    const duotone = { palette: 1, contrast: 30 }
+    expect(scalePreviewParams('duotone', duotone, 0.25)).toBe(duotone)
   })
 
   it('multiplies print treatments over the preview paper', () => {
@@ -54,5 +81,41 @@ describe('debounce', () => {
     vi.advanceTimersByTime(200)
     expect(fn).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
+  })
+})
+
+describe('renderOriginalPreview', () => {
+  it('returns the shared source raster instead of rasterizing again', async () => {
+    // Node has no Image; a stand-in that "loads" as soon as it gets a src is enough here.
+    class FakeImage {
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      private url = ''
+      get src() {
+        return this.url
+      }
+      set src(value: string) {
+        this.url = value
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+    vi.stubGlobal('Image', FakeImage)
+    clearFilterPreviewCache()
+    const toDataURL = vi.fn(() => 'data:image/png;base64,ORIGINAL')
+    const layer = {
+      id: 'layer-1',
+      type: 'textbox',
+      scaleX: 1,
+      getBoundingRect: () => ({ left: 0, top: 0, width: 1280, height: 320 }),
+      toDataURL,
+    } as unknown as FabricObject
+
+    await expect(renderOriginalPreview(layer, 640)).resolves.toBe('data:image/png;base64,ORIGINAL')
+    await expect(renderOriginalPreview(layer, 640)).resolves.toBe('data:image/png;base64,ORIGINAL')
+    expect(toDataURL).toHaveBeenCalledTimes(1)
+    expect(toDataURL).toHaveBeenCalledWith({ format: 'png', multiplier: 0.5 })
+
+    clearFilterPreviewCache()
+    vi.unstubAllGlobals()
   })
 })

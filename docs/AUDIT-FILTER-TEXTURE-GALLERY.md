@@ -1,6 +1,6 @@
 # Carson — Filter & Texture Gallery Audit
 
-*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3, H1–H7, A1–A7, I1, I2 and L6 are fixed in follow-up commits on `claude/filter-texture-gallery-audit-p0scb6` (see §1a, §2a and §3a). Everything else is still open.*
+*Source read of `main` @ `9df12e4`, plus a Playwright drive of both galleries in Chromium (1440×960) on a fresh clone, using the wreck poster with `Oversized headline` selected. Scope: `FilterGalleryModal.tsx`, `TextureGalleryModal.tsx`, `lib/filterGallery.ts`, `lib/filterPreview.ts`, `lib/textureGallery.ts`, `textureCatalog.generated.ts`, `scripts/import-textures.py`, the App wiring (`App.tsx:3898–3939`, `5258–5273`) and the `.filter-gallery-*` CSS. C1–C3, H1–H7, A1–A7, I1–I3, L5 and L6 are fixed in follow-up commits on `claude/filter-texture-gallery-audit-p0scb6` (see §1a, §2a and §3a). Everything else is still open.*
 
 ---
 
@@ -101,8 +101,12 @@ The native dialog lets Tab reach the browser's own controls after the last eleme
 
 `.command-backdrop` is still used by the Command palette, Comps and the other dialogs. Moving them onto `GalleryDialog` is a mechanical follow-up.
 
+| # | Fix | Verification |
+|---|---|---|
 | I1 | `lib/galleryMemory.ts` stores each gallery's last state in `localStorage` (`carson.filterGallery.v1`, `carson.textureGallery.v1`). If storage is blocked, it keeps a copy for the session instead. The Filter Gallery reopens on the last category, filter and slider values. The Texture Gallery reopens on the last texture with the blend, opacity and fit chosen for it. Every field is validated on read. Params are clamped to their slider range. A filter that no longer fits the layer, such as Cold wash on type, falls back to the first fitting filter in its category. A removed texture falls back to its category's first texture. Choosing a *different* texture still applies that texture's own defaults. Textures whose full-size file failed to load are remembered for the session. The "pick the first filter or texture" logic moved from a mount effect into the category click, so it no longer overwrites the restored choice. | Unit tests for validation, fallbacks, round-trip, blocked storage and corrupt JSON. Component tests for reopening both galleries. Drive: Motion blur with Distance 41 (default 36), and Paper Texture 191 with Overlay and "Place as layer", both survive close and reopen *and* a full page reload. |
 | I2 | The Texture Gallery preview is a live composite (`components/TexturePreview.tsx`, `lib/texturePreview.ts`). When the gallery opens, App snapshots the poster (900 px on the long side). The preview draws the texture over it using the blend as a canvas composite operation, the opacity as global alpha, and the placement from `texturePlacementTransform()`. `placeTextureFromGallery` now uses that same function, so the preview and the canvas can't drift apart. The thumbnail shows at once and the full-size file replaces it when it loads. If the full file is missing, the composite still renders from the thumbnail, with a notice over it instead of a blank pane. New **Monochrome** switch, on by default and remembered: placing applies a live `Grayscale({ mode: 'luminosity' })` filter. It isn't baked into the pixels, so the layer keeps its short URL source and can be undone. The preview desaturates with the same weights, and grid thumbnails turn grey while the switch is on. | Drive with temporary full-size files: preview pixels vs. the placed poster differ by **1.8/255** mean \|ΔRGB\|, while placing the texture changed the poster by 82/255. With the full file removed, the composite renders from the thumbnail and Place is disabled. Unit tests for the placement transform and luminosity weights. Component tests for the Monochrome default, persistence and the preview's accessible description. |
+| I3 | **Before/after:** an **Original** pill sits in the top-right corner of the Filter Gallery preview. Pressing and holding it with a mouse, pen or finger shows the layer without the filter, and letting go brings the filtered preview back. It captures the pointer and sets `touch-action: none`, so a drag off the pill or a long press on touch doesn't leave it stuck or open the callout menu. It is a real `<button>` with `aria-pressed`: Space, Enter or a screen reader's activate toggles it (a click with `detail` 0), repeated Enter keydowns are ignored, and moving focus away turns it off. A white "Original" badge shows in the top-left while it is on, and the preview's `alt` changes to "Original layer, without the filter". The image comes from the new `renderOriginalPreview(source, maxSize)` in `lib/filterPreview.ts`, which returns the same `sourceRaster()` PNG that every preview at that size is built from. No second rasterization, and before and after line up exactly. It is fetched when the gallery opens so the swap is instant. **Slider reset:** `Slider` already reset to `defaultValue` on double-click, and the gallery already passed each preset's default, so nothing changed there. It is now tested. | Component tests: holding the pill shows the original image and badge, and releasing (including the click that follows) restores the filtered preview; Enter and Space toggle `aria-pressed`, and Tab away turns it off; double-clicking the Radius bar after dragging it to 64 resets it to 18. Unit test: `renderOriginalPreview` returns the shared raster and calls `toDataURL` once for two requests. Drive: holding Original over Heavy gaussian showed the sharp headline with the badge, and releasing brought the blur back; Enter and Space toggled it; Radius 60 went back to 48 on double-click. |
+| L5 | **Taxonomy:** Grain moved from Adjust to Look, and Newsprint (`halftone`) moved from Stylize to Print. Newsprint is listed after the photocopy generations, so Print still opens on Light copy; Grain comes last in Look, so Look still opens on Sepia. Remembered state keeps working because `resolveFilterGalleryState` takes the category from the preset. **Layout:** the two-column grid of 10 category buttons (five rows) is now a single row of 24 px pill chips in a shared `components/CategoryChips.tsx`, used by both galleries. It scrolls sideways with a hidden scrollbar and `scroll-snap`, and it fades an edge only while more chips sit beyond it. On open it jumps to the active chip, since a remembered category can be off-screen. On later changes it glides there, unless `prefers-reduced-motion` is set. The scroll runs in a passive effect, after `showModal()` has given the bar a layout. Chips are plain buttons in Tab order, with visible labels and `aria-pressed`. | Unit tests: Grain and Newsprint are in their new categories; state saved under the old categories reopens in the new ones. Component tests: the chip order, `aria-pressed` on Look, the "Look filters" and "Print filters" listboxes, Print opening on Light copy, and reopening on Grain with Amount 75. Drive at 1440, 820 and 390 px wide: chips sit on one row (bar 28 px, chips 24 px) in both galleries. Reopening on Wash scrolls the bar to it (scrollLeft 362 at 1440 px, 298 at 390 px), with a left fade and Wash fully visible. |
 
 ---
 
@@ -142,3 +146,53 @@ The native dialog lets Tab reach the browser's own controls after the last eleme
 - **The misleading bits:** filter previews are made from a small, low-res copy of your layer. Some effects (motion blur) look much stronger in the preview than on the poster, see-through areas show as white, and switching quickly can briefly show the wrong filter.
 - **The polish:** screen-reader and keyboard users can't get around the grid well, most textures are called "Print 1"-style names, and the texture grid tiles overlap.
 - **The durable fix:** build one well-behaved "picker window" that every dialog uses, store textures somewhere the app can always reach, and generate previews the same way the real filter runs, just smaller.
+
+---
+
+## 7. Filter expansion
+
+Six print-process filters, plus a Level param on Threshold. Each is a Fabric filter in `lib/printFilters.ts` with a Canvas2D path and a GLSL shader, registered with the class registry so applied treatments rebuild after reload. Pixel-measured params are listed in `PIXEL_PARAMS` (`lib/filterPreview.ts`) so previews scale them. Discrete params, such as an ink pair, are palette indices; `FilterParamDef.labels` names them in the gallery slider, the Inspector and the treatment chip.
+
+| Filter | Category | Params | Presets |
+|---|---|---|---|
+| Halftone dots | Print | Cell size (px), Screen angle (°), Contrast (%) | Halftone dots (28 px, 45°), Coarse screen (64 px, 15°) |
+| Riso | Print | Inks (Fluoro Pink + Blue, Black + Red, Teal + Orange, Black + Yellow, Purple + Fluoro Orange), Misregister (px), Grain (%) | Riso, Riso black + red |
+| Bayer dither | Print | Scale (px), Threshold (%) | Bayer dither (8 px), Chunky dither (18 px) |
+| Duotone | Look | Palette (Black / Paper, Navy / Cream, Red / Paper, Blue / Pink, Green / Lemon), Contrast (%) | Navy duotone, Red duotone |
+| RGB split | Distress | Distance (px), Angle (°) | RGB split (16 px), Channel drift (40 px, 60°) |
+| Scan lines | Distress | Spacing (px), Darkness (%), Jitter (%) | Scan lines (24 px), Torn scan (40 px, heavy jitter) |
+| Threshold | Adjust | Level (%) | Threshold (50) |
+
+How they behave:
+
+- **Ink over paper.** Ink is composed over white, then un-composited. Transparent areas stay clear, and ink that lands past a shape (a riso fringe, an RGB fringe, a dot at a glyph edge) is ink-coloured and opaque only where it covers. White paper appears only under a layer's solid areas, so anti-aliased edges never get a pale rim.
+- **Determinism.** Grain and row jitter hash coordinates; there is no `Math.random()`. Grain cells are relative to the layer, so the 640 px preview and the full-size result share the same pattern.
+- **Small patterns.** Once dots or scan lines are smaller than a couple of pixels, they fade to their mean tone instead of aliasing. Dither fades only below 1.5 px; see the Δ note below.
+- **Threshold compatibility.** Saved Threshold treatments have no level. They, and the new default of 50, build the original `BlackWhite` + `Contrast(0.2)` stack, so saved posters render exactly as before. Any other level moves the same ramp with a `ColorMatrix`.
+
+**Fixed along the way: fx on big layers came back cropped.** Type and shapes were snapshotted at 2×, and Fabric's WebGL backend draws its last pass into a single 4096 px tile. On the wreck poster, `Oversized headline` snapshots to 7720 px, and every fx (Grayscale too) lost everything past x = 4096. `snapshotMultiplier()` (`lib/rasterizeLayer.ts`) now keeps 2× where it fits and otherwise picks the largest multiplier inside `config.textureSize`, and `previewPixelRatio()` uses the same value. Grayscale on the headline went from mean Δ 9.0 to 1.3.
+
+### Verification
+
+Drive: Chromium (SwiftShader WebGL) at 1440×960, wreck poster, `Oversized headline` selected. Each preset was applied from the gallery. The layer was isolated on white and framed so its bounds cover exactly the preview's 640×343 lower-canvas pixels, then compared with the preview. The poster was then reloaded, reopened from Home ("Recover Untitled poster"), and measured again.
+
+| Filter (preset) | Mean \|ΔRGB\| preview vs canvas | After reload |
+|---|---|---|
+| Duotone (Navy duotone) | 1.14 | 1.14, filter `Duotone` rebuilt |
+| Riso | 1.69 | 1.69, `Risograph` |
+| RGB split | 1.71 | 1.71, `RgbSplit` |
+| Threshold (level 50) | 1.38 | — |
+| Chunky dither | 2.53 | 2.53, `BayerDither` |
+| Halftone dots | 2.83 | 2.83, `HalftoneDots` |
+| Scan lines | 2.95 | 2.95, `ScanLines` |
+| Bayer dither | 6.94 | 6.94, `BayerDither` |
+
+Bayer dither is the one result over 4/255. Its 8 px cells are 1.26 px in the preview, and the canvas aliases rather than averages when it downsamples the applied raster, so both show the same 1-bit texture, but a pixel out of phase. Fading the preview to its mean tone instead pushed Δ to 16 and looked less like the canvas.
+
+Timing: preview `applyFilters()` on the 640×343 raster in Chromium (WebGL) takes a median of 3–4 ms for every new filter, at most 23 ms (the first render, which includes compiling the shader). With the 120 ms debounce, a slider step shows its new preview about 220–290 ms after the key press. The Canvas2D fallback on a 640×343 buffer (Node, jsdom), median / max: halftone 20 / 34 ms, riso 28 / 32 ms, RGB split 18 / 22 ms, dither 10 / 13 ms, scan lines 6 / 12 ms, duotone 2 ms.
+
+Undo/redo: applying Halftone dots then RGB split, then Ctrl+Z ×2 and Ctrl+Shift+Z, steps the filter stack `[HalftoneDots, RgbSplit]` → `[HalftoneDots]` → `[]` → `[HalftoneDots]`. No page errors in any run.
+
+Tests: `lib/printFilters.test.ts` (27) covers each CPU path on tiny buffers: known output, alpha, determinism, edge values, and serialization round-trips. `filterGallery`, `filterPreview` and `pixelFilters` tests cover registry coverage, `PIXEL_PARAMS`, palette labels, the Threshold compatibility, and the snapshot cap. Full suite 494/494 ✓, `tsc -b` ✓, `npm run build` ✓, lint clean apart from the existing `usePathEditing.ts` warning.
+
+Thumbnails (144 px) render pixel params at about 1/30 of the applied size, so the pattern filters show as plain tone in the tile grid. That matches how the result looks at that size, and it is the same for Mosaic and Newsprint.

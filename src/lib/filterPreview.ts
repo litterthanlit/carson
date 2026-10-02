@@ -3,6 +3,7 @@ import { getLayerDecayProfile, getPrintScanProfile } from './editorModel'
 import type { FilterPreset } from './filterGallery'
 import { paramsForTreatment } from './filterGallery'
 import type { FxKind } from './pixelFilters'
+import { SNAPSHOT_MULTIPLIER, snapshotMultiplier } from './rasterizeLayer'
 import {
   applyScatterTransform,
   buildTreatmentFilters,
@@ -11,16 +12,20 @@ import {
 } from './treatments'
 
 const PREVIEW_SEED = 42
-/** Type and shapes are snapshotted at this multiplier before fx run (see `rasterizeLayer.ts`). */
-export const SNAPSHOT_MULTIPLIER = 2
+export { SNAPSHOT_MULTIPLIER }
 const MIN_MULTIPLIER = 0.02
 const MAX_MULTIPLIER = 2
 
 /** Fx params measured in raster pixels. Everything else is relative to the layer or unitless. */
-const PIXEL_PARAMS: Partial<Record<FxKind, readonly string[]>> = {
+export const PIXEL_PARAMS: Partial<Record<FxKind, readonly string[]>> = {
   'motion-blur': ['distance'],
   pixelate: ['blocksize'],
   halftone: ['blocksize'],
+  'halftone-dots': ['cell'],
+  risograph: ['offset'],
+  dither: ['scale'],
+  'rgb-split': ['distance'],
+  'scan-lines': ['spacing'],
 }
 
 /** Treatments that composite with multiply on the canvas; the preview image should too. */
@@ -52,10 +57,16 @@ export function previewMultiplier(boundsWidth: number, boundsHeight: number, tar
 
 /**
  * Preview pixels per applied-filter pixel. Image layers filter their own element, so one poster
- * unit holds `1 / scaleX` element pixels; everything else is snapshotted at SNAPSHOT_MULTIPLIER.
+ * unit holds `1 / scaleX` element pixels; everything else is snapshotted at `snapshotScale`
+ * (SNAPSHOT_MULTIPLIER, or less for layers too big for one WebGL tile; see `snapshotMultiplier`).
  */
-export function previewPixelRatio(multiplier: number, isImage: boolean, scaleX: number) {
-  const appliedPerUnit = isImage ? 1 / Math.max(Math.abs(scaleX), 1e-6) : SNAPSHOT_MULTIPLIER
+export function previewPixelRatio(
+  multiplier: number,
+  isImage: boolean,
+  scaleX: number,
+  snapshotScale = SNAPSHOT_MULTIPLIER,
+) {
+  const appliedPerUnit = isImage ? 1 / Math.max(Math.abs(scaleX), 1e-6) : snapshotScale
   return multiplier / appliedPerUnit
 }
 
@@ -99,7 +110,12 @@ function sourceRaster(source: FabricObject, targetPx: number): Promise<SourceRas
   if (cached) return cached
   const bounds = source.getBoundingRect()
   const multiplier = previewMultiplier(bounds.width, bounds.height, targetPx)
-  const pixelRatio = previewPixelRatio(multiplier, source.type === 'image', source.scaleX ?? 1)
+  const pixelRatio = previewPixelRatio(
+    multiplier,
+    source.type === 'image',
+    source.scaleX ?? 1,
+    snapshotMultiplier(bounds.width, bounds.height),
+  )
   const pending = loadElement(source.toDataURL({ format: 'png', multiplier })).then((element) => ({
     element,
     multiplier,
@@ -108,6 +124,14 @@ function sourceRaster(source: FabricObject, targetPx: number): Promise<SourceRas
   pending.catch(() => sourceCache.delete(key))
   sourceCache.set(key, pending)
   return pending
+}
+
+/**
+ * The layer with no filter, as a PNG data URL, for the before/after toggle. It is the raster every
+ * preset preview at `maxSize` is built from, so it costs nothing extra and lines up exactly.
+ */
+export async function renderOriginalPreview(source: FabricObject, maxSize = 320): Promise<string> {
+  return (await sourceRaster(source, maxSize)).element.src
 }
 
 function syntheticTreatment(

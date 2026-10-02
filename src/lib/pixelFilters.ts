@@ -1,9 +1,21 @@
 /**
  * Photoshop-style pixel filters used by the Filter Gallery.
  * Custom directional blurs implement both Canvas2D and WebGL so they run
- * on Fabric's default WebGL backend as well as in jsdom tests.
+ * on Fabric's default WebGL backend as well as in jsdom tests. The print-process
+ * filters (halftone dots, riso, duotone, dither, RGB split, scan lines) live in
+ * `printFilters.ts` and follow the same pattern.
  */
 import { classRegistry, filters, isWebGLPipelineState } from 'fabric'
+import {
+  BayerDither,
+  Duotone,
+  duotonePalette,
+  HalftoneDots,
+  Risograph,
+  risoInks,
+  RgbSplit,
+  ScanLines,
+} from './printFilters'
 
 type ImageBuffer = {
   data: Uint8ClampedArray
@@ -26,6 +38,11 @@ export const FX_KINDS = [
   'posterize',
   'pixelate',
   'halftone',
+  'halftone-dots',
+  'risograph',
+  'dither',
+  'rgb-split',
+  'scan-lines',
   'watercolor',
   'brightness',
   'contrast',
@@ -42,6 +59,7 @@ export const FX_KINDS = [
   'technicolor',
   'brownie',
   'grain',
+  'duotone',
 ] as const
 
 export type FxKind = (typeof FX_KINDS)[number]
@@ -59,6 +77,11 @@ export const FX_LABELS: Record<FxKind, string> = {
   posterize: 'Posterize',
   pixelate: 'Pixelate',
   halftone: 'Halftone',
+  'halftone-dots': 'Dots',
+  risograph: 'Riso',
+  dither: 'Dither',
+  'rgb-split': 'RGB split',
+  'scan-lines': 'Scan lines',
   watercolor: 'Wash paint',
   brightness: 'Brightness',
   contrast: 'Contrast',
@@ -75,6 +98,7 @@ export const FX_LABELS: Record<FxKind, string> = {
   technicolor: 'Technicolor',
   brownie: 'Brownie',
   grain: 'Grain',
+  duotone: 'Duotone',
 }
 
 export function isFxKind(value: string | undefined): value is FxKind {
@@ -87,6 +111,13 @@ export function fxChipLabel(fxKind: string | undefined, params: Record<string, n
   if (fxKind === 'motion-blur') return `${name}·${Math.round(params.angle ?? 0)}°`
   if (fxKind === 'gaussian-blur') return `${name}·${Math.round(params.radius ?? 18)}`
   if (fxKind === 'radial-blur' || fxKind === 'zoom-blur') return `${name}·${Math.round(params.amount ?? 40)}`
+  if (fxKind === 'risograph') return `${name}·${risoInks(params.inks ?? 0).name}`
+  if (fxKind === 'duotone') return `${name}·${duotonePalette(params.palette ?? 0).name}`
+  if (fxKind === 'halftone-dots') return `${name}·${Math.round(params.cell ?? 28)}`
+  if (fxKind === 'dither') return `${name}·${Math.round(params.scale ?? 8)}`
+  if (fxKind === 'rgb-split') return `${name}·${Math.round(params.distance ?? 16)}`
+  if (fxKind === 'scan-lines') return `${name}·${Math.round(params.spacing ?? 24)}`
+  if (fxKind === 'threshold' && params.level !== undefined) return `${name}·${Math.round(params.level)}`
   if (params.amount !== undefined) return `${name}·${Math.round(params.amount)}`
   if (params.levels !== undefined) return `${name}·${Math.round(params.levels)}`
   return name
@@ -487,6 +518,27 @@ function markAll(list: FabricFilter[]): FabricFilter[] {
   return list.map(markTreatmentFilter)
 }
 
+/** Like clampInt, but keeps fractions: pixel params arrive scaled down for previews. */
+function clampNum(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+/** The level that reproduces the original fixed Threshold, which had no params. */
+export const THRESHOLD_LEGACY_LEVEL = 50
+
+/**
+ * Threshold as a steep ramp on mean RGB, the same shape as Fabric's BlackWhite matrix
+ * (`1.5·(r+g+b) − 1`), with its midpoint moved by `level`. 50 puts it at BlackWhite's own
+ * midpoint (mean 1/3); 0 and 100 push it just past white and black, so the ends clear fully.
+ */
+export function thresholdMatrix(level: number): number[] {
+  const t = clampNum(level, 0, 100) / 50
+  const mid = t <= 1 ? -0.12 + t * (1 / 3 + 0.12) : 1 / 3 + (t - 1) * (1.12 - 1 / 3)
+  const offset = 0.5 - 4.5 * mid
+  return [1.5, 1.5, 1.5, 0, offset, 1.5, 1.5, 1.5, 0, offset, 1.5, 1.5, 1.5, 0, offset, 0, 0, 0, 1, 0]
+}
+
 function unit(value: number, fallback = 0) {
   return Math.max(-1, Math.min(1, (Number.isFinite(value) ? value : fallback) / 100))
 }
@@ -561,6 +613,51 @@ export function buildFxFilters(kind: FxKind, params: Record<string, number>): Fa
         new filters.Contrast({ contrast: 0.42 }),
         new filters.BlackWhite(),
       ])
+    case 'halftone-dots':
+      return markAll([
+        new HalftoneDots({
+          cell: clampNum(params.cell ?? 28, 0.25, 480),
+          angle: clampNum(params.angle ?? 45, 0, 360),
+          contrast: clampNum(params.contrast ?? 25, 0, 100),
+        }),
+      ])
+    case 'risograph':
+      return markAll([
+        new Risograph({
+          inks: clampInt(params.inks ?? 0, 0, 99),
+          offset: clampNum(params.offset ?? 20, 0, 480),
+          grain: clampNum(params.grain ?? 35, 0, 100),
+        }),
+      ])
+    case 'dither':
+      return markAll([
+        new BayerDither({
+          scale: clampNum(params.scale ?? 8, 0.25, 128),
+          threshold: clampNum(params.threshold ?? 50, 0, 100),
+        }),
+      ])
+    case 'rgb-split':
+      return markAll([
+        new RgbSplit({
+          distance: clampNum(params.distance ?? 16, 0, 480),
+          angle: clampNum(params.angle ?? 0, 0, 360),
+        }),
+      ])
+    case 'scan-lines':
+      return markAll([
+        new ScanLines({
+          spacing: clampNum(params.spacing ?? 24, 0.25, 400),
+          darkness: clampNum(params.darkness ?? 55, 0, 100),
+          jitter: clampNum(params.jitter ?? 20, 0, 100),
+        }),
+      ])
+    case 'duotone':
+      return markAll([
+        new Duotone({
+          palette: clampInt(params.palette ?? 0, 0, 99),
+          contrast: clampNum(params.contrast ?? 30, 0, 100),
+        }),
+      ])
     case 'watercolor':
       return markAll([
         new filters.Blur({ blur: 0.12 + clampInt(params.amount ?? 40, 0, 100) / 400 }),
@@ -584,8 +681,17 @@ export function buildFxFilters(kind: FxKind, params: Record<string, number>): Fa
       ])
     case 'invert':
       return markAll([new filters.Invert()])
-    case 'threshold':
-      return markAll([new filters.BlackWhite(), new filters.Contrast({ contrast: 0.2 })])
+    case 'threshold': {
+      // Saved Threshold treatments have no level; they, and the default, keep the original stack.
+      const level = params.level
+      if (level === undefined || Math.round(level) === THRESHOLD_LEGACY_LEVEL) {
+        return markAll([new filters.BlackWhite(), new filters.Contrast({ contrast: 0.2 })])
+      }
+      return markAll([
+        new filters.ColorMatrix({ matrix: thresholdMatrix(level), colorsOnly: false }),
+        new filters.Contrast({ contrast: 0.2 }),
+      ])
+    }
     case 'grayscale':
       return markAll([new filters.Grayscale()])
     case 'sepia':
