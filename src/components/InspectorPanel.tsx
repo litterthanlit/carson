@@ -36,7 +36,10 @@ import { formatCmyk, gamutReadout } from '../lib/cmykPreview'
 import { posterTreatmentLabel } from '../lib/posterTreatments'
 import { treatmentLabel, type Treatment } from '../lib/treatments'
 import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask'
-import { COPY_MACHINE_DEFAULTS } from '../lib/copyMachine'
+import { hasWeave } from '../lib/weave'
+import { FOUND_PAPERS, type FoundPaperKind } from '../lib/foundPaper'
+import { LETTER_BREAK_DEFAULTS, MAX_BREAK_DEPTH } from '../lib/letterBreak'
+import { COPY_MACHINE_DEFAULTS, MAX_COPY_GENERATIONS } from '../lib/copyMachine'
 import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
 import type { Gesture } from '../lib/gestures'
@@ -184,6 +187,10 @@ export type InspectorPanelProps = {
   storedAssets: StoredAsset[]
   documentMeta: DocumentMeta | null
   onInsertAsset: (asset: StoredAsset) => void
+  onInsertFoundPaper: (kind: FoundPaperKind) => void
+  onPhotographCollage: () => void
+  onCrumpleSheet: () => void
+  onAddCropMarks: () => void
   onInsertComponent: (componentId: string) => void
   onSaveSelectionAsComponent: () => void
   canGroupLayers: boolean
@@ -198,6 +205,9 @@ export type InspectorPanelProps = {
   onAlignSelection: (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void
   onDistributeSelection: (mode: 'horizontal' | 'vertical') => void
   onClipSelectionToShape: () => void
+  onWeaveSelection: () => void
+  onUnweaveLayer: () => void
+  onTearEdges: () => void
   gridOverlay: GridOverlay
   onGridOverlayChange: (patch: Partial<GridOverlay>) => void
   onGridTensionChange: (value: number) => void
@@ -368,6 +378,10 @@ export function InspectorPanel({
   storedAssets,
   documentMeta,
   onInsertAsset,
+  onInsertFoundPaper,
+  onPhotographCollage,
+  onCrumpleSheet,
+  onAddCropMarks,
   onInsertComponent,
   onSaveSelectionAsComponent,
   canGroupLayers,
@@ -382,6 +396,9 @@ export function InspectorPanel({
   onAlignSelection,
   onDistributeSelection,
   onClipSelectionToShape,
+  onWeaveSelection,
+  onUnweaveLayer,
+  onTearEdges,
   gridOverlay,
   onGridOverlayChange,
   onGridTensionChange,
@@ -758,6 +775,43 @@ export function InspectorPanel({
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                         <Slider
+                          label="Streaks"
+                          value={treatment.params.streaks ?? COPY_MACHINE_DEFAULTS.streaks}
+                          defaultValue={COPY_MACHINE_DEFAULTS.streaks}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { streaks: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Lid edge"
+                          value={treatment.params.edge ?? COPY_MACHINE_DEFAULTS.edge}
+                          defaultValue={COPY_MACHINE_DEFAULTS.edge}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { edge: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Generations"
+                          value={treatment.params.generations ?? COPY_MACHINE_DEFAULTS.generations}
+                          defaultValue={COPY_MACHINE_DEFAULTS.generations}
+                          min={1}
+                          max={MAX_COPY_GENERATIONS}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { generations: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Copy size"
+                          value={treatment.params.copyScale ?? COPY_MACHINE_DEFAULTS.copyScale}
+                          defaultValue={COPY_MACHINE_DEFAULTS.copyScale}
+                          min={50}
+                          max={200}
+                          format={formatPercent}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { copyScale: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
                           label="Ghost"
                           value={treatment.params.ghost ?? COPY_MACHINE_DEFAULTS.ghost}
                           defaultValue={COPY_MACHINE_DEFAULTS.ghost}
@@ -773,6 +827,63 @@ export function InspectorPanel({
                           min={0}
                           max={24}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { ghostOffset: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                      </div>
+                    ) : treatment.type === 'letter-break' ? (
+                      <div className="treatment-params nested">
+                        <Slider
+                          label="Letters"
+                          value={treatment.params.letters ?? LETTER_BREAK_DEFAULTS.letters}
+                          defaultValue={LETTER_BREAK_DEFAULTS.letters}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { letters: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Cuts"
+                          value={treatment.params.depth ?? LETTER_BREAK_DEFAULTS.depth}
+                          defaultValue={LETTER_BREAK_DEFAULTS.depth}
+                          min={1}
+                          max={MAX_BREAK_DEPTH}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { depth: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Gap"
+                          value={treatment.params.gap ?? LETTER_BREAK_DEFAULTS.gap}
+                          defaultValue={LETTER_BREAK_DEFAULTS.gap}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { gap: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Slide"
+                          value={treatment.params.shift ?? LETTER_BREAK_DEFAULTS.shift}
+                          defaultValue={LETTER_BREAK_DEFAULTS.shift}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { shift: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Missing"
+                          value={treatment.params.drop ?? LETTER_BREAK_DEFAULTS.drop}
+                          defaultValue={LETTER_BREAK_DEFAULTS.drop}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { drop: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Across ↔ along"
+                          value={treatment.params.axis ?? LETTER_BREAK_DEFAULTS.axis}
+                          defaultValue={LETTER_BREAK_DEFAULTS.axis}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { axis: value })}
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                       </div>
@@ -1622,6 +1733,16 @@ export function InspectorPanel({
                     </button>
                   </div>
                   <div className="button-row">
+                    <button type="button" title="Rip this layer's edges like torn paper — again for a new rip" onClick={onTearEdges}>
+                      Tear edges
+                    </button>
+                    {hasWeave(layerMask) ? (
+                      <button type="button" title="Remove the over/under cut from Weave" onClick={onUnweaveLayer}>
+                        Unweave
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="button-row">
                     <button type="button" disabled={!hasMaskContent(layerMask)} onClick={onInvertLayerMask}>
                       Invert
                     </button>
@@ -1729,6 +1850,34 @@ export function InspectorPanel({
         <div className="panel-section">
           <h2>Asset library</h2>
           <p className="hint">Images and components insert onto the canvas. Instruments and Gestures play on the selection.</p>
+          <h3 className="property-kicker">Found paper</h3>
+          <p className="hint">Torn scraps to build a collage from. Click again for a different tear.</p>
+          <div className="preset-row" role="group" aria-label="Found paper">
+            {FOUND_PAPERS.map((paper) => (
+              <button
+                key={paper.kind}
+                type="button"
+                title={`Paste a torn ${paper.label.toLowerCase()}`}
+                onClick={() => onInsertFoundPaper(paper.kind)}
+              >
+                {paper.label}
+              </button>
+            ))}
+          </div>
+          <div className="button-row">
+            <button type="button" title="One light over the board: each scrap casts a shadow by how many sheets it lies on" onClick={onPhotographCollage}>
+              Photograph the collage
+            </button>
+          </div>
+          <h3 className="property-kicker">The sheet</h3>
+          <div className="button-row">
+            <button type="button" title="Fold, ball up and flatten the poster: creases lit from one side" onClick={onCrumpleSheet}>
+              Crumple
+            </button>
+            <button type="button" title="Trim marks and registration targets, as on a proof" onClick={onAddCropMarks}>
+              Crop marks
+            </button>
+          </div>
           {savedInstruments.length > 0 ? (
             <>
               <h3 className="property-kicker">Instruments</h3>
@@ -1976,6 +2125,18 @@ export function InspectorPanel({
             </button>
             <button type="button" onClick={onClipSelectionToShape}>
               Clip to shape
+            </button>
+          </div>
+          <h3>Collage</h3>
+          <p className="hint">
+            Weave threads the biggest word over and under the layers it crosses. Weave again to swap.
+          </p>
+          <div className="button-row">
+            <button type="button" onClick={onWeaveSelection}>
+              Weave through
+            </button>
+            <button type="button" title="Light the selected scraps from one light" onClick={onPhotographCollage}>
+              Photograph
             </button>
           </div>
           <h3>Variations</h3>

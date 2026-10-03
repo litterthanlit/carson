@@ -8,6 +8,8 @@ import {
   Lasso,
   SquareDashed,
   Crop,
+  Layers2,
+  Scissors,
   Eraser,
   ImagePlus,
   Minus,
@@ -38,6 +40,8 @@ type ToolRailProps = {
   onTogglePencilMode: () => void
   onImageInputChange: (file: File) => void
   onClipToShape: () => void
+  onWeave: () => void
+  onTearEdges: () => void
   onBrushMask: () => void
   onWhiteScrapes: () => void
   selectMode?: SelectionMode
@@ -60,6 +64,8 @@ export const ToolRail = memo(function ToolRail({
   onTogglePencilMode,
   onImageInputChange,
   onClipToShape,
+  onWeave,
+  onTearEdges,
   onBrushMask,
   onWhiteScrapes,
   selectMode = 'rect',
@@ -271,6 +277,12 @@ export const ToolRail = memo(function ToolRail({
           <div className="tool-flyout" role="menu" aria-label="Mask tools">
             <button type="button" role="menuitem" title="Clip the selection to a shape" onClick={() => { onClipToShape(); setFlyout(null) }}>
               <Crop size={14} /> Clip to shape
+            </button>
+            <button type="button" role="menuitem" title="Thread the selected word over and under the scraps it crosses" onClick={() => { onWeave(); setFlyout(null) }}>
+              <Layers2 size={14} /> Weave through
+            </button>
+            <button type="button" role="menuitem" title="Rip the edges of the selected layer like torn paper" onClick={() => { onTearEdges(); setFlyout(null) }}>
+              <Scissors size={14} /> Tear edges
             </button>
             <button type="button" role="menuitem" title="Paint a soft alpha mask on the selected layer" onClick={() => { onBrushMask(); setFlyout(null) }}>
               <Circle size={14} /> Paint mask

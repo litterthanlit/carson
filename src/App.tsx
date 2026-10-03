@@ -63,7 +63,9 @@ import {
   addTreatment,
   captureTransformBaseline,
   patchTransformBaseline,
+  readTransformBaseline,
   readTreatments,
+  updateTreatment,
   writeTreatments,
   type Treatment,
 } from './lib/treatments'
@@ -123,6 +125,27 @@ import {
   writeLayerMask,
   type MaskRegion,
 } from './lib/layerMask'
+import {
+  applyWeaveToMask,
+  hasWeave,
+  layerOutline,
+  nextWeaveParity,
+  outlinesOverlap,
+  pickWeaveThread,
+  planWeave,
+  removeWeaveFromMask,
+  tornEdgeClip,
+} from './lib/weave'
+import { castsCollageShadow, planCollageLight } from './lib/collageLight'
+import { paintCrumple } from './lib/materials'
+import {
+  FOUND_PAPER_FONTS,
+  FOUND_PAPERS,
+  foundPaperSize,
+  foundPaperSpec,
+  paintFoundPaper,
+  type FoundPaperKind,
+} from './lib/foundPaper'
 import type { PathEditActions } from './hooks/usePathEditing'
 import { applyPathData, isPathClosed, type PathData } from './lib/pathEditing'
 import {
@@ -152,6 +175,8 @@ import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, 
 import { omitDecayMarkFragmentsFromCanvasJSON } from './lib/decayMarksTreatment'
 import { misprintParamsFromGeneration, omitMisprintFragmentsFromCanvasJSON } from './lib/misprintTreatment'
 import { omitTypeStripFragmentsFromCanvasJSON } from './lib/typeStripsTreatment'
+import { isLetterBreakStale, letterBreakSourceIdOf, omitLetterBreakPiecesFromCanvasJSON } from './lib/letterBreakTreatment'
+import { LETTER_BREAK_DEFAULTS } from './lib/letterBreak'
 import { PRESS_CHECK_DEFAULTS, pressCheckParamsToRecord } from './lib/pressCheck'
 import { omitPressCheckFragmentsFromCanvasJSON, rebakePressCheckTreatments } from './lib/pressCheckTreatment'
 import { getInstrument, instrumentUsesTension, resolveInstrumentParams, type InstrumentId } from './lib/instruments'
@@ -714,6 +739,28 @@ function App() {
     installDynamicBackstore(canvas, () => backstoreScaleRef.current)
     // Dev-only handle for debugging and browser-driven verification.
     if (import.meta.env.DEV) (window as unknown as { __carsonCanvas?: Canvas }).__carsonCanvas = canvas
+
+    // A broken word re-cuts itself after a drag, an edit or an undo moves its source.
+    let recutting = false
+    canvas.on('after:render', () => {
+      if (recutting || (canvas as unknown as { _currentTransform?: unknown })._currentTransform) return
+      const stale = canvas.getObjects().find(isLetterBreakStale)
+      if (!stale) return
+      // The user moved it: that pose is the new resting place, unless Scatter owns the pose.
+      if (!readTreatments(stale).some((item) => item.type === 'scatter' && item.enabled)) {
+        patchTransformBaseline(stale, {
+          left: stale.left ?? 0,
+          top: stale.top ?? 0,
+          angle: stale.angle ?? 0,
+          scaleX: stale.scaleX ?? 1,
+          scaleY: stale.scaleY ?? 1,
+        })
+      }
+      recutting = true
+      void refreshTreatmentStackRef.current(stale).finally(() => {
+        recutting = false
+      })
+    })
     canvasRef.current = canvas
     registerCanvasEvents(canvas)
     detailOverlayRef.current = installDetailOverlay(canvas, visibleDetailViewport)
@@ -1499,7 +1546,7 @@ function App() {
     const canvas = canvasRef.current
     if (!canvas) return {}
     return omitPressCheckFragmentsFromCanvasJSON(
-      omitTypeStripFragmentsFromCanvasJSON(
+      omitLetterBreakPiecesFromCanvasJSON(omitTypeStripFragmentsFromCanvasJSON(
         omitMisprintFragmentsFromCanvasJSON(
           omitDecayMarkFragmentsFromCanvasJSON(
             omitCopyMachineCompanionsFromCanvasJSON(
@@ -1507,7 +1554,7 @@ function App() {
             ),
           ),
         ),
-      ),
+      )),
     )
   }
 
@@ -2051,6 +2098,106 @@ function App() {
     canvas.requestRenderAll()
     commitObjectPatchHistoryRef.current(objectId, 'Applied clipping mask', before, captureObjectPatch(content))
     syncSelected()
+  }
+
+  /**
+   * Thread the biggest word in the selection through the scraps it crosses:
+   * over one, under the next, cut along each scrap's real (torn) outline.
+   */
+  async function weaveSelection() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const picked = canvas.getActiveObjects()
+    if (picked.length < 2) {
+      setStatus('Select a word and the scraps it crosses (Shift+click), then Weave')
+      return
+    }
+    // Leave the selection first so every layer reports absolute coordinates.
+    canvas.discardActiveObject()
+    // A broken word weaves as its source; its pieces follow on re-render.
+    const sourceFor = (object: FabricObject) => {
+      const sourceId = letterBreakSourceIdOf(object)
+      return sourceId ? (findObjectById(sourceId) ?? object) : object
+    }
+    const objects = [...new Set(picked.map(sourceFor))].filter((object) => !object.group)
+    const thread = pickWeaveThread(objects)
+    if (!thread) return
+    const threadOutline = layerOutline(thread)
+    const crossings = objects
+      .filter((object) => object !== thread)
+      .map((object) => ({ object, id: String(readObjectProp(object, 'id') ?? ''), outline: layerOutline(object) }))
+      .filter((crossing) => outlinesOverlap(threadOutline, crossing.outline))
+    const threadName = String(readObjectProp(thread, 'name') ?? 'layer')
+    if (crossings.length === 0) {
+      canvas.setActiveObject(thread)
+      canvas.requestRenderAll()
+      setStatus(`${threadName} doesn't cross the other selected layers — overlap them first`)
+      return
+    }
+    const mask = readLayerMask(thread) ?? emptyLayerMask()
+    const plan = planWeave(thread.angle ?? 0, crossings, nextWeaveParity(mask))
+    writeLayerMask(
+      thread,
+      applyWeaveToMask(mask, plan, (point) => canvasPointToMaskLocal(thread, point.x, point.y)),
+    )
+    await applyLayerMask(thread)
+    // Sit just above the highest scrap it crosses; the mask does the "under".
+    const stack = canvas.getObjects()
+    const highest = Math.max(...crossings.map((crossing) => stack.indexOf(crossing.object)))
+    if (stack.indexOf(thread) < highest) canvas.moveObjectTo(thread, highest)
+    if (readTreatments(thread).some((item) => item.type === 'letter-break' && item.enabled)) {
+      await refreshTreatmentStack(thread)
+    }
+    invalidateLayerThumbnail(String(readObjectProp(thread, 'id') ?? ''))
+    canvas.setActiveObject(thread)
+    canvas.requestRenderAll()
+    commitHistory(`Wove ${threadName} through ${crossings.length} layers`)
+    const under = plan.crossings.filter((crossing) => crossing.under).length
+    setStatus(`Wove ${threadName}: under ${under}, over ${crossings.length - under} — weave again to swap`)
+  }
+
+  async function unweaveSelected() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    const mask = readLayerMask(object)
+    if (!canvas || !object || !mask || !hasWeave(mask)) return
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    writeLayerMask(object, removeWeaveFromMask(mask))
+    await applyLayerMask(object)
+    if (readTreatments(object).some((item) => item.type === 'letter-break' && item.enabled)) {
+      await refreshTreatmentStack(object)
+    }
+    canvas.requestRenderAll()
+    invalidateLayerThumbnail(objectId)
+    commitObjectPatchHistoryRef.current(objectId, 'Removed weave', before, captureObjectPatch(object))
+    syncSelected()
+  }
+
+  /** Rip the edges of the selected layer — a scan becomes a pasted scrap. Run again to re-rip. */
+  async function tearSelectedEdges() {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') {
+      setStatus('Select one layer to tear its edges')
+      return
+    }
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    const before = captureObjectPatch(object)
+    const size = objectUnscaledSize(object)
+    const mask = readLayerMask(object) ?? emptyLayerMask()
+    writeLayerMask(object, {
+      ...mask,
+      enabled: true,
+      clipJson: null,
+      clipGeom: tornEdgeClip(size.width, size.height, newSeed()),
+    })
+    await applyLayerMask(object)
+    canvas.requestRenderAll()
+    invalidateLayerThumbnail(objectId)
+    commitObjectPatchHistoryRef.current(objectId, 'Tore edges', before, captureObjectPatch(object))
+    syncSelected()
+    setStatus('Tore the edges — tear again for a different rip')
   }
 
   function paintBrushMask() {
@@ -2913,6 +3060,118 @@ function App() {
     canvas.add(image)
     canvas.setActiveObject(image)
     commitHistory(`Inserted asset “${asset.name}”`)
+  }
+
+  /**
+   * Light the paste-up like Carson's phone photos of his collages: one light,
+   * each scrap's shadow set by how many sheets it lies on. Works on the
+   * selection, or on every scrap when nothing is selected. Run again to re-light.
+   */
+  function photographCollage() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const picked = canvas.getActiveObjects()
+    canvas.discardActiveObject()
+    const stack = canvas.getObjects()
+    const pool = (picked.length > 0 ? picked : getSelectableLayerObjects()).filter(
+      (object) => !object.group && object.visible !== false && castsCollageShadow(object as never),
+    )
+    if (pool.length === 0) {
+      setStatus('Nothing to light — paste some paper first')
+      return
+    }
+    const scraps = pool.map((object) => ({
+      object,
+      id: String(readObjectProp(object, 'id') ?? ''),
+      outline: layerOutline(object),
+      stackIndex: stack.indexOf(object),
+    }))
+    const plan = planCollageLight(scraps, { seed: newSeed(), scale: layerStyleScale(poster.width, poster.height) })
+    for (const scrap of scraps) {
+      const shadow = plan.get(scrap.id)
+      if (!shadow) continue
+      writeLayerStyle(scrap.object, { ...(readLayerStyle(scrap.object) ?? {}), dropShadow: shadow })
+      invalidateLayerThumbnail(scrap.id)
+    }
+    if (picked.length > 0) {
+      canvas.setActiveObject(picked.length === 1 ? picked[0] : new ActiveSelection(picked, { canvas }))
+    }
+    canvas.requestRenderAll()
+    commitHistory(`Photographed ${scraps.length} scraps`)
+    setStatus(`Lit ${scraps.length} scraps from one light — photograph again to re-light`)
+  }
+
+  /**
+   * Crumple the whole sheet: a fold-and-wrinkle relief lit from one side, laid
+   * over the poster in hard-light. Run again to re-crumple (it replaces itself).
+   */
+  async function crumpleSheet() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const scale = Math.min(1, 1400 / Math.max(poster.width, poster.height))
+    const element = document.createElement('canvas')
+    element.width = Math.max(8, Math.round(poster.width * scale))
+    element.height = Math.max(8, Math.round(poster.height * scale))
+    const context = element.getContext('2d')
+    if (!context) return
+    setStatus('Crumpling the sheet…')
+    // Let the status paint before the relief blocks the thread for a moment.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    paintCrumple(context, element.width, element.height, newSeed(), 60)
+    const image = await FabricImage.fromURL(element.toDataURL('image/webp', 0.92), { crossOrigin: 'anonymous' })
+    for (const old of canvas.getObjects().filter((object) => readObjectProp(object, 'crumpleLayer'))) canvas.remove(old)
+    image.set({
+      originX: 'left',
+      originY: 'top',
+      left: 0,
+      top: 0,
+      scaleX: poster.width / element.width,
+      scaleY: poster.height / element.height,
+      globalCompositeOperation: 'hard-light',
+      opacity: 0.9,
+      crumpleLayer: true,
+    } as Partial<FabricObject>)
+    tagObject(image, 'image', 'Crumpled sheet')
+    canvas.add(image)
+    canvas.requestRenderAll()
+    commitHistory('Crumpled the sheet')
+    setStatus('Crumpled the sheet — crumple again for new creases')
+  }
+
+  /** Paste a torn scrap of found paper — painted fresh, so each click is a new tear. */
+  async function insertFoundPaper(kind: FoundPaperKind) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const spec = foundPaperSpec(kind)
+    const seed = newSeed()
+    const size = foundPaperSize(kind, seed, poster.width)
+    await Promise.all(FOUND_PAPER_FONTS.map((family) => document.fonts.load(`400 32px "${family}"`).catch(() => [])))
+    const element = document.createElement('canvas')
+    element.width = size.rasterWidth
+    element.height = size.rasterHeight
+    const context = element.getContext('2d')
+    if (!context) return
+    paintFoundPaper(context, kind, element.width, element.height, seed)
+    // WebP keeps the alpha tear and stays light in undo history; Safari falls back to PNG.
+    const image = await FabricImage.fromURL(element.toDataURL('image/webp', 0.9), { crossOrigin: 'anonymous' })
+    const random = createSeededRandom(seed)
+    image.set({
+      originX: 'center',
+      originY: 'center',
+      left: poster.width * (0.3 + random() * 0.4),
+      top: poster.height * (0.25 + random() * 0.5),
+      scaleX: size.width / element.width,
+      scaleY: size.height / element.height,
+      angle: (random() - 0.5) * 8,
+      opacity: spec.opacity,
+      globalCompositeOperation: spec.blend,
+      collageFlat: spec.flat || undefined,
+    } as Partial<FabricObject>)
+    tagObject(image, 'image', spec.label)
+    canvas.add(image)
+    canvas.setActiveObject(image)
+    canvas.requestRenderAll()
+    commitHistory(`Pasted ${spec.label.toLowerCase()}`)
   }
 
   function applyGradientFill(kind: 'linear' | 'radial' = 'linear') {
@@ -4270,6 +4529,25 @@ function App() {
     })
   }
 
+  /** Cut each letter into its strokes and pull them apart. Run again for a new break. */
+  function letterBreakSelected(seed = newSeed()) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type !== 'textbox') {
+      setStatus('Select a text layer to break its letters')
+      return
+    }
+    const existing = readTreatments(object).find((item) => item.type === 'letter-break')
+    if (!readTransformBaseline(object)) captureTransformBaseline(object)
+    if (existing) updateTreatment(object, existing.id, { seed })
+    else addTreatment(object, 'letter-break', { ...LETTER_BREAK_DEFAULTS }, seed)
+    void refreshTreatmentStack(object).then(() => {
+      setInspectorTab('treatments')
+      commitHistory(`Broke letters #${seed}`)
+      setStatus('Broke the letters into their strokes — break again for a new cut')
+    })
+  }
+
   async function cloneTypeAsTexture() {
     const canvas = canvasRef.current
     const object = activeObject()
@@ -5126,6 +5404,59 @@ function App() {
     { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
     { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
+    {
+      id: 'weave',
+      label: 'Weave type through scraps',
+      keywords: ['weave', 'over', 'under', 'collage', 'interleave', 'behind', 'mask'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => void weaveSelection(),
+    },
+    {
+      id: 'letter-break',
+      label: 'Letter break',
+      keywords: ['break', 'letters', 'strokes', 'cut', 'split', 'type', 'fragment', 'scalpel'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => letterBreakSelected(),
+    },
+    { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => void unweaveSelected() },
+    {
+      id: 'crumple-sheet',
+      label: 'Crumple the sheet',
+      keywords: ['crumple', 'crease', 'fold', 'wrinkle', 'paper', 'texture', 'real', 'material'],
+      scope: 'canvas',
+      run: () => void crumpleSheet(),
+    },
+    {
+      id: 'crop-marks',
+      label: 'Add crop marks',
+      keywords: ['crop', 'trim', 'registration', 'marks', 'print', 'proof'],
+      scope: 'canvas',
+      run: () => addCropMarks(),
+    },
+    {
+      id: 'photograph-collage',
+      label: 'Photograph the collage',
+      keywords: ['shadow', 'light', 'depth', 'lift', 'phone', 'photo', 'collage', 'paper', 'scan'],
+      scope: 'canvas',
+      run: () => photographCollage(),
+    },
+    ...FOUND_PAPERS.map((paper) => ({
+      id: `found-paper-${paper.kind}`,
+      label: `Paste ${paper.label.toLowerCase()}`,
+      keywords: ['found paper', 'scrap', 'collage', 'paper', 'torn', paper.kind],
+      scope: 'canvas' as const,
+      run: () => void insertFoundPaper(paper.kind),
+    })),
+    {
+      id: 'tear-edges',
+      label: 'Tear edges',
+      keywords: ['tear', 'torn', 'rip', 'paper', 'scrap', 'collage', 'mask'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => void tearSelectedEdges(),
+    },
     { id: 'paint-mask', label: 'Paint layer mask', keywords: ['mask', 'brush', 'eraser', 'alpha'], scope: 'selection', disabled: !selected, run: () => paintBrushMask() },
     { id: 'invert-mask', label: 'Invert layer mask', keywords: ['mask', 'invert'], scope: 'selection', disabled: !selected, run: () => void invertSelectedMask() },
     { id: 'clear-mask', label: 'Remove layer mask', keywords: ['mask', 'clear', 'remove'], scope: 'selection', disabled: !selected, run: () => void clearSelectedMask() },
@@ -5352,6 +5683,8 @@ function App() {
           onTogglePencilMode={handleTogglePencilMode}
           onImageInputChange={(file) => void handleImageFile(file)}
           onClipToShape={() => void clipSelectionToShape()}
+          onWeave={() => void weaveSelection()}
+          onTearEdges={() => void tearSelectedEdges()}
           onBrushMask={() => void paintBrushMask()}
           onWhiteScrapes={() => addWhiteScrapes()}
           selectMode={selectMode}
@@ -5407,6 +5740,7 @@ function App() {
             onTearCollage={() => void tearCollageSelected()}
             onAddCropMarks={addCropMarks}
             onBreakSelectedType={() => breakSelectedType()}
+            onLetterBreak={() => letterBreakSelected()}
             onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
             onApplyXerox={() => void applyXeroxToSelected()}
             onApplyCopyMachine={() => void applyCopyMachineToSelected()}
@@ -5756,6 +6090,13 @@ function App() {
           onAlignSelection={alignSelection}
           onDistributeSelection={distributeSelection}
           onClipSelectionToShape={() => void clipSelectionToShape()}
+          onInsertFoundPaper={(kind) => void insertFoundPaper(kind)}
+          onPhotographCollage={() => photographCollage()}
+          onCrumpleSheet={() => void crumpleSheet()}
+          onAddCropMarks={() => addCropMarks()}
+          onWeaveSelection={() => void weaveSelection()}
+          onUnweaveLayer={() => void unweaveSelected()}
+          onTearEdges={() => void tearSelectedEdges()}
           gridOverlay={gridOverlay}
           onGridOverlayChange={patchGridOverlay}
           onGridTensionChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}

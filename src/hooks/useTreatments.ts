@@ -25,6 +25,7 @@ import { stripCopyMachineCompanions } from '../lib/copyMachineTreatment'
 import { stripDecayMarkFragments } from '../lib/decayMarksTreatment'
 import { stripMisprintFragments } from '../lib/misprintTreatment'
 import { stripTypeStripFragments } from '../lib/typeStripsTreatment'
+import { stripLetterBreakPieces } from '../lib/letterBreakTreatment'
 import { withLayerSyncSuppressed } from '../lib/layerSync'
 import type { LayerKind } from '../types/editor'
 import { newSeed } from '../lib/random'
@@ -113,6 +114,9 @@ export function useTreatments({
             glyph: (fragment, _index, glyphText) => {
               tagObject(fragment, 'text', `Glyph ${glyphText}`)
             },
+            letterBreak: (fragment, glyphText) => {
+              tagObject(fragment, 'fragment', `Broken ${glyphText}`)
+            },
             decayMarks: (fragment, mark) => {
               tagObject(fragment, 'fragment', mark.kind === 'ink-loss' ? 'Ink loss' : 'Fold mark')
             },
@@ -140,6 +144,7 @@ export function useTreatments({
       stripDecayMarkFragments(canvas)
       stripMisprintFragments(canvas)
       stripTypeStripFragments(canvas)
+      stripLetterBreakPieces(canvas)
       await applyAllLayerMasks(canvas.getObjects())
       const artifactTypes = new Set([
         'slice',
@@ -147,6 +152,7 @@ export function useTreatments({
         'tear',
         'bad-crop',
         'glyph-break',
+        'letter-break',
         'copy-machine',
         'decay-marks',
         'misprint',

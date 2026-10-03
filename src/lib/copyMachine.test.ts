@@ -18,11 +18,16 @@ import {
   renderCopyMachineGhostPass,
   renderCopyMachinePass,
   applyCopyMachineChain,
+  isOpaqueSource,
+  resampleGeneration,
   scaleCopyMachineParams,
 } from './copyMachine'
 
 const FIXTURE_SIZE = 64
 const FIXTURE_SEED = 4719
+// Re-baselined when drag became scan drift (the original moving under the bar).
+const GOLDEN_SAMPLES = [254, 255, 125, 13, 112]
+const GOLDEN_DIGEST = 'dc7c8100'
 
 class ImageDataPolyfill {
   readonly width: number
@@ -167,8 +172,8 @@ describe('copyMachine CM-0', () => {
       result.data[(55 * FIXTURE_SIZE + 55) * 4],
     ]
 
-    expect(samples).toEqual([255, 255, 144, 0, 54])
-    expect(imageDataDigest(result.data)).toBe('6c53b600')
+    expect(samples).toEqual(GOLDEN_SAMPLES)
+    expect(imageDataDigest(result.data)).toBe(GOLDEN_DIGEST)
   })
 
   it('maps treatment params with defaults', () => {
@@ -459,5 +464,133 @@ describe('copyMachine save/reload + export scale', () => {
       ],
     })
     expect(saved.objects?.map((item) => (item as { id: string }).id)).toEqual(['headline', 'xerox'])
+  })
+})
+
+function blank(size: number, opaque: boolean): ImageData {
+  const imageData = new ImageData(size, size)
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    imageData.data[i] = 255
+    imageData.data[i + 1] = 255
+    imageData.data[i + 2] = 255
+    imageData.data[i + 3] = opaque ? 255 : 0
+  }
+  return imageData
+}
+
+const QUIET = {
+  ...COPY_MACHINE_DEFAULTS,
+  wobble: 0,
+  drag: 0,
+  grain: 0,
+  bands: 0,
+  streaks: 0,
+  voids: 0,
+  edge: 0,
+}
+
+describe('copyMachine toner model', () => {
+  it('copies an opaque sheet as paper and a transparent layer as toner only', () => {
+    expect(isOpaqueSource(createCheckerboard(FIXTURE_SIZE))).toBe(true)
+    expect(isOpaqueSource(blank(FIXTURE_SIZE, false))).toBe(false)
+
+    const sheet = applyTonalPasses(createCheckerboard(FIXTURE_SIZE), QUIET, createSeededRandom(1))
+    expect(sheet.data[3]).toBe(255)
+
+    const type = new ImageData(FIXTURE_SIZE, FIXTURE_SIZE)
+    for (let y = 20; y < 40; y++) {
+      for (let x = 10; x < 54; x++) type.data[(y * FIXTURE_SIZE + x) * 4 + 3] = 255
+    }
+    const toner = applyTonalPasses(type, QUIET, createSeededRandom(1))
+    expect(toner.data[(30 * FIXTURE_SIZE + 30) * 4 + 3]).toBeGreaterThan(240)
+    expect(toner.data[(5 * FIXTURE_SIZE + 5) * 4 + 3]).toBe(0)
+  })
+
+  it('spreads toner so a hairline comes out thicker', () => {
+    const line = new ImageData(FIXTURE_SIZE, FIXTURE_SIZE)
+    for (let y = 0; y < FIXTURE_SIZE; y++) line.data[(y * FIXTURE_SIZE + 32) * 4 + 3] = 255
+    const inked = (image: ImageData) => {
+      let count = 0
+      for (let x = 0; x < FIXTURE_SIZE; x++) if (image.data[(32 * FIXTURE_SIZE + x) * 4 + 3] > 64) count++
+      return count
+    }
+    const copy = applyTonalPasses(line, { ...QUIET, contrast: 100 }, createSeededRandom(2))
+    expect(inked(copy)).toBeGreaterThan(inked(line))
+  })
+
+  it('speckles bare paper with loose toner when grain is up', () => {
+    const copy = applyTonalPasses(blank(128, true), { ...QUIET, grain: 100 }, createSeededRandom(3))
+    let specks = 0
+    for (let i = 0; i < copy.data.length; i += 4) if (copy.data[i] < 128) specks++
+    expect(specks).toBeGreaterThan(0)
+  })
+
+  it('runs streaks along the scan and bands across it', () => {
+    const streaked = applyTonalPasses(blank(96, true), { ...QUIET, streaks: 100, dragAngle: 90 }, createSeededRandom(4))
+    // A vertical scan prints streaks as columns: find a dark column hit in most rows.
+    let best = 0
+    for (let x = 0; x < 96; x++) {
+      let dark = 0
+      for (let y = 0; y < 96; y++) if (streaked.data[(y * 96 + x) * 4] < 200) dark++
+      best = Math.max(best, dark)
+    }
+    expect(best).toBeGreaterThan(40)
+  })
+
+  it('brings the lid shadow in from the frame', () => {
+    const copy = applyTonalPasses(blank(100, true), { ...QUIET, edge: 80 }, createSeededRandom(5))
+    expect(copy.data[(50 * 100 + 0) * 4]).toBeLessThan(80)
+    expect(copy.data[(50 * 100 + 50) * 4]).toBe(255)
+  })
+})
+
+describe('copyMachine generations', () => {
+  it('reduces about the centre and leaves white glass around an opaque sheet', () => {
+    const reduced = resampleGeneration(createCheckerboard(FIXTURE_SIZE), 50)
+    expect(reduced.data[3]).toBe(255)
+    expect(reduced.data[0]).toBe(255)
+  })
+
+  it('keeps a transparent layer transparent outside the reduced copy', () => {
+    const type = new ImageData(FIXTURE_SIZE, FIXTURE_SIZE)
+    for (let y = 16; y < 48; y++) {
+      for (let x = 16; x < 48; x++) type.data[(y * FIXTURE_SIZE + x) * 4 + 3] = 255
+    }
+    const reduced = resampleGeneration(type, 50)
+    expect(reduced.data[3]).toBe(0)
+    expect(reduced.data[(32 * FIXTURE_SIZE + 32) * 4 + 3]).toBeGreaterThan(200)
+  })
+
+  it('degrades further with each generation, deterministically', () => {
+    const source = createCheckerboard(FIXTURE_SIZE)
+    const once = renderCopyMachinePass(source, { ...QUIET, contrast: 80 }, createSeededRandom(6))
+    const four = () => renderCopyMachinePass(source, { ...QUIET, contrast: 80, generations: 4, copyScale: 110 }, createSeededRandom(6))
+    expect(imageDataDigest(four().data)).toBe(imageDataDigest(four().data))
+    expect(imageDataDigest(four().data)).not.toBe(imageDataDigest(once.data))
+  })
+
+  it('reads older saved treatments without the new params', () => {
+    const params = copyMachineParamsFromRecord({ wobble: 10 })
+    expect(params.generations).toBe(1)
+    expect(params.copyScale).toBe(100)
+    expect(params.streaks).toBe(COPY_MACHINE_DEFAULTS.streaks)
+    expect(params.edge).toBe(0)
+  })
+})
+
+describe('copyMachine scan drift', () => {
+  it('shifts the original along the slip rather than blurring every row the same', () => {
+    const source = createCheckerboard(FIXTURE_SIZE)
+    const drifted = applyDrag(source, { drag: 100, dragAngle: 0 }, createSeededRandom(7))
+    let changedRows = 0
+    for (let y = 0; y < FIXTURE_SIZE; y++) {
+      let changed = false
+      for (let x = 0; x < FIXTURE_SIZE; x++) {
+        const i = (y * FIXTURE_SIZE + x) * 4
+        if (drifted.data[i] !== source.data[i]) changed = true
+      }
+      if (changed) changedRows++
+    }
+    expect(changedRows).toBeGreaterThan(FIXTURE_SIZE / 2)
   })
 })

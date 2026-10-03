@@ -50,6 +50,7 @@ const STEP_LABELS: Partial<Record<TreatmentType, string>> = {
   tear: 'Tear',
   'bad-crop': 'Bad crop',
   'glyph-break': 'Break letters',
+  'letter-break': 'Letter break',
   scrape: 'Scrape',
   'press-check': 'Press Check',
   'decay-marks': 'Decay marks',
