@@ -1,7 +1,8 @@
 import type { LayerStyle } from '../lib/layerStyles'
 import type { Adjustment } from '../lib/adjustments'
 import type { Warp } from '../lib/warp'
-export type EditorTool = 'move' | 'text' | 'shape' | 'image' | 'select' | 'brush' | 'mask' | 'instruments'
+import type { FrameSpec } from '../lib/frameHandles'
+export type EditorTool = 'move' | 'text' | 'shape' | 'frame' | 'image' | 'select' | 'brush' | 'mask' | 'instruments'
 export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'star' | 'pen'
 export type MaskKind = 'clip' | 'brush' | 'scrape'
 export type PenKind = 'bezier' | 'freehand'
@@ -59,4 +60,5 @@ export type SelectedState = {
   layerStyle?: LayerStyle | null
   adjustment?: Adjustment
   warp?: Warp | null
+  frame?: FrameSpec
 }

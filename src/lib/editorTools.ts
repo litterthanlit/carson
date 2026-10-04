@@ -10,6 +10,7 @@ export function cursorForTool(
     case 'text':
       return 'text'
     case 'shape':
+    case 'frame':
       return 'crosshair'
     case 'mask':
       return 'cell'
@@ -21,6 +22,6 @@ export function cursorForTool(
 export function hoverCursorForTool(tool: EditorTool, options: { pan?: boolean; pen?: boolean } = {}): string {
   if (options.pan) return 'grab'
   if (options.pen) return 'crosshair'
-  if (tool === 'text' || tool === 'shape' || tool === 'mask') return cursorForTool(tool, options)
+  if (tool === 'text' || tool === 'shape' || tool === 'frame' || tool === 'mask') return cursorForTool(tool, options)
   return 'move'
 }

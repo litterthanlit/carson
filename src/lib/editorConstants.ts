@@ -31,6 +31,7 @@ export const HISTORY_PROPS = [
   'letterBreakSourceId',
   'crumpleLayer',
   'collageFlat',
+  'frameSourceId',
   'letterBreakTreatmentId',
   'glyphTreatmentId',
   'scrapeTreatmentId',

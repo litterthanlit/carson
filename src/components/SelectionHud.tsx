@@ -26,6 +26,8 @@ export function SelectionHud({
 }: SelectionHudProps) {
   const isText = selected.kind === 'text'
   const isShape = selected.kind === 'shape'
+  // A frame's color is its line color; its weight lives in the Frame inspector, not stroke.
+  const isFrame = Boolean(selected.frame)
   const { left, top, side } = hudPlacement(bounds, displayScale)
 
   return (
@@ -64,7 +66,7 @@ export function SelectionHud({
       {isShape ? (
         <>
           <label className="hud-field">
-            Fill
+            {isFrame ? 'Line' : 'Fill'}
             <input
               type="color"
               value={typeof selected.fill === 'string' && selected.fill.startsWith('#') ? selected.fill : '#111111'}
@@ -72,17 +74,19 @@ export function SelectionHud({
               onBlur={() => onFinalizeActive('Changed fill')}
             />
           </label>
-          <label className="hud-field">
-            Stroke
-            <input
-              type="number"
-              min={0}
-              max={80}
-              value={Math.round(selected.strokeWidth ?? 0)}
-              onChange={(event) => onUpdateActive({ strokeWidth: Number(event.target.value) })}
-              onBlur={() => onFinalizeActive('Changed stroke')}
-            />
-          </label>
+          {isFrame ? null : (
+            <label className="hud-field">
+              Stroke
+              <input
+                type="number"
+                min={0}
+                max={80}
+                value={Math.round(selected.strokeWidth ?? 0)}
+                onChange={(event) => onUpdateActive({ strokeWidth: Number(event.target.value) })}
+                onBlur={() => onFinalizeActive('Changed stroke')}
+              />
+            </label>
+          )}
         </>
       ) : null}
       <label className="hud-field">

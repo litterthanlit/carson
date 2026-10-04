@@ -9,6 +9,7 @@ import { readObjectProp } from './canvasUtils'
 import { readLayerStyle, writeLayerStyle, type LayerStyle } from './layerStyles'
 import type { Adjustment } from './adjustments'
 import type { Warp } from './warp'
+import { isFrameHandles, type FrameSpec } from './frameHandles'
 
 export type ObjectPatch = {
   left: number
@@ -27,6 +28,9 @@ export type ObjectPatch = {
   layerStyle?: LayerStyle | null
   adjustment?: Adjustment
   warp?: Warp | null
+  frame?: FrameSpec
+  /** A frame's line color (its fill) — the true color, never a soft-proof preview. */
+  frameColor?: string
 }
 
 export function captureObjectPatch(object: FabricObject): string {
@@ -48,6 +52,11 @@ export function captureObjectPatch(object: FabricObject): string {
   const adjustment = readObjectProp(object, 'adjustment') as Adjustment | undefined
   if (adjustment) patch.adjustment = adjustment
   patch.warp = (readObjectProp(object, 'warp') as Warp | undefined) ?? null
+  if (isFrameHandles(object)) {
+    patch.frame = object.frame
+    const color = readObjectProp(object, 'originalFill') ?? object.fill
+    if (typeof color === 'string') patch.frameColor = color
+  }
   return JSON.stringify(patch)
 }
 
@@ -83,6 +92,14 @@ export function applyObjectPatch(object: FabricObject, patchJson: string): void 
     evented: patch.evented,
   } as Partial<FabricObject>)
   if (patch.adjustment) object.set({ adjustment: patch.adjustment } as Partial<FabricObject>)
+  if (isFrameHandles(object)) {
+    if (patch.frame) object.set({ frame: patch.frame, dirty: true } as Partial<FabricObject>)
+    if (typeof patch.frameColor === 'string') {
+      // Under the CMYK soft proof the true color waits in originalFill.
+      if (readObjectProp(object, 'originalFill')) object.set({ originalFill: patch.frameColor } as Partial<FabricObject>)
+      else object.set({ fill: patch.frameColor })
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'warp')) object.set({ warp: patch.warp ?? undefined, dirty: true } as Partial<FabricObject>)
   if (Object.prototype.hasOwnProperty.call(patch, 'layerStyle')) {
     writeLayerStyle(object, patch.layerStyle ?? null)

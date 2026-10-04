@@ -64,6 +64,8 @@ import { layerStyleScale, type LayerStyle } from '../lib/layerStyles'
 import { AdjustmentPanel } from './AdjustmentPanel'
 import { ADJUSTMENT_LABELS, type Adjustment, type AdjustmentType } from '../lib/adjustments'
 import { ScopeSel } from './ScopeBadge'
+import { FrameControls } from './FrameControls'
+import { FRAME_COLOR, type FrameSpec } from '../lib/frameHandles'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
 
 export type InspectorPanelProps = {
@@ -148,6 +150,12 @@ export type InspectorPanelProps = {
   onStartWarp?: (type: 'distort' | 'mesh') => void
   onRemoveWarp?: () => void
   onAdjustmentChange?: (adjustment: Adjustment) => void
+  /** Edit the selected frame's handles and lines (see lib/frameHandles). */
+  onFrameChange?: (patch: Partial<FrameSpec>, label: string) => void
+  onFrameColorChange?: (color: string) => void
+  onFrameShuffle?: () => void
+  onFrameSelection?: () => void
+  onFrameImages?: () => void
   onPreviewBlendMode: (mode: string | null) => void
   onApplyBlendMode: (mode: string) => void
   onLoadGoogleFont: (family: string) => Promise<void>
@@ -339,6 +347,11 @@ export function InspectorPanel({
   onStartWarp,
   onRemoveWarp,
   onAdjustmentChange,
+  onFrameChange,
+  onFrameColorChange,
+  onFrameShuffle,
+  onFrameSelection,
+  onFrameImages,
   onPreviewBlendMode,
   onApplyBlendMode,
   onLoadGoogleFont,
@@ -1420,6 +1433,21 @@ export function InspectorPanel({
                   </button>
                   </PropertySection>
                 ) : null}
+                {selected.frame && onFrameChange && selectedLayerIds.length <= 1 ? (
+                  <PropertySection id="frame" title="Frame">
+                    <FrameControls
+                      layout="panel"
+                      spec={selected.frame}
+                      color={typeof selected.fill === 'string' && selected.fill.startsWith('#') ? selected.fill : FRAME_COLOR}
+                      posterWidth={posterWidth}
+                      posterHeight={posterHeight}
+                      onChange={onFrameChange}
+                      onColorChange={(color) => onFrameColorChange?.(color)}
+                      onCommit={onFinalizeActive}
+                      onShuffle={() => onFrameShuffle?.()}
+                    />
+                  </PropertySection>
+                ) : null}
                 <PropertySection id="transform" title="Transform">
                   <div className="split-inputs">
                     <label>
@@ -1594,7 +1622,7 @@ export function InspectorPanel({
                       ))}
                     </div>
                   ) : null}
-                  {!selectedIsImage ? (
+                  {!selectedIsImage && !selected.frame ? (
                     <div className="button-row">
                       <button type="button" title="Apply a linear gradient from palette colors" onClick={() => onApplyGradientFill('linear')}>
                         Linear gradient
@@ -1604,7 +1632,7 @@ export function InspectorPanel({
                       </button>
                     </div>
                   ) : null}
-                  {!selectedIsText && selected ? (
+                  {!selectedIsText && !selected.frame && selected ? (
                     <div className="button-row">
                       <button type="button" onClick={() => onApplyStrokeDash('solid')}>
                         Solid stroke
@@ -1818,7 +1846,7 @@ export function InspectorPanel({
                 <kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10
               </li>
               <li>
-                <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
+                <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>F</kbd> Frame · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
               </li>
               <li>
                 Mask: drag conceal · <kbd>Alt</kbd>-drag reveal · <kbd>[</kbd> <kbd>]</kbd> brush size
@@ -1868,6 +1896,11 @@ export function InspectorPanel({
             <button type="button" title="One light over the board: each scrap casts a shadow by how many sheets it lies on" onClick={onPhotographCollage}>
               Photograph the collage
             </button>
+            {onFrameImages ? (
+              <button type="button" title="Frame handles and construction lines on every image — R for another layout" onClick={onFrameImages}>
+                Frame the images
+              </button>
+            ) : null}
           </div>
           <h3 className="property-kicker">The sheet</h3>
           <div className="button-row">
@@ -2138,6 +2171,11 @@ export function InspectorPanel({
             <button type="button" title="Light the selected scraps from one light" onClick={onPhotographCollage}>
               Photograph
             </button>
+            {onFrameSelection ? (
+              <button type="button" title="Frame handles on each selected layer" onClick={onFrameSelection}>
+                Frame each
+              </button>
+            ) : null}
           </div>
           <h3>Variations</h3>
           <p className="hint">

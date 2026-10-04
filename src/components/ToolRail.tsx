@@ -19,6 +19,7 @@ import {
   Square,
   Star,
   Type,
+  VectorSquare,
   Wand2,
 } from 'lucide-react'
 import type { EditorTool, PenKind } from '../types/editor'
@@ -174,6 +175,16 @@ export const ToolRail = memo(function ToolRail({
           </div>
         ) : null}
       </div>
+      <button
+        type="button"
+        className={tool === 'frame' ? 'active' : undefined}
+        title="Frame (F) — drag frame handles onto the poster, or click a layer to frame it"
+        aria-label="Frame tool"
+        aria-pressed={tool === 'frame'}
+        onClick={() => selectTool(tool === 'frame' ? 'move' : 'frame')}
+      >
+        <VectorSquare size={16} />
+      </button>
       <button
         type="button"
         className={tool === 'image' ? 'active' : undefined}
