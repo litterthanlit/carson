@@ -23,6 +23,7 @@ Open the local URL Vite prints.
 - Found paper: receipts, envelopes, carbon invoices, kraft, newsprint, tickets, tape — pasted already torn
 - Real materials: crumple the whole sheet (lit folds and wrinkles), clear packing tape, translucent masking tape, peeled-paper scars
 - Photograph the collage: one light, each scrap's shadow set by how many sheets it lies on
+- Frame tool (F): design-tool chrome as a graphic — drag out a frame, or click a layer to frame it exactly; square handles on any corner or edge, construction lines run to the poster edge; weights hold however it's resized. "Frame the images" frames every photo and scrap at once (R for another layout)
 - Copy Machine: a physical toner copier — dot gain, halftone, scan drift, streaks, lid edge, copy-of-a-copy generations
 - Typography controls for font, size, spacing, line height, skew, stretch, color, opacity, and blend mode
 - Local image upload with grayscale, contrast, threshold, blur, and noise effects

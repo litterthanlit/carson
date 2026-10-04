@@ -9,11 +9,13 @@ import {
   Line,
   Path,
   PencilBrush,
+  Point,
   Polygon,
   Rect,
   Textbox,
   Group as FabricGroup,
   filters,
+  util,
 } from 'fabric'
 import {
   applyPosterPreset,
@@ -94,7 +96,7 @@ import {
 } from './lib/document'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
 import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
-import { alignObjects, clampGridOverlay, distributeObjects, gridTensionScale, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
+import { alignObjects, buildLayoutGrid, clampGridOverlay, distributeObjects, gridTensionScale, layoutSnapLines, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
 import { PLATE_CHANNELS, PLATE_LABELS, plateChannel, plateRasterScale, plateToDataUrl, rgbaToCmykPlates } from './lib/cmykPlates'
 import {
@@ -138,6 +140,20 @@ import {
 } from './lib/weave'
 import { castsCollageShadow, planCollageLight } from './lib/collageLight'
 import { paintCrumple } from './lib/materials'
+import {
+  defaultFrameSpec,
+  FRAME_COLOR,
+  frameBoxForCorners,
+  FrameHandles,
+  isFrameHandles,
+  normalizeFrameSpec,
+  readFrameSpec,
+  rescaleFrameSpec,
+  shuffleFrameSpec,
+  type FrameSpec,
+} from './lib/frameHandles'
+import { FrameOverlay, type FrameRect, type FrameSnapTargets } from './components/FrameOverlay'
+import { FrameBar } from './components/FrameControls'
 import {
   FOUND_PAPER_FONTS,
   FOUND_PAPERS,
@@ -431,6 +447,13 @@ function App() {
   const [maskHardness, setMaskHardness] = useState(35)
   const [selectMode, setSelectMode] = useState<SelectionMode>('rect')
   const [brush, setBrush] = useState<BrushSettings>(DEFAULT_BRUSH)
+  // Frame tool style for the next frame. Sizes are stored against the poster they were
+  // set on and rescaled to the current one, so a new poster size keeps the same look.
+  const [frameDefaults, setFrameDefaults] = useState<{ spec: FrameSpec; long: number }>(() => ({
+    spec: defaultFrameSpec(poster.width, poster.height),
+    long: Math.max(poster.width, poster.height),
+  }))
+  const [frameColor, setFrameColor] = useState(FRAME_COLOR)
   const [warpEdit, setWarpEdit] = useState<{ objectId: string; startPatch: string; warp: Warp } | null>(null)
   const warpEditRef = useRef(warpEdit)
   warpEditRef.current = warpEdit
@@ -993,6 +1016,11 @@ function App() {
       setPenMode(false)
       setEditorTool('shape')
     },
+    frameTool: () => {
+      setPenMode(false)
+      setEditorTool('frame')
+      setStatus('Frame — drag to draw (Shift square, Alt from center), or click a layer to frame it')
+    },
     brushTool: () => {
       setPenMode(false)
       setEditorTool('brush')
@@ -1215,6 +1243,9 @@ function App() {
       } else if (event.key.toLowerCase() === 's') {
         event.preventDefault()
         actions.shapeTool()
+      } else if (event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        actions.frameTool()
       } else if (event.key.toLowerCase() === 'l') {
         event.preventDefault()
         actions.selectTool()
@@ -1692,6 +1723,7 @@ function App() {
       layerStyle: readLayerStyle(object),
       adjustment: readAdjustment(object),
       warp: readWarp(object),
+      frame: readFrameSpec(object),
     }
   }
 
@@ -1789,6 +1821,8 @@ function App() {
     delete patch.angle
     object.set(patch)
     if (nextAngle !== undefined) object.rotate(nextAngle)
+    // The next frame drawn takes the last frame color picked, wherever it was picked.
+    if (isFrameHandles(object) && typeof values.fill === 'string') setFrameColor(values.fill)
     if (values.text !== undefined || values.fill !== undefined || values.stroke !== undefined) {
       recordOverrideFromPatch(object, {
         text: values.text,
@@ -4821,6 +4855,179 @@ function App() {
     commitHistory('Added crop marks and grid')
   }
 
+  /** The Frame tool's style, sized for the current poster. */
+  const frameSpec = rescaleFrameSpec(frameDefaults.spec, Math.max(poster.width, poster.height) / frameDefaults.long)
+
+  /** Layers a frame can sit on: not frames themselves, nor whole-sheet overlays. */
+  function frameableObjects(canvas: Canvas) {
+    return canvas
+      .getObjects()
+      .filter(
+        (object) =>
+          object.visible !== false &&
+          !isFrameHandles(object) &&
+          !readAdjustment(object) &&
+          !readObjectProp(object, 'crumpleLayer') &&
+          !isPaintLayer(object),
+      )
+  }
+
+  /** Edges a new frame snaps to: the poster, every layer's bounds, guides and grid. */
+  function frameSnapTargets(): FrameSnapTargets {
+    const canvas = canvasRef.current
+    const xs = [0, poster.width / 2, poster.width]
+    const ys = [0, poster.height / 2, poster.height]
+    if (!canvas) return { xs, ys }
+    for (const object of canvas.getObjects()) {
+      if (object.visible === false || readAdjustment(object) || readObjectProp(object, 'crumpleLayer')) continue
+      const bounds = object.getBoundingRect()
+      xs.push(bounds.left, bounds.left + bounds.width / 2, bounds.left + bounds.width)
+      ys.push(bounds.top, bounds.top + bounds.height / 2, bounds.top + bounds.height)
+    }
+    const extras = layoutSnapLines(buildLayoutGrid(poster, gridOverlay), layoutGuides, {
+      includeGrid: snapToGrid && gridOverlay.tension < 96,
+      includeGuides: true,
+    })
+    xs.push(...extras.vLines)
+    ys.push(...extras.hLines)
+    return { xs, ys }
+  }
+
+  function addFrame(
+    box: { left: number; top: number; width: number; height: number; angle?: number },
+    options: { spec?: FrameSpec; name?: string; sourceId?: string } = {},
+  ) {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const frame = new FrameHandles({
+      left: box.left,
+      top: box.top,
+      width: Math.max(1, box.width),
+      height: Math.max(1, box.height),
+      angle: box.angle ?? 0,
+      fill: frameColor,
+      frame: options.spec ?? frameSpec,
+    })
+    if (options.sourceId) frame.set({ frameSourceId: options.sourceId } as Partial<FabricObject>)
+    tagObject(frame, 'shape', options.name ?? 'Frame')
+    canvas.add(frame)
+    return frame
+  }
+
+  /** Select what was just framed and hand back to the Move tool, like Figma. */
+  function finishFraming(frames: FabricObject[], label: string) {
+    const canvas = canvasRef.current
+    if (!canvas || frames.length === 0) return
+    if (frames.length === 1) canvas.setActiveObject(frames[0])
+    else canvas.setActiveObject(new ActiveSelection(frames, { canvas }))
+    canvas.requestRenderAll()
+    setEditorTool('move')
+    setInspectorTab('inspect')
+    commitHistory(label)
+  }
+
+  function drawFrame(rect: FrameRect) {
+    const frame = addFrame(rect)
+    if (!frame) return
+    finishFraming([frame], 'Drew a frame')
+    setStatus(`Frame ${Math.round(rect.width)} × ${Math.round(rect.height)} — handles and lines in the inspector`)
+  }
+
+  /** A frame sitting exactly on a layer, turned with it. */
+  function frameOnLayer(object: FabricObject, spec?: FrameSpec) {
+    const name = String(readObjectProp(object, 'name') ?? 'layer')
+    // Corners come back in poster space; the angle is relative to a (rotated) multi-selection.
+    const angle = (object.angle ?? 0) + (object.group ? util.qrDecompose(object.group.calcTransformMatrix()).angle : 0)
+    return addFrame(frameBoxForCorners(object.getCoords(), angle), {
+      spec,
+      name: `Frame · ${name}`,
+      sourceId: String(readObjectProp(object, 'id') ?? '') || undefined,
+    })
+  }
+
+  function frameLayerAt(point: { x: number; y: number }) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const { target } = canvas.searchPossibleTargets(frameableObjects(canvas), new Point(point.x, point.y))
+    if (!target) {
+      setStatus('Frame — drag to draw one, or click a layer to frame it')
+      return
+    }
+    const frame = frameOnLayer(target)
+    if (!frame) return
+    finishFraming([frame], `Framed ${String(readObjectProp(target, 'name') ?? 'layer')}`)
+  }
+
+  function frameSelection() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const targets = canvas.getActiveObjects().filter((object) => !isFrameHandles(object))
+    if (targets.length === 0) {
+      setStatus('Select the layers to frame first')
+      return
+    }
+    const frames = targets.map((object) => frameOnLayer(object)).filter((frame): frame is FrameHandles => Boolean(frame))
+    finishFraming(frames, targets.length === 1 ? 'Framed layer' : `Framed ${targets.length} layers`)
+  }
+
+  /**
+   * Frame every image on the poster, each with its own handles and construction
+   * lines — the design-file-mid-edit look in one move. Re-roll (R) for another layout.
+   */
+  function frameImages(seed = newSeed()) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const posterArea = poster.width * poster.height
+    const images = frameableObjects(canvas).filter((object) => {
+      if (readObjectProp(object, 'kind') !== 'image' || readObjectProp(object, 'collageFlat')) return false
+      // Full-bleed textures and surfaces would only frame the sheet itself.
+      const bounds = object.getBoundingRect()
+      return bounds.width * bounds.height < posterArea * 0.9
+    })
+    if (images.length === 0) {
+      setStatus('No images to frame — place an image or paste found paper first')
+      return
+    }
+    const imageIds = new Set(images.map((object) => String(readObjectProp(object, 'id') ?? '')))
+    // Running it again re-frames rather than stacking a second set of frames.
+    for (const old of canvas.getObjects()) {
+      if (isFrameHandles(old) && imageIds.has(String(readObjectProp(old, 'frameSourceId') ?? ''))) canvas.remove(old)
+    }
+    const random = createSeededRandom(seed)
+    for (const image of images) frameOnLayer(image, shuffleFrameSpec(frameSpec, random))
+    canvas.discardActiveObject()
+    canvas.requestRenderAll()
+    trackChaos('Frame the images', seed, [], (next) => frameImages(next))
+    commitHistory(`Framed ${images.length} image${images.length === 1 ? '' : 's'} #${seed}`)
+    setStatus(`Framed ${images.length} image${images.length === 1 ? '' : 's'} — R for another layout`)
+  }
+
+  /** Remember a frame's style so the next frame drawn matches it. */
+  function rememberFrameStyle(spec: FrameSpec) {
+    setFrameDefaults({ spec, long: Math.max(poster.width, poster.height) })
+  }
+
+  function updateFrameDefaults(patch: Partial<FrameSpec>) {
+    rememberFrameStyle(normalizeFrameSpec({ ...frameSpec, ...patch }, frameSpec))
+  }
+
+  /** Edit the selected frame. Toggles commit at once; sliders and pickers on release. */
+  function updateSelectedFrame(patch: Partial<FrameSpec>, label: string) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !isFrameHandles(object)) return
+    beginObjectEditSession(object)
+    const next = normalizeFrameSpec({ ...object.frame, ...patch }, object.frame)
+    object.set({ frame: next, dirty: true } as Partial<FabricObject>)
+    canvas.requestRenderAll()
+    syncSelected()
+    invalidateLayerThumbnail(String(readObjectProp(object, 'id') ?? ''))
+    scheduleSyncLayers()
+    rememberFrameStyle(next)
+    const continuous = 'weight' in patch || 'handleSize' in patch || 'knockout' in patch
+    if (!continuous) finalizeActive(label)
+  }
+
   function applyPosterStyle(style: 'magazine' | 'type' | 'image' | 'minimal') {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -5252,6 +5459,7 @@ function App() {
     setEditorTool(next)
     if (next !== 'shape') setPenMode(false)
     if (next === 'mask') setStatus('Mask — paint to conceal, Alt to reveal · [ ] size')
+    if (next === 'frame') setStatus('Frame — drag to draw (Shift square, Alt from center), or click a layer to frame it')
   }, [])
   function togglePenKind(kind: PenKind) {
     if (penMode && penKind === kind) {
@@ -5434,6 +5642,28 @@ function App() {
       keywords: ['crop', 'trim', 'registration', 'marks', 'print', 'proof'],
       scope: 'canvas',
       run: () => addCropMarks(),
+    },
+    {
+      id: 'frame-tool',
+      label: 'Frame tool',
+      keywords: ['frame', 'handles', 'chrome', 'figma', 'bounding box', 'ui', 'draw', 'tool'],
+      scope: 'canvas',
+      run: () => keyActionsRef.current.frameTool?.(),
+    },
+    {
+      id: 'frame-selection',
+      label: 'Frame selection',
+      keywords: ['frame', 'handles', 'selection', 'chrome', 'figma', 'bounding box', 'ui', 'wrap'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => frameSelection(),
+    },
+    {
+      id: 'frame-images',
+      label: 'Frame the images',
+      keywords: ['frame', 'handles', 'chrome', 'figma', 'construction', 'lines', 'ui', 'collage', 'images'],
+      scope: 'canvas',
+      run: () => frameImages(),
     },
     {
       id: 'photograph-collage',
@@ -5810,6 +6040,16 @@ function App() {
                 onDone={() => finishWarpEdit(true)}
                 onCancel={() => finishWarpEdit(false)}
               />
+            ) : editorTool === 'frame' ? (
+              <FrameBar
+                spec={frameSpec}
+                color={frameColor}
+                posterWidth={poster.width}
+                posterHeight={poster.height}
+                onChange={(patch) => updateFrameDefaults(patch)}
+                onColorChange={setFrameColor}
+                onShuffle={() => rememberFrameStyle(shuffleFrameSpec(frameSpec, Math.random))}
+              />
             ) : editorTool === 'brush' ? (
               <BrushBar
                 brush={brush}
@@ -5854,6 +6094,17 @@ function App() {
               onStrokeMove={handleStrokeMove}
               onStrokeEnd={handleStrokeEnd}
             />
+            <FrameOverlay
+              active={editorTool === 'frame' && !isPanMode}
+              posterWidth={poster.width}
+              posterHeight={poster.height}
+              displayScale={displayScale}
+              spec={frameSpec}
+              color={frameColor}
+              readSnapTargets={frameSnapTargets}
+              onDraw={drawFrame}
+              onPick={frameLayerAt}
+            />
             <SelectionOverlay
               posterWidth={poster.width}
               posterHeight={poster.height}
@@ -5868,7 +6119,7 @@ function App() {
               onLayerViaCopy={() => void liftSelectionToLayer(false)}
               onLayerViaCut={() => void liftSelectionToLayer(true)}
             />
-            {selected && editorTool !== 'select' && editorTool !== 'brush' && !warpEdit ? (
+            {selected && editorTool !== 'select' && editorTool !== 'brush' && editorTool !== 'frame' && !warpEdit ? (
               <LiveSelectionHud
                 canvasRef={canvasRef}
                 selected={selected}
@@ -6037,6 +6288,14 @@ function App() {
           onRemoveWarp={removeWarp}
           onAddAdjustment={addAdjustmentLayer}
           onAdjustmentChange={updateAdjustment}
+          onFrameChange={updateSelectedFrame}
+          onFrameColorChange={(color) => updateActive({ fill: color })}
+          onFrameShuffle={() => {
+            const spec = readFrameSpec(activeObject())
+            if (spec) updateSelectedFrame(shuffleFrameSpec(spec, Math.random), 'Shuffled frame')
+          }}
+          onFrameSelection={frameSelection}
+          onFrameImages={() => frameImages()}
           onPreviewBlendMode={previewBlendMode}
           onApplyBlendMode={applyBlendMode}
           onLoadGoogleFont={loadGoogleFont}

@@ -3677,6 +3677,257 @@ label:has(> input[type='radio']) {
   color: var(--text-faint);
 }
 
+/* ── Frame handles ──────────────────────────────────────────────────────── */
+.frame-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.frame-overlay.is-active {
+  pointer-events: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.frame-overlay-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.frame-overlay-guide {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1px;
+}
+
+/* The live size readout under a frame being drawn, as in Figma. */
+.frame-overlay-size {
+  position: absolute;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff;
+  background: var(--accent);
+  font: 600 10px/1.4 var(--font);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.frame-bar .brush-field {
+  width: 118px;
+}
+
+.frame-segmented,
+.frame-extend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.frame-bar .frame-segmented .icon-button,
+.frame-bar .frame-extend .icon-button,
+.frame-bar > .icon-button {
+  width: 26px;
+  min-height: 26px;
+}
+
+.frame-segmented button[aria-checked='true'],
+.frame-extend button[aria-pressed='true'] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.frame-segmented button[aria-checked='true']:hover:not(:disabled),
+.frame-extend button[aria-pressed='true']:hover:not(:disabled) {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.frame-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-muted);
+  font: 500 11px/1 var(--font);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.frame-color input {
+  width: 26px;
+  height: 22px;
+  padding: 1px;
+}
+
+/* Handle-fill swatches: knocked out flat, open to the art, solid line color. */
+.frame-fill-glyph {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+}
+
+.frame-fill-glyph.is-knockout {
+  background: #fff;
+}
+
+.frame-fill-glyph.is-solid {
+  background: currentColor;
+}
+
+.frame-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.frame-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.frame-controls-row .toggle-row {
+  margin-top: 0;
+}
+
+.frame-controls-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.frame-controls-stack .property-kicker {
+  margin: 0;
+}
+
+.frame-controls-handles {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Beside the handle map the fill choices stack, so the section never outgrows the panel. */
+.frame-controls-handles .frame-segmented {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.frame-controls-handles .frame-segmented button {
+  justify-content: flex-start;
+}
+
+/*
+ * The handle map is the frame in miniature: a hairline square with a button on
+ * each corner and edge midpoint. Spots sit 26px apart so each keeps a clear
+ * 24px target.
+ */
+.frame-handle-map {
+  --map-pad: 10px;
+  position: relative;
+  flex: none;
+  width: 72px;
+  height: 72px;
+}
+
+.frame-handle-map-frame {
+  position: absolute;
+  inset: var(--map-pad);
+  border: 1px solid var(--text-faint, var(--text-muted));
+  pointer-events: none;
+}
+
+.frame-handle-spot {
+  position: absolute;
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translate(-50%, -50%);
+}
+
+.frame-handle-spot::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--text-muted);
+  background: var(--panel, transparent);
+  transition: background 80ms ease, border-color 80ms ease, transform 120ms ease;
+}
+
+.frame-handle-spot:hover:not(:disabled) {
+  background: transparent;
+}
+
+.frame-handle-spot:hover::before {
+  border-color: var(--accent);
+  transform: scale(1.15);
+}
+
+.frame-handle-spot[aria-pressed='true']::before {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.frame-handle-spot.is-tl,
+.frame-handle-spot.is-l,
+.frame-handle-spot.is-bl {
+  left: var(--map-pad);
+}
+
+.frame-handle-spot.is-t,
+.frame-handle-spot.is-b,
+.frame-handle-spot.is-center {
+  left: 50%;
+}
+
+.frame-handle-spot.is-tr,
+.frame-handle-spot.is-r,
+.frame-handle-spot.is-br {
+  left: calc(100% - var(--map-pad));
+}
+
+.frame-handle-spot.is-tl,
+.frame-handle-spot.is-t,
+.frame-handle-spot.is-tr {
+  top: var(--map-pad);
+}
+
+.frame-handle-spot.is-l,
+.frame-handle-spot.is-r,
+.frame-handle-spot.is-center {
+  top: 50%;
+}
+
+.frame-handle-spot.is-bl,
+.frame-handle-spot.is-b,
+.frame-handle-spot.is-br {
+  top: calc(100% - var(--map-pad));
+}
+
+.frame-handle-spot.is-center::before {
+  border-style: dashed;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame-handle-spot::before {
+    transition: none;
+  }
+}
+
 /* ── Layers panel ────────────────────────────────────────────────────────
    Photoshop anatomy, quieter chrome: blend + opacity strip on top, a dense
    single-line list (eye · thumb · name · lock), and an icon footer pinned

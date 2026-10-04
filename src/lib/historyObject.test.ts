@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Path, Rect } from 'fabric'
 import { applyObjectPatch, captureObjectPatch, capturePathEditPatch } from './historyObject'
 import { readLayerMask, writeLayerMask } from './layerMask'
+import { FrameHandles } from './frameHandles'
 
 describe('historyObject', () => {
   it('round-trips object patches', () => {
@@ -112,5 +113,31 @@ describe('historyObject', () => {
     expect(path.left).toBe(10)
     expect(path.angle).toBe(15)
     expect(path.path[1]).toEqual(['L', 80, 20])
+  })
+
+  it('round-trips a frame\'s handles, lines and color', () => {
+    const frame = new FrameHandles({ left: 0, top: 0, width: 200, height: 100, fill: '#1aa9d8', frame: { handles: ['tl'], extend: [] } })
+    const before = captureObjectPatch(frame)
+    frame.set({ frame: { ...frame.frame, handles: ['tl', 'br'], extend: ['top'], dash: 'dotted' }, fill: '#ff0000' })
+    const after = captureObjectPatch(frame)
+    expect(after).not.toBe(before)
+    applyObjectPatch(frame, before)
+    expect(frame.frame.handles).toEqual(['tl'])
+    expect(frame.frame.extend).toEqual([])
+    expect(frame.frame.dash).toBe('solid')
+    expect(frame.fill).toBe('#1aa9d8')
+    applyObjectPatch(frame, after)
+    expect(frame.frame.handles).toEqual(['tl', 'br'])
+    expect(frame.fill).toBe('#ff0000')
+  })
+
+  it('restores a frame color under the soft proof without touching the proofed fill', () => {
+    const frame = new FrameHandles({ left: 0, top: 0, width: 200, height: 100, fill: '#1aa9d8' })
+    const before = captureObjectPatch(frame)
+    frame.set({ originalFill: '#ff0000', fill: '#ee1111' } as Partial<FrameHandles>)
+    expect(JSON.parse(captureObjectPatch(frame)).frameColor).toBe('#ff0000')
+    applyObjectPatch(frame, before)
+    expect((frame as unknown as { originalFill: string }).originalFill).toBe('#1aa9d8')
+    expect(frame.fill).toBe('#ee1111')
   })
 })

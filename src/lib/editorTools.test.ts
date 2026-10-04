@@ -10,6 +10,8 @@ describe('editorTools', () => {
   it('maps placement tools to text or crosshair', () => {
     expect(cursorForTool('text')).toBe('text')
     expect(cursorForTool('shape')).toBe('crosshair')
+    expect(cursorForTool('frame')).toBe('crosshair')
+    expect(hoverCursorForTool('frame')).toBe('crosshair')
     expect(cursorForTool('mask')).toBe('cell')
     expect(cursorForTool('move')).toBe('default')
   })
