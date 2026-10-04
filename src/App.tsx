@@ -5367,6 +5367,9 @@ function App() {
       run: () => void applyGestureToSelection(gesture),
     })),
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
+    { id: 'slice-strips', label: 'Slice into strips', keywords: ['slice', 'cut', 'scalpel', 'strips'], scope: 'selection', disabled: !selected, run: () => void sliceSelected('horizontal') },
+    { id: 'slice-columns', label: 'Slice into columns', keywords: ['slice', 'cut', 'scalpel', 'columns'], scope: 'selection', disabled: !selected, run: () => void sliceSelected('vertical') },
+    { id: 'tear-collage', label: 'Tear collage', keywords: ['tear', 'torn', 'rip', 'collage', 'paper'], scope: 'selection', disabled: !selected, run: () => void tearCollageSelected() },
     {
       id: 'scramble',
       label: 'Scramble layout',

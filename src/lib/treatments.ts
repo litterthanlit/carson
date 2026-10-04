@@ -519,7 +519,7 @@ export async function renderTreatmentStackOnCanvas(
   cleanupOrphanedCopyMachineRenders(canvas, object)
 
   for (const treatment of treatments.filter((item) => item.type === 'slice')) {
-    if (treatment.enabled) await renderSliceTreatment(canvas, object, treatment, taggers.slice)
+    if (treatment.enabled) await renderSliceTreatment(canvas, object, treatment, taggers.slice, pxPerMm)
     else removeSliceFragments(canvas, treatment.id)
   }
   for (const treatment of treatments.filter((item) => item.type === 'crop')) {
@@ -527,7 +527,7 @@ export async function renderTreatmentStackOnCanvas(
     else removeCropFragments(canvas, treatment.id)
   }
   for (const treatment of treatments.filter((item) => item.type === 'tear')) {
-    if (treatment.enabled) await renderTearTreatment(canvas, object, treatment, taggers.tear)
+    if (treatment.enabled) await renderTearTreatment(canvas, object, treatment, taggers.tear, pxPerMm, typeof canvas.backgroundColor === 'string' ? canvas.backgroundColor : undefined)
     else removeTearFragments(canvas, treatment.id)
   }
   for (const treatment of treatments.filter((item) => item.type === 'bad-crop')) {

@@ -65,7 +65,7 @@ function parseColor(color: string): [number, number, number] {
   return [246, 243, 236]
 }
 
-function layerFrame(source: FabricObject): LayerFrame {
+export function layerFrame(source: FabricObject): LayerFrame {
   const matrix = source.calcTransformMatrix()
   const at = (x: number, y: number) => util.transformPoint(new Point(x, y), matrix)
   const center = at(0, 0)

@@ -1,9 +1,9 @@
 /**
- * Non-destructive slice treatment — source layer survives; fragments are removable artifacts.
+ * Non-destructive slice treatment — source layer survives; hand-cut pieces are removable artifacts.
  */
-import { FabricImage, type Canvas, type FabricObject } from 'fabric'
-import { createCutFragments, type CutFragment } from './editorModel'
-import { createSeededRandom } from './random'
+import type { Canvas, FabricObject } from 'fabric'
+import type { CutFragment } from './editorModel'
+import { renderPaperCut } from './paperCutRender'
 import type { Treatment } from './treatments'
 
 export const SLICE_SOURCE_ID_KEY = 'sliceSourceId'
@@ -89,54 +89,35 @@ export function restoreSliceSource(object: FabricObject, fallbackOpacity = 1) {
 
 export type SliceFragmentTagger = (object: FabricObject, index: number) => void
 
+/**
+ * Slice: a scalpel through the layer, strips or columns. The lines are hand-cut
+ * (a degree off, a slight bow), shared by neighbouring strips so nothing goes
+ * missing, and each strip slides a few millimetres along its cut.
+ */
 export async function renderSliceTreatment(
   canvas: Canvas,
   source: FabricObject,
   treatment: Treatment,
   tagFragment: SliceFragmentTagger,
+  pxPerMm = 11.8,
 ) {
   removeSliceFragments(canvas, treatment.id)
-
-  if (!treatment.enabled) {
-    return
-  }
-
-  const sourceId = String(readSliceProp(source, 'id') ?? 'layer')
-  const bounds = source.getBoundingRect()
-  const direction = sliceDirectionFromParams(treatment.params)
-  const pieces = treatment.params.pieces ?? 5
+  if (!treatment.enabled) return
   const gap = treatment.params.gap ?? 9
-  const fragments = createCutFragments(
+  renderPaperCut(
+    canvas,
+    source,
+    treatment,
     {
-      id: sourceId,
-      left: bounds.left,
-      top: bounds.top,
-      width: bounds.width,
-      height: bounds.height,
+      style: 'scalpel',
+      direction: sliceDirectionFromParams(treatment.params),
+      pieces: treatment.params.pieces ?? 5,
+      separationMm: gap * 0.12,
+      slideMm: 2 + gap * 0.5,
+      turnDeg: 1.5,
     },
-    { pieces, gap, direction },
+    { sourceKey: SLICE_SOURCE_ID_KEY, treatmentKey: SLICE_TREATMENT_ID_KEY },
+    tagFragment,
+    pxPerMm,
   )
-
-  const imageUrl = source.toDataURL({ format: 'png', multiplier: 1 })
-  const cropped = await cropFragments(imageUrl, fragments)
-  const random = createSeededRandom(treatment.seed)
-  const baseOpacity = source.opacity ?? 1
-
-  for (const [index, url] of cropped.entries()) {
-    const fragment = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
-    const frame = fragments[index]
-    const angleJitter = (index % 2 === 0 ? -1 : 1) * (2 + random() * 2)
-    fragment.set({
-      left: frame.left,
-      top: frame.top,
-      angle: angleJitter,
-      opacity: baseOpacity,
-      [SLICE_SOURCE_ID_KEY]: sourceId,
-      [SLICE_TREATMENT_ID_KEY]: treatment.id,
-    } as Partial<FabricObject>)
-    tagFragment(fragment, index)
-    canvas.add(fragment)
-  }
-
-  hideSliceSource(source)
 }
