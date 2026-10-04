@@ -7,7 +7,9 @@ import {
   applyCopyMachineChain,
   copyMachineGhostDelta,
   copyMachineGhostOpacity,
+  copyMachineParamsFromGeneration,
   copyMachineParamsFromRecord,
+  copyMachineParamsToRecord,
   copyMachinePixelScale,
   isOpaqueSource,
   renderCopyMachineGhostPass,
@@ -91,10 +93,33 @@ export function listCopyMachinePosterTargets(canvas: Canvas): FabricObject[] {
   return canvas.getObjects().filter(isCopyMachinePosterTarget)
 }
 
+/**
+ * Treatments that run through the copier: Copy machine itself, and Xerox —
+ * the copier set by generation, so a "photocopy" is the physical model on
+ * type and shapes too, not a filter that only images can take.
+ */
+export function copierChain(treatments: Treatment[]): Treatment[] {
+  return treatments
+    .filter((item) => item.type === 'copy-machine' || item.type === 'xerox')
+    .map((item) =>
+      item.type === 'xerox'
+        ? {
+            ...item,
+            type: 'copy-machine' as const,
+            params: copyMachineParamsToRecord(copyMachineParamsFromGeneration(item.params.generation ?? 5)),
+          }
+        : item,
+    )
+}
+
+export function usesCopier(treatments: Treatment[]): boolean {
+  return treatments.some((item) => item.type === 'copy-machine' || item.type === 'xerox')
+}
+
 export function listCopyMachineSources(canvas: Canvas): FabricObject[] {
   return canvas.getObjects().filter((object) => {
     if (isCopyMachineCompanionLayer(object)) return false
-    return readTreatments(object).some((item) => item.type === 'copy-machine')
+    return usesCopier(readTreatments(object))
   })
 }
 
@@ -195,7 +220,7 @@ export async function rebakeCopyMachineTreatments(canvas: Canvas, exportScale = 
     await renderCopyMachineTreatment(
       canvas,
       source,
-      readTreatments(source).filter((item) => item.type === 'copy-machine'),
+      copierChain(readTreatments(source)),
       exportScale,
       tensionScale,
     )

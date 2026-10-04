@@ -367,6 +367,30 @@ export function copyMachineParamsFromRecord(params: Record<string, number>): Cop
   }
 }
 
+/**
+ * Xerox by generation (1–10): the same copier, run the way an office copier
+ * degrades a sheet that's been copied again and again — more passes, darker
+ * toner, more grit, a dirtier drum, and by the late generations the original
+ * slipping under the bar. No ghost: that's a separate misregistration.
+ */
+export function copyMachineParamsFromGeneration(generation: number): CopyMachineParams {
+  const g = Math.max(1, Math.min(10, Number.isFinite(generation) ? generation : 5))
+  return {
+    ...COPY_MACHINE_DEFAULTS,
+    generations: Math.max(1, Math.min(5, Math.ceil(g / 2))),
+    copyScale: 100,
+    contrast: 52 + g * 4.5,
+    grain: 26 + g * 5,
+    voids: g * 2,
+    wobble: 8 + g * 2,
+    drag: g > 5 ? (g - 5) * 9 : 0,
+    bands: 8 + g * 3,
+    streaks: 4 + g * 3,
+    edge: 0,
+    ghost: 0,
+  }
+}
+
 export function copyMachineParamsToRecord(params: CopyMachineParams): Record<string, number> {
   return { ...params }
 }

@@ -11,6 +11,7 @@ import {
   copyMachineGhostDelta,
   copyMachineGhostOpacity,
   copyMachineLayerSeeds,
+  copyMachineParamsFromGeneration,
   copyMachineParamsFromRecord,
   copyMachinePixelScale,
   copyMachineTensionScale,
@@ -592,5 +593,23 @@ describe('copyMachine scan drift', () => {
       if (changed) changedRows++
     }
     expect(changedRows).toBeGreaterThan(FIXTURE_SIZE / 2)
+  })
+})
+
+describe('xerox through the copier', () => {
+  it('degrades with each generation', () => {
+    const early = copyMachineParamsFromGeneration(1)
+    const late = copyMachineParamsFromGeneration(10)
+    expect(late.generations).toBeGreaterThan(early.generations)
+    expect(late.contrast).toBeGreaterThan(early.contrast)
+    expect(late.grain).toBeGreaterThan(early.grain)
+    expect(early.drag).toBe(0)
+    expect(late.drag).toBeGreaterThan(0)
+    expect(late.ghost).toBe(0)
+  })
+
+  it('clamps out-of-range generations', () => {
+    expect(copyMachineParamsFromGeneration(99)).toEqual(copyMachineParamsFromGeneration(10))
+    expect(copyMachineParamsFromGeneration(Number.NaN)).toEqual(copyMachineParamsFromGeneration(5))
   })
 })

@@ -3,7 +3,7 @@
  */
 import { filters } from 'fabric'
 import type { Canvas, FabricImage, FabricObject } from 'fabric'
-import { getLayerDecayProfile, getPrintScanProfile } from './editorModel'
+import { getLayerDecayProfile } from './editorModel'
 import {
   buildFxFilters,
   fxChipLabel,
@@ -57,6 +57,8 @@ import {
   type TearFragmentTagger,
 } from './tearTreatment'
 import {
+  copierChain,
+  usesCopier,
   findCopyMachineGhost,
   findCopyMachineRender,
   removeCopyMachineCompanions,
@@ -351,13 +353,8 @@ export function buildTreatmentFilters(
   const output: filters.BaseFilter<string, object>[] = []
   for (const treatment of treatments.filter((item) => item.enabled)) {
     const params = scaleTreatmentParams(treatment.type, treatment.params, tensionScale)
-    if (treatment.type === 'xerox') {
-      const profile = getPrintScanProfile(params.generation ?? 5)
-      output.push(markTreatmentFilter(new filters.Grayscale()))
-      output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
-      output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
-      output.push(markTreatmentFilter(new filters.Blur({ blur: profile.blur })))
-    } else if (treatment.type === 'decay') {
+    // Xerox isn't a filter any more: it runs through the copier (see copierChain).
+    if (treatment.type === 'decay') {
       const profile = getLayerDecayProfile(params.amount ?? 55)
       output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
       output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
@@ -405,7 +402,9 @@ export function renderTreatmentStack(object: FabricObject, tensionScale = 1) {
 
 function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
   const stack = readTreatments(object).filter((item) => item.enabled && !ARTIFACT_TYPES.has(item.type))
-  const filterTreatments = stack.filter((item) => item.type !== 'scatter' && item.type !== 'copy-machine')
+  const filterTreatments = stack.filter(
+    (item) => item.type !== 'scatter' && item.type !== 'copy-machine' && item.type !== 'xerox',
+  )
   const scatter = stack.find((item) => item.type === 'scatter')
 
   const baseline = readTransformBaseline(object)
@@ -431,10 +430,7 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
 
   for (const treatment of filterTreatments) {
     const params = scaleTreatmentParams(treatment.type, treatment.params, tensionScale)
-    if (treatment.type === 'xerox') {
-      const profile = getPrintScanProfile(params.generation ?? 5)
-      object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
-    } else if (treatment.type === 'decay') {
+    if (treatment.type === 'decay') {
       const profile = getLayerDecayProfile(params.amount ?? 55)
       object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
     } else if (treatment.type === 'cold-wash') {
@@ -447,7 +443,7 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
 
 function cleanupOrphanedCopyMachineRenders(canvas: Canvas, source: FabricObject) {
   const sourceId = String((source as unknown as Record<string, unknown>).id ?? '')
-  const hasCopyMachine = readTreatments(source).some((item) => item.type === 'copy-machine')
+  const hasCopyMachine = usesCopier(readTreatments(source))
   const render = findCopyMachineRender(canvas, sourceId)
   const ghost = findCopyMachineGhost(canvas, sourceId)
   if (!hasCopyMachine && (render || ghost)) {
@@ -559,7 +555,7 @@ export async function renderTreatmentStackOnCanvas(
     else removeTypeStripFragments(canvas, treatment.id)
   }
 
-  const copyMachineTreatments = treatments.filter((item) => item.type === 'copy-machine')
+  const copyMachineTreatments = copierChain(treatments)
   if (copyMachineTreatments.length > 0) {
     await renderCopyMachineTreatment(canvas, object, copyMachineTreatments, 1, tensionScale)
   } else {

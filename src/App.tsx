@@ -20,8 +20,6 @@ import {
   createAccidentTransforms,
   createCropGuides,
   createDiagonalTextureLines,
-  createPhotocopyNoise,
-  createPrintScanArtifacts,
   getLayerDecayProfile,
   type ExpressiveLegibility,
   type PosterPreset,
@@ -171,7 +169,7 @@ import {
   copyMachineLayerSeeds,
   copyMachineParamsToRecord,
 } from './lib/copyMachine'
-import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, rebakeCopyMachineTreatments } from './lib/copyMachineTreatment'
+import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, rebakeCopyMachineTreatments, usesCopier } from './lib/copyMachineTreatment'
 import { omitDecayMarkFragmentsFromCanvasJSON } from './lib/decayMarksTreatment'
 import { misprintParamsFromGeneration, omitMisprintFragmentsFromCanvasJSON } from './lib/misprintTreatment'
 import { omitTypeStripFragmentsFromCanvasJSON } from './lib/typeStripsTreatment'
@@ -1868,7 +1866,7 @@ function App() {
   function finalizeActive(message: string) {
     activeObject()?.setCoords()
     const object = activeObject()
-    if (object && readTreatments(object).some((item) => item.type === 'copy-machine')) {
+    if (object && usesCopier(readTreatments(object))) {
       void refreshTreatmentStack(object)
     }
     canvasRef.current?.requestRenderAll()
@@ -4241,7 +4239,11 @@ function App() {
     )
   }
 
-  async function applyCopyMachineToPoster(seed = newSeed()) {
+  async function applyCopyMachineToPoster(
+    seed = newSeed(),
+    params: Record<string, number> = copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS),
+    label = 'Run through the copier',
+  ) {
     const canvas = canvasRef.current
     if (!canvas) return
     const targets = listCopyMachinePosterTargets(canvas)
@@ -4250,7 +4252,6 @@ function App() {
       return
     }
 
-    const params = copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS)
     const seeds = copyMachineLayerSeeds(seed, targets.length)
     const targetIds = targets.map((object) => String(readObjectProp(object, 'id') ?? ''))
 
@@ -4262,8 +4263,8 @@ function App() {
     }
 
     setInspectorTab('treatments')
-    trackChaos('Run through the copier', seed, targetIds, (next) => applyCopyMachineToPoster(next))
-    commitHistory(`Ran poster through the copier #${seed}`)
+    trackChaos(label, seed, targetIds, (next) => applyCopyMachineToPoster(next, params, label))
+    commitHistory(`${label} #${seed}`)
     setStatus(`Ran ${targets.length} layer${targets.length === 1 ? '' : 's'} through the copier`)
   }
 
@@ -4596,64 +4597,43 @@ function App() {
     void applyTreatmentToSelection('distress', { intensity: 70 }, 'distress', seed)
   }
 
+  /** A dusty glass and a tired drum: the whole poster through a copier that adds grit and streaks. */
   function addPhotocopyNoise(seed = newSeed()) {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const random = createSeededRandom(seed)
-    const marks = createPhotocopyNoise(poster, { specks: 90, scratches: 18, scanlines: 9, random })
-
-    marks.forEach((mark) => {
-      const object =
-        mark.kind === 'speck'
-          ? new Rect({
-              left: mark.left,
-              top: mark.top,
-              width: mark.size,
-              height: mark.size,
-              fill: '#111111',
-              opacity: mark.opacity,
-              angle: random() * 45,
-            })
-          : new Rect({
-              left: mark.left,
-              top: mark.top,
-              width: mark.width,
-              height: mark.height,
-              fill: mark.kind === 'scanline' ? '#05b6d4' : '#111111',
-              opacity: mark.opacity,
-              angle: mark.angle,
-              globalCompositeOperation: mark.kind === 'scanline' ? 'multiply' : 'source-over',
-            })
-      tagObject(object, 'shape', mark.kind)
-      canvas.add(object)
-    })
-
-    trackChaos('Photocopy noise', seed, [], (next) => addPhotocopyNoise(next))
-    commitHistory(`Added photocopy noise #${seed}`)
+    void applyCopyMachineToPoster(
+      seed,
+      copyMachineParamsToRecord({
+        ...COPY_MACHINE_DEFAULTS,
+        contrast: 40,
+        grain: 95,
+        streaks: 70,
+        bands: 10,
+        wobble: 6,
+        drag: 0,
+        voids: 6,
+        ghost: 0,
+      }),
+      'Photocopy noise',
+    )
   }
 
+  /** Toner starvation across the scan and a dirty drum along it, deeper with each generation. */
   function addPrintScanSurface(seed = newSeed()) {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const artifacts = createPrintScanArtifacts(poster, { generation: xeroxGeneration, random: createSeededRandom(seed) })
-
-    artifacts.forEach((artifact) => {
-      const object = new Rect({
-        left: artifact.left,
-        top: artifact.top,
-        width: artifact.width,
-        height: artifact.height,
-        fill: artifact.kind === 'band' ? '#111111' : ACCENTS[0],
-        opacity: artifact.opacity,
-        angle: artifact.kind === 'drift' ? artifact.angle : 0,
-        globalCompositeOperation: 'multiply',
-      })
-      tagObject(object, 'shape', artifact.kind === 'band' ? 'Xerox band' : 'Scanner drift')
-      canvas.add(object)
-    })
-
-    trackChaos('Surface wear', seed, [], (next) => addPrintScanSurface(next))
-    commitHistory(`Added print-scan surface #${seed}`)
+    const generation = Math.max(1, Math.min(10, xeroxGeneration))
+    void applyCopyMachineToPoster(
+      seed,
+      copyMachineParamsToRecord({
+        ...COPY_MACHINE_DEFAULTS,
+        contrast: 45,
+        grain: 35,
+        bands: 40 + generation * 6,
+        streaks: 20 + generation * 5,
+        wobble: 6,
+        drag: generation > 5 ? (generation - 5) * 8 : 0,
+        voids: 4,
+        ghost: 0,
+      }),
+      'Surface wear',
+    )
   }
 
   function addDiagonalTexture() {
