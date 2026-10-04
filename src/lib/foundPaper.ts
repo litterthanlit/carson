@@ -518,7 +518,7 @@ const PAINTERS: Record<FoundPaperKind, (ctx: Ctx, width: number, height: number,
       ctx.restore()
     }
     // Wrinkles where the tape went down crooked: a lit side and a shaded side.
-    const wrinkles = 6 + Math.floor(random() * 10)
+    const wrinkles = 3 + Math.floor(random() * 5)
     for (let wrinkle = 0; wrinkle < wrinkles; wrinkle++) {
       const x = random() * width
       const y = random() * height
@@ -528,30 +528,35 @@ const PAINTERS: Record<FoundPaperKind, (ctx: Ctx, width: number, height: number,
       const dy = Math.sin(angle) * length / 2
       const offset = Math.max(1, height * 0.012)
       ctx.lineCap = 'round'
-      ctx.strokeStyle = `rgba(255,255,255,${between(random, 0.35, 0.7)})`
+      ctx.strokeStyle = `rgba(255,255,255,${between(random, 0.18, 0.4)})`
       ctx.lineWidth = Math.max(1, height * 0.008)
       ctx.beginPath()
       ctx.moveTo(x - dx, y - dy)
       ctx.quadraticCurveTo(x + (random() - 0.5) * length * 0.3, y + (random() - 0.5) * length * 0.3, x + dx, y + dy)
       ctx.stroke()
-      ctx.strokeStyle = `rgba(40,30,15,${between(random, 0.12, 0.25)})`
+      ctx.strokeStyle = `rgba(40,30,15,${between(random, 0.06, 0.14)})`
       ctx.beginPath()
       ctx.moveTo(x - dx + offset, y - dy + offset)
       ctx.lineTo(x + dx + offset, y + dy + offset)
       ctx.stroke()
     }
-    // Trapped air.
-    const bubbles = 2 + Math.floor(random() * 6)
+    // Trapped air: a soft lifted spot of film, lit on one side only.
+    const bubbles = Math.floor(random() * 4)
     for (let bubble = 0; bubble < bubbles; bubble++) {
       const bx = random() * width
-      const by = between(random, 0.15, 0.85) * height
-      const r = height * between(random, 0.02, 0.07)
-      ctx.fillStyle = 'rgba(255,255,255,0.12)'
-      ctx.strokeStyle = 'rgba(255,255,255,0.6)'
-      ctx.lineWidth = Math.max(1, r * 0.12)
+      const by = between(random, 0.2, 0.8) * height
+      const r = height * between(random, 0.02, 0.06)
+      const glow = ctx.createRadialGradient(bx - r * 0.3, by - r * 0.3, 0, bx, by, r * 1.3)
+      glow.addColorStop(0, 'rgba(255,255,255,0.22)')
+      glow.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = glow
       ctx.beginPath()
-      ctx.ellipse(bx, by, r * 1.4, r, random() * Math.PI, 0, Math.PI * 2)
+      ctx.ellipse(bx, by, r * 1.4, r, 0, 0, Math.PI * 2)
       ctx.fill()
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+      ctx.lineWidth = Math.max(1, r * 0.1)
+      ctx.beginPath()
+      ctx.ellipse(bx, by, r * 1.4, r, 0, Math.PI * 1.05, Math.PI * 1.55)
       ctx.stroke()
     }
     // The film's factory edges: a bright line with a hairline shadow.

@@ -15,6 +15,7 @@ import {
   Rows3,
   ScanLine,
   Scissors,
+  StickyNote,
   Shuffle,
   Spline,
   Timer,
@@ -70,6 +71,7 @@ export type InstrumentsPaletteProps = {
   onAddCropMarks: () => void
   onBreakSelectedType: () => void
   onLetterBreak: () => void
+  onTapeLift: () => void
   onCloneTypeAsTexture: () => void
   onApplyXerox: () => void
   onApplyCopyMachine: () => void
@@ -139,6 +141,7 @@ export function InstrumentsPalette({
   onAddCropMarks,
   onBreakSelectedType,
   onLetterBreak,
+  onTapeLift,
   onCloneTypeAsTexture,
   onApplyXerox,
   onApplyCopyMachine,
@@ -314,6 +317,9 @@ export function InstrumentsPalette({
           </button>
           <button type="button" title="Cut each letter into its strokes and pull them apart" onClick={onLetterBreak} disabled={!selectedIsText}>
             <Scissors size={16} /> Letter break <ScopeSel />
+          </button>
+          <button type="button" title="Rub tape onto the layer and peel it off — the print loses ink, the tape carries it" onClick={onTapeLift} disabled={!selected}>
+            <StickyNote size={16} /> Tape lift <ScopeSel />
           </button>
           <button type="button" title="Bury a ghost copy of the selected text" onClick={onCloneTypeAsTexture} disabled={!selectedIsText}>
             <Layers size={16} /> Bury type <ScopeSel />

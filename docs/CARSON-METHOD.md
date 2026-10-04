@@ -4,6 +4,17 @@ A field guide to the method behind the tool. Each claim is marked **sourced** (C
 
 ---
 
+## 0. Analog above all
+
+Carson (the app) must feel handmade before it feels clever. Every tool is built as a model of a physical cause — a thumb rubbing tape, toner letting go along paper fibres, a sheet balled up and flattened, a hand that lays tape a couple of degrees off — never as a filter that imitates the look. Concretely:
+
+- **Model the cause, not the look.** If you can't name the physical thing that happened, the effect isn't ready.
+- **Physical units.** Textures are sized in millimetres of the printed sheet, not in screen pixels.
+- **Hands aren't rulers.** Anything placed by a hand gets a seeded wobble in angle and position.
+- **Matter is conserved.** What leaves one surface arrives on another (the tape lift's print and strip are exact complements).
+- **Edges carry the truth.** Torn fibres, sawtooth tape ends, ragged toner — never a clean digital edge or a uniform fade.
+- **Every accident is seeded.** Re-rollable, reversible, and identical on reload.
+
 ## 1. The method in seven lines
 
 1. **Read the content first.** "Read the article. Look at the art. Listen to the music." The form comes from the material, never a formula. *(sourced — [Jeff Mellin interview](https://www.jeffmellin.com/davidcarsoninterview), [designboom 2021](https://www.designboom.com/design/david-carson-masterclass-graphic-design-interview-04-22-2021/))*
@@ -29,6 +40,7 @@ A field guide to the method behind the tool. Each claim is marked **sourced** (C
 | Cut-and-tape tiled printouts (the Beach Culture "Mixed Messages" title, printed over 4 sheets) *(sourced)* | Gap | Tiled-print enlarger: split a layer across N "printer pages" with seams, overlaps and slight misalignment. |
 | Masking tape holding pieces down *(inferred)* | **Built** | **Masking tape**: creped, half-translucent — print shows through greyed, overlaps read denser; straight factory edges, fibrous torn ends. |
 | Clear packing tape over the collage *(inferred from his work)* | **Built** | **Packing tape**: amber film, soft gloss ribbons, wrinkles, trapped air, sawtooth dispenser ends. |
+| Tape lift — type pulled off the sheet with tape and stuck down again *(inferred from his work)* | **Built** | **Tape lift** (Instruments, ⌘K): tape laid by hand across the layer, rubbed down in thumb strokes, peeled. Toner lets go in thumb-sized zones, clumps and fibres; paper skin tears where it gripped hardest. The print keeps what stayed; the strip — clear or masking, sticky side down or up (mirrored) — carries exactly what left, stuck back down nearby. `src/lib/tapeLift.ts`, `src/lib/tapeLiftTreatment.ts` |
 | Paper torn off, leaving a scar *(inferred)* | **Built** | **Peeled patch**: the fibrous white body of the sheet, flecks of lost print, an inner shadow where the top layer stands proud. |
 | A sheet that has been folded and crushed (the Ray Gun paste-ups) *(inferred)* | **Built** | **Crumple the sheet** (Assets / ⌘K): long folds plus short wrinkles as a faceted relief, lit from one window and laid on in hard-light. `src/lib/materials.ts` |
 

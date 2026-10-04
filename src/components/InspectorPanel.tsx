@@ -39,6 +39,7 @@ import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask
 import { hasWeave } from '../lib/weave'
 import { FOUND_PAPERS, type FoundPaperKind } from '../lib/foundPaper'
 import { LETTER_BREAK_DEFAULTS, MAX_BREAK_DEPTH } from '../lib/letterBreak'
+import { TAPE_LIFT_DEFAULTS } from '../lib/tapeLift'
 import { COPY_MACHINE_DEFAULTS, MAX_COPY_GENERATIONS } from '../lib/copyMachine'
 import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
@@ -827,6 +828,84 @@ export function InspectorPanel({
                           min={0}
                           max={24}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { ghostOffset: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                      </div>
+                    ) : treatment.type === 'tape-lift' ? (
+                      <div className="treatment-params nested">
+                        <Slider
+                          label="Pressure"
+                          value={treatment.params.pressure ?? TAPE_LIFT_DEFAULTS.pressure}
+                          defaultValue={TAPE_LIFT_DEFAULTS.pressure}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { pressure: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Tape width"
+                          value={treatment.params.width ?? TAPE_LIFT_DEFAULTS.width}
+                          defaultValue={TAPE_LIFT_DEFAULTS.width}
+                          min={5}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { width: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Angle"
+                          value={treatment.params.angle ?? TAPE_LIFT_DEFAULTS.angle}
+                          defaultValue={TAPE_LIFT_DEFAULTS.angle}
+                          min={-90}
+                          max={90}
+                          format={formatDegrees}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { angle: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Position"
+                          value={treatment.params.position ?? TAPE_LIFT_DEFAULTS.position}
+                          defaultValue={TAPE_LIFT_DEFAULTS.position}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { position: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Re-lay"
+                          value={treatment.params.relay ?? TAPE_LIFT_DEFAULTS.relay}
+                          defaultValue={TAPE_LIFT_DEFAULTS.relay}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { relay: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Paper tear"
+                          value={treatment.params.tear ?? TAPE_LIFT_DEFAULTS.tear}
+                          defaultValue={TAPE_LIFT_DEFAULTS.tear}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { tear: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Tape"
+                          value={treatment.params.tape ?? TAPE_LIFT_DEFAULTS.tape}
+                          defaultValue={TAPE_LIFT_DEFAULTS.tape}
+                          min={0}
+                          max={1}
+                          format={(value: number) => (value >= 0.5 ? 'Masking' : 'Clear')}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { tape: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Sticky side"
+                          value={treatment.params.mirror ?? TAPE_LIFT_DEFAULTS.mirror}
+                          defaultValue={TAPE_LIFT_DEFAULTS.mirror}
+                          min={0}
+                          max={1}
+                          format={(value: number) => (value >= 0.5 ? 'Up · mirrored' : 'Down')}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { mirror: value })}
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                       </div>

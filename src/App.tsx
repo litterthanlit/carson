@@ -175,8 +175,10 @@ import { listCopyMachinePosterTargets, omitCopyMachineCompanionsFromCanvasJSON, 
 import { omitDecayMarkFragmentsFromCanvasJSON } from './lib/decayMarksTreatment'
 import { misprintParamsFromGeneration, omitMisprintFragmentsFromCanvasJSON } from './lib/misprintTreatment'
 import { omitTypeStripFragmentsFromCanvasJSON } from './lib/typeStripsTreatment'
-import { isLetterBreakStale, letterBreakSourceIdOf, omitLetterBreakPiecesFromCanvasJSON } from './lib/letterBreakTreatment'
+import { letterBreakSourceIdOf, omitLetterBreakPiecesFromCanvasJSON } from './lib/letterBreakTreatment'
+import { isLiveArtifactStale } from './lib/liveArtifacts'
 import { LETTER_BREAK_DEFAULTS } from './lib/letterBreak'
+import { TAPE_LIFT_DEFAULTS } from './lib/tapeLift'
 import { PRESS_CHECK_DEFAULTS, pressCheckParamsToRecord } from './lib/pressCheck'
 import { omitPressCheckFragmentsFromCanvasJSON, rebakePressCheckTreatments } from './lib/pressCheckTreatment'
 import { getInstrument, instrumentUsesTension, resolveInstrumentParams, type InstrumentId } from './lib/instruments'
@@ -740,11 +742,11 @@ function App() {
     // Dev-only handle for debugging and browser-driven verification.
     if (import.meta.env.DEV) (window as unknown as { __carsonCanvas?: Canvas }).__carsonCanvas = canvas
 
-    // A broken word re-cuts itself after a drag, an edit or an undo moves its source.
+    // Live artifacts (a broken word, a tape lift) rebuild after a drag, an edit or an undo moves their source.
     let recutting = false
     canvas.on('after:render', () => {
       if (recutting || (canvas as unknown as { _currentTransform?: unknown })._currentTransform) return
-      const stale = canvas.getObjects().find(isLetterBreakStale)
+      const stale = canvas.getObjects().find(isLiveArtifactStale)
       if (!stale) return
       // The user moved it: that pose is the new resting place, unless Scatter owns the pose.
       if (!readTreatments(stale).some((item) => item.type === 'scatter' && item.enabled)) {
@@ -4529,6 +4531,25 @@ function App() {
     })
   }
 
+  /** Rub tape onto the layer and peel it off: the print loses ink, the tape carries it. Again for a new pull. */
+  function tapeLiftSelected(seed = newSeed()) {
+    const canvas = canvasRef.current
+    const object = activeObject()
+    if (!canvas || !object || object.type === 'activeselection') {
+      setStatus('Select one layer to lift with tape')
+      return
+    }
+    const existing = readTreatments(object).find((item) => item.type === 'tape-lift')
+    if (!readTransformBaseline(object)) captureTransformBaseline(object)
+    if (existing) updateTreatment(object, existing.id, { seed })
+    else addTreatment(object, 'tape-lift', { ...TAPE_LIFT_DEFAULTS }, seed)
+    void refreshTreatmentStack(object).then(() => {
+      setInspectorTab('treatments')
+      commitHistory(`Lifted with tape #${seed}`)
+      setStatus('Peeled the tape off — lift again for a new pull')
+    })
+  }
+
   /** Cut each letter into its strokes and pull them apart. Run again for a new break. */
   function letterBreakSelected(seed = newSeed()) {
     const canvas = canvasRef.current
@@ -5413,6 +5434,14 @@ function App() {
       run: () => void weaveSelection(),
     },
     {
+      id: 'tape-lift',
+      label: 'Tape lift',
+      keywords: ['tape', 'lift', 'transfer', 'peel', 'pull', 'toner', 'analog', 'packing', 'masking'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => tapeLiftSelected(),
+    },
+    {
       id: 'letter-break',
       label: 'Letter break',
       keywords: ['break', 'letters', 'strokes', 'cut', 'split', 'type', 'fragment', 'scalpel'],
@@ -5741,6 +5770,7 @@ function App() {
             onAddCropMarks={addCropMarks}
             onBreakSelectedType={() => breakSelectedType()}
             onLetterBreak={() => letterBreakSelected()}
+            onTapeLift={() => tapeLiftSelected()}
             onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
             onApplyXerox={() => void applyXeroxToSelected()}
             onApplyCopyMachine={() => void applyCopyMachineToSelected()}

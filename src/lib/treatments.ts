@@ -96,7 +96,16 @@ import {
   renderLetterBreakTreatment,
   type LetterBreakTagger,
 } from './letterBreakTreatment'
+import {
+  TAPE_LIFT_SOURCE_ID_KEY,
+  TAPE_LIFT_TREATMENT_ID_KEY,
+  removeTapeLiftCompanions,
+  removeTapeLiftCompanionsForSource,
+  renderTapeLiftTreatment,
+  type TapeLiftTagger,
+} from './tapeLiftTreatment'
 import { scaleTreatmentParams } from './instruments'
+import { markLiveArtifactsFresh } from './liveArtifacts'
 
 export type TreatmentType =
   | 'xerox'
@@ -111,6 +120,7 @@ export type TreatmentType =
   | 'bad-crop'
   | 'glyph-break'
   | 'letter-break'
+  | 'tape-lift'
   | 'scrape'
   | 'press-check'
   | 'copy-machine'
@@ -143,11 +153,12 @@ const ARTIFACT_TYPES = new Set<TreatmentType>([
   'bad-crop',
   'glyph-break',
   'letter-break',
+  'tape-lift',
   'decay-marks',
   'misprint',
   'type-strips',
 ])
-const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'letter-break', 'type-strips'])
+const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'letter-break', 'tape-lift', 'type-strips'])
 
 const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
   slice: SLICE_SOURCE_ID_KEY,
@@ -156,6 +167,7 @@ const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
   'bad-crop': BAD_CROP_SOURCE_ID_KEY,
   'glyph-break': GLYPH_SOURCE_ID_KEY,
   'letter-break': LETTER_BREAK_SOURCE_ID_KEY,
+  'tape-lift': TAPE_LIFT_SOURCE_ID_KEY,
   'decay-marks': DECAY_MARK_SOURCE_ID_KEY,
   misprint: MISPRINT_SOURCE_ID_KEY,
   'type-strips': TYPE_STRIP_SOURCE_ID_KEY,
@@ -168,6 +180,7 @@ const ARTIFACT_TREATMENT_KEYS: Partial<Record<TreatmentType, string>> = {
   'bad-crop': BAD_CROP_TREATMENT_ID_KEY,
   'glyph-break': GLYPH_TREATMENT_ID_KEY,
   'letter-break': LETTER_BREAK_TREATMENT_ID_KEY,
+  'tape-lift': TAPE_LIFT_TREATMENT_ID_KEY,
   'decay-marks': DECAY_MARK_TREATMENT_ID_KEY,
   misprint: MISPRINT_TREATMENT_ID_KEY,
   'type-strips': TYPE_STRIP_TREATMENT_ID_KEY,
@@ -312,6 +325,8 @@ export function treatmentLabel(treatment: Treatment): string {
       return `Glyphs·${treatment.params.intensity ?? 70}`
     case 'letter-break':
       return `Letter break·#${treatment.seed}`
+    case 'tape-lift':
+      return `Tape lift·#${treatment.seed}`
     case 'scrape':
       return `Scrape·${treatment.params.count ?? 7}`
     case 'press-check':
@@ -466,6 +481,7 @@ function removeAllArtifactsForSource(canvas: Canvas, sourceId: string) {
   removeBadCropFragmentsForSource(canvas, sourceId)
   removeGlyphFragmentsForSource(canvas, sourceId)
   removeLetterBreakPiecesForSource(canvas, sourceId)
+  removeTapeLiftCompanionsForSource(canvas, sourceId)
   removeDecayMarkFragmentsForSource(canvas, sourceId)
   removeMisprintFragmentsForSource(canvas, sourceId)
   removeTypeStripFragmentsForSource(canvas, sourceId)
@@ -478,6 +494,7 @@ export type ArtifactFragmentTaggers = {
   badCrop: BadCropFragmentTagger
   glyph: GlyphFragmentTagger
   letterBreak: LetterBreakTagger
+  tapeLift: TapeLiftTagger
   decayMarks: DecayMarkFragmentTagger
   misprint: MisprintFragmentTagger
   typeStrips: TypeStripFragmentTagger
@@ -488,6 +505,8 @@ export async function renderTreatmentStackOnCanvas(
   object: FabricObject,
   taggers: ArtifactFragmentTaggers,
   tensionScale = 1,
+  /** Poster px per millimetre, for treatments with a physical texture (tape lift). */
+  pxPerMm = 11.8,
 ) {
   applySyncTreatmentStack(object, tensionScale)
 
@@ -522,6 +541,11 @@ export async function renderTreatmentStackOnCanvas(
     if (treatment.enabled) renderLetterBreakTreatment(canvas, object, treatment, taggers.letterBreak)
     else removeLetterBreakPieces(canvas, treatment.id)
   }
+  for (const treatment of treatments.filter((item) => item.type === 'tape-lift')) {
+    const paper = typeof canvas.backgroundColor === 'string' ? canvas.backgroundColor : undefined
+    if (treatment.enabled) renderTapeLiftTreatment(canvas, object, treatment, taggers.tapeLift, paper, pxPerMm)
+    else removeTapeLiftCompanions(canvas, treatment.id)
+  }
   for (const treatment of treatments.filter((item) => item.type === 'decay-marks')) {
     if (treatment.enabled) renderDecayMarksTreatment(canvas, object, treatment, taggers.decayMarks, tensionScale)
     else removeDecayMarkFragments(canvas, treatment.id)
@@ -551,6 +575,7 @@ export async function renderTreatmentStackOnCanvas(
     removeAllArtifactsForSource(canvas, sourceId)
   }
 
+  markLiveArtifactsFresh(object)
   object.setCoords()
 }
 

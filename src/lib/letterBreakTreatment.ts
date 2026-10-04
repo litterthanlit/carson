@@ -21,42 +21,6 @@ export const LETTER_BREAK_TREATMENT_ID_KEY = 'letterBreakTreatmentId'
 /** Font size of the glyph raster the cuts are found on. */
 const ANALYSIS_EM = 128
 
-/** What the pieces were cut from; when it changes, the pieces are stale. */
-export const LETTER_BREAK_SIGNATURE_KEY = 'letterBreakSignature'
-
-function letterBreakTreatmentsOf(object: FabricObject): Treatment[] {
-  const raw = (object as unknown as Record<string, unknown>).treatments
-  return Array.isArray(raw) ? (raw as Treatment[]).filter((item) => item.type === 'letter-break') : []
-}
-
-export function letterBreakSignature(source: FabricObject): string {
-  const record = source as unknown as Record<string, unknown>
-  return JSON.stringify([
-    source.left,
-    source.top,
-    source.angle,
-    source.scaleX,
-    source.scaleY,
-    source.skewX,
-    source.skewY,
-    source.flipX,
-    source.flipY,
-    ...['text', 'width', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'fill', 'stroke', 'strokeWidth', 'charSpacing', 'lineHeight', 'textAlign', 'layerMask', 'globalCompositeOperation'].map((key) => record[key]),
-    (record.transformBaseline as { opacity?: number } | undefined)?.opacity,
-    letterBreakTreatmentsOf(source).map((item) => [item.enabled, item.seed, item.params]),
-  ])
-}
-
-/**
- * True when a broken word has moved, been retyped, re-masked or re-tuned since
- * its pieces were cut — undo, a drag, an edit — and isn't mid-edit right now.
- */
-export function isLetterBreakStale(object: FabricObject): boolean {
-  if (object.type !== 'textbox' || (object as Textbox).isEditing) return false
-  if (!letterBreakTreatmentsOf(object).some((item) => item.enabled)) return false
-  return (object as unknown as Record<string, unknown>)[LETTER_BREAK_SIGNATURE_KEY] !== letterBreakSignature(object)
-}
-
 export type LetterBreakTagger = (object: FabricObject, glyphText: string) => void
 
 export function isLetterBreakPiece(object: FabricObject | Record<string, unknown>): boolean {
@@ -350,5 +314,4 @@ export function renderLetterBreakTreatment(
   // Hidden but still clickable: clicking the broken word selects its source to edit.
   source.set({ opacity: 0, evented: true } as Partial<FabricObject>)
   source.setCoords()
-  ;(source as unknown as Record<string, unknown>)[LETTER_BREAK_SIGNATURE_KEY] = letterBreakSignature(source)
 }
