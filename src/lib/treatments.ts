@@ -108,6 +108,7 @@ import {
 } from './tapeLiftTreatment'
 import { scaleTreatmentParams } from './instruments'
 import { markLiveArtifactsFresh } from './liveArtifacts'
+import { handShove } from './hand'
 
 export type TreatmentType =
   | 'xerox'
@@ -376,31 +377,33 @@ export function buildTreatmentFilters(
   return output
 }
 
-export function applyScatterTransform(object: FabricObject, treatment: Treatment, tensionScale = 1) {
+/**
+ * Scatter is a hand shoving the piece across the table: it slides a few
+ * millimetres (now and then further), turns more the further it went, and
+ * keeps its size. `distance` and `rotation` are the stored strengths; the old
+ * `scale` param is ignored — hands don't resize paper.
+ */
+export function applyScatterTransform(object: FabricObject, treatment: Treatment, tensionScale = 1, pxPerMm = 11.8) {
   const baseline = readTransformBaseline(object) ?? captureTransformBaseline(object)
   const random = createSeededRandom(treatment.seed)
-  const scale = Math.max(0.1, tensionScale)
-  const distance = (treatment.params.distance ?? 46) * scale
-  const rotation = (treatment.params.rotation ?? 18) * scale
-  const size = (treatment.params.scale ?? 0.14) * scale
-  const dx = (random() - 0.5) * distance * 2
-  const dy = (random() - 0.5) * distance * 2
-  const da = (random() - 0.5) * rotation * 2
-  const ds = 1 + (random() - 0.5) * size * 2
+  const strength = Math.max(0.1, tensionScale)
+  const reachMm = (treatment.params.distance ?? 46) * 0.4 * strength
+  const turn = (treatment.params.rotation ?? 18) * strength
+  const shove = handShove(random, reachMm, turn, pxPerMm)
   object.set({
-    left: baseline.left + dx,
-    top: baseline.top + dy,
-    angle: baseline.angle + da,
-    scaleX: baseline.scaleX * ds,
-    scaleY: baseline.scaleY * ds,
+    left: baseline.left + shove.dx,
+    top: baseline.top + shove.dy,
+    angle: baseline.angle + shove.angle,
+    scaleX: baseline.scaleX,
+    scaleY: baseline.scaleY,
   })
 }
 
-export function renderTreatmentStack(object: FabricObject, tensionScale = 1) {
-  applySyncTreatmentStack(object, tensionScale)
+export function renderTreatmentStack(object: FabricObject, tensionScale = 1, pxPerMm = 11.8) {
+  applySyncTreatmentStack(object, tensionScale, pxPerMm)
 }
 
-function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
+function applySyncTreatmentStack(object: FabricObject, tensionScale = 1, pxPerMm = 11.8) {
   const stack = readTreatments(object).filter((item) => item.enabled && !ARTIFACT_TYPES.has(item.type))
   const filterTreatments = stack.filter(
     (item) => item.type !== 'scatter' && item.type !== 'copy-machine' && item.type !== 'xerox',
@@ -418,7 +421,7 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
       opacity: baseline.opacity,
     })
   }
-  if (scatter) applyScatterTransform(object, scatter, tensionScale)
+  if (scatter) applyScatterTransform(object, scatter, tensionScale, pxPerMm)
 
   const built = buildTreatmentFilters(filterTreatments, tensionScale)
   const filterable = object as FabricImage
@@ -501,10 +504,12 @@ export async function renderTreatmentStackOnCanvas(
   object: FabricObject,
   taggers: ArtifactFragmentTaggers,
   tensionScale = 1,
-  /** Poster px per millimetre, for treatments with a physical texture (tape lift). */
+  /** Poster px per millimetre: physical sizes (tape lift texture, scatter drift, misfeed). */
   pxPerMm = 11.8,
+  /** Poster width, for things that pivot about the sheet (the press's gripper edge). */
+  sheetWidth?: number,
 ) {
-  applySyncTreatmentStack(object, tensionScale)
+  applySyncTreatmentStack(object, tensionScale, pxPerMm)
 
   const sourceId = String((object as unknown as Record<string, unknown>).id ?? '')
   const treatments = readTreatments(object)
@@ -547,7 +552,7 @@ export async function renderTreatmentStackOnCanvas(
     else removeDecayMarkFragments(canvas, treatment.id)
   }
   for (const treatment of treatments.filter((item) => item.type === 'misprint')) {
-    if (treatment.enabled) await renderMisprintTreatment(canvas, object, treatment, taggers.misprint, tensionScale)
+    if (treatment.enabled) await renderMisprintTreatment(canvas, object, treatment, taggers.misprint, tensionScale, pxPerMm, sheetWidth)
     else removeMisprintFragments(canvas, treatment.id)
   }
   for (const treatment of treatments.filter((item) => item.type === 'type-strips')) {

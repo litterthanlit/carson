@@ -134,6 +134,7 @@ export function useTreatments({
           tensionScale(),
           // Print presets know their size; screen ones are treated as an A3-wide sheet.
           poster.widthMm ? poster.width / poster.widthMm : Math.min(poster.width, poster.height) / 297,
+          poster.width,
         )
       })
       canvas.requestRenderAll()

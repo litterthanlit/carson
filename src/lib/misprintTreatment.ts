@@ -1,10 +1,14 @@
 /**
- * Non-destructive misprint offset — a faint misregistered echo lives on the stack.
+ * Non-destructive misprint — the sheet went through the press twice and didn't
+ * land in the same place. The second impression is the same ink at full
+ * density, shifted a fraction of a millimetre (mostly along the feed) and
+ * turned a hair about the gripper edge: a doubled, heavier print with a thin
+ * fringe — not a faint drop shadow.
  * Source stays editable; the companion is re-rendered from seed + Tension.
  */
 import type { Canvas, FabricObject } from 'fabric'
 import { round } from './canvasUtils'
-import { misprintCompanionPose } from './copyMachine'
+import { pressMisfeed } from './hand'
 import { getPrintScanProfile } from './editorModel'
 import { scaleInstrumentParams } from './instrumentTension'
 import { createSeededRandom } from './random'
@@ -72,26 +76,28 @@ export function omitMisprintFragmentsFromCanvasJSON<T extends { objects?: unknow
   }
 }
 
+/** Stored offset (3–18, from the generation) → millimetres of misfeed. */
+export function misprintOffsetMm(offset: number): number {
+  return Math.max(0, offset) * 0.08
+}
+
 export function misprintPoseForTreatment(
   source: { left: number; top: number; angle: number },
   treatment: Treatment,
   tensionScale = 1,
+  pxPerMm = 11.8,
+  sheetWidth = source.left * 2,
 ) {
   const params = scaleInstrumentParams(treatment.params, TENSION_KEYS, tensionScale)
-  const offset = params.offset ?? 10
-  const opacity = params.opacity ?? 0.27
   const random = createSeededRandom(treatment.seed)
-  const pose = misprintCompanionPose({
-    left: source.left,
-    top: source.top,
-    angle: source.angle,
-    offset,
-    opacity,
-  })
+  const landed = pressMisfeed(random, { x: source.left, y: source.top }, misprintOffsetMm(params.offset ?? 10), pxPerMm, sheetWidth)
   return {
-    ...pose,
-    left: pose.left + (random() - 0.5) * offset * 0.5,
-    top: pose.top + (random() - 0.5) * offset * 0.35,
+    left: landed.x,
+    top: landed.y,
+    angle: source.angle + landed.angle,
+    // Ink is ink: the second hit prints as dense as the first.
+    opacity: 0.88,
+    globalCompositeOperation: 'multiply' as const,
   }
 }
 
@@ -103,6 +109,8 @@ export async function renderMisprintTreatment(
   treatment: Treatment,
   tagFragment: MisprintFragmentTagger,
   tensionScale = 1,
+  pxPerMm = 11.8,
+  sheetWidth?: number,
 ) {
   removeMisprintFragments(canvas, treatment.id)
   if (!treatment.enabled) return
@@ -116,6 +124,8 @@ export async function renderMisprintTreatment(
     },
     treatment,
     tensionScale,
+    pxPerMm,
+    sheetWidth,
   )
   const clone = await source.clone()
   clone.set({
