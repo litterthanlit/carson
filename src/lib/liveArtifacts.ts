@@ -8,7 +8,7 @@ import type { FabricObject, Textbox } from 'fabric'
 import type { Treatment } from './treatments'
 
 export const LIVE_ARTIFACT_SIGNATURE_KEY = 'liveArtifactSignature'
-export const LIVE_ARTIFACT_TYPES = new Set(['letter-break', 'tape-lift', 'slice', 'tear'])
+export const LIVE_ARTIFACT_TYPES = new Set(['letter-break', 'tape-lift', 'slice', 'tear', 'decay', 'distress', 'decay-marks'])
 
 function liveTreatmentsOf(object: FabricObject): Treatment[] {
   const raw = (object as unknown as Record<string, unknown>).treatments

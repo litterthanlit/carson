@@ -1,7 +1,7 @@
 /**
  * Non-destructive misprint — the sheet went through the press twice and didn't
  * land in the same place. The second impression is the same ink at full
- * density, shifted a fraction of a millimetre (mostly along the feed) and
+ * density, shifted a millimetre or so (mostly along the feed) and
  * turned a hair about the gripper edge: a doubled, heavier print with a thin
  * fringe — not a faint drop shadow.
  * Source stays editable; the companion is re-rendered from seed + Tension.
@@ -78,7 +78,7 @@ export function omitMisprintFragmentsFromCanvasJSON<T extends { objects?: unknow
 
 /** Stored offset (3–18, from the generation) → millimetres of misfeed. */
 export function misprintOffsetMm(offset: number): number {
-  return Math.max(0, offset) * 0.08
+  return Math.max(0, offset) * 0.12
 }
 
 export function misprintPoseForTreatment(

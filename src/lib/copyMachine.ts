@@ -432,7 +432,7 @@ function inkPlane(imageData: ImageData): Float32Array {
 }
 
 /** Separable running-sum box blur, two passes ≈ tent. */
-function boxBlur(plane: Float32Array, width: number, height: number, radius: number): Float32Array {
+export function boxBlur(plane: Float32Array, width: number, height: number, radius: number): Float32Array {
   const r = Math.round(radius)
   if (r < 1) return plane
   const temp = new Float32Array(plane.length)

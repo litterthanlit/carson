@@ -27,6 +27,7 @@ import { stripMisprintFragments } from '../lib/misprintTreatment'
 import { stripTypeStripFragments } from '../lib/typeStripsTreatment'
 import { stripLetterBreakPieces } from '../lib/letterBreakTreatment'
 import { stripTapeLiftCompanions } from '../lib/tapeLiftTreatment'
+import { stripSurfaceCompanions } from '../lib/surfaceTreatment'
 import { withLayerSyncSuppressed } from '../lib/layerSync'
 import type { LayerKind } from '../types/editor'
 import { newSeed } from '../lib/random'
@@ -121,6 +122,9 @@ export function useTreatments({
             tapeLift: (fragment, part) => {
               tagObject(fragment, 'fragment', part === 'strip' ? 'Lifted tape' : 'Lifted print')
             },
+            surface: (fragment) => {
+              tagObject(fragment, 'fragment', 'Worn print')
+            },
             decayMarks: (fragment, mark) => {
               tagObject(fragment, 'fragment', mark.kind === 'ink-loss' ? 'Ink loss' : 'Fold mark')
             },
@@ -153,6 +157,7 @@ export function useTreatments({
       stripTypeStripFragments(canvas)
       stripLetterBreakPieces(canvas)
       stripTapeLiftCompanions(canvas)
+      stripSurfaceCompanions(canvas)
       await applyAllLayerMasks(canvas.getObjects())
       const artifactTypes = new Set([
         'slice',
@@ -162,6 +167,8 @@ export function useTreatments({
         'glyph-break',
         'letter-break',
         'tape-lift',
+        'decay',
+        'distress',
         'copy-machine',
         'decay-marks',
         'misprint',

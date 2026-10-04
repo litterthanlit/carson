@@ -112,16 +112,17 @@ export function renderDecayMarksTreatment(
     tensionScale,
   )
 
-  marks.forEach((mark, index) => {
+  // Ink loss is now real erosion of the ink (see surface.ts); only folds draw marks here.
+  marks.filter((mark) => mark.kind === 'fold').forEach((mark, index) => {
     const fragment = new Rect({
       left: mark.left,
       top: mark.top,
       width: mark.width,
       height: mark.height,
-      fill: mark.kind === 'ink-loss' ? '#f8f6ef' : '#111111',
+      fill: '#111111',
       opacity: mark.opacity,
       angle: mark.angle,
-      globalCompositeOperation: mark.kind === 'ink-loss' ? 'source-over' : 'multiply',
+      globalCompositeOperation: 'multiply',
       selectable: false,
       evented: false,
       [DECAY_MARK_SOURCE_ID_KEY]: sourceId,

@@ -16,7 +16,7 @@ Status: **Fixed** (this pass) · **Open**.
 
 | # | Effect | What it did | Rules broken | Sev | Status |
 |---|---|---|---|---|---|
-| 1 | Xerox / Copy selected | Grayscale+Contrast+Noise+Blur filters; on type only opacity+multiply | 1 2 5 6 | High | **Fixed** — runs the Copy Machine engine; old saves migrate |
+| 1 | Xerox / Copy selected | Grayscale+Contrast+Noise+Blur filters; on type only opacity+multiply | 1 2 5 6 | High | **Fixed** — runs the Copy Machine engine set by generation; old saves render through it |
 | 2 | Age / Decay | Contrast+Noise+Blur; nothing ages | 1 2 5 6 | High | **Fixed** — paper ageing: yellowing toward the edges, ink fade, foxing, in mm |
 | 3 | Distress | Contrast+Noise+Blur; nothing on type | 1 2 5 6 | High | **Fixed** — abrasion: rubbed off along strokes, through the paper's tooth |
 | 4 | Cold wash | Grayscale + blue BlendColor + Noise | 1 6 | Med | Open — single cool ink through a halftone |
@@ -30,7 +30,7 @@ Status: **Fixed** (this pass) · **Open**.
 | 12 | Tear collage | Straight rectangles named "torn" | 1 2 3 4 5 | High | **Fixed** — real tear lines shared by neighbours, fibre rim, mm |
 | 13 | Break letters (glyph-break) | Fixed advances, recolours letters cyan/lime | 1 4 | Med-High | Open — merge into Letter break |
 | 14 | Type strip | Perfect bars with invented Arial Black text | 3 4 5 | High | Open |
-| 15 | Misprint offset | Faint clone that reads as a drop shadow | 1 2 | Med | **Fixed** — full-density second plate, mm offset, rotation about the gripper edge |
+| 15 | Misprint offset | Faint clone that reads as a drop shadow | 1 2 | Med | **Fixed** — a second impression of the same ink at full density, misfed ~0.4–2 mm, turned about the gripper edge |
 | 16 | Ink loss / Fold marks | Paper-coloured rectangles; 2px lines on one layer | 1 3 4 5 | High | **Fixed** (Ink loss — ink eroded from the edges in, fibre-frayed) · Open (Fold → sheet-wide crease) |
 | 17 | Scatter | ±46px, ±18°, ±14% scale, uniform | 2 3 | Med | **Fixed** — hand pose: mm drift, mostly-small angles, no rescaling |
 | 18 | White scrapes | Even straight rects as transparent holes, 1024px raster | 1 2 3 5 | High | Open — blade strokes revealing paper |
@@ -46,3 +46,10 @@ Status: **Fixed** (this pass) · **Open**.
 | 28 | Seed poster | Perfect rects, 34 steps per torn edge, folds at exactly ½ | 2 3 5 | Low-Med | Open |
 
 `Math.random` traps: `editorModel.ts` generators fall back to `options.random ?? Math.random` — every caller passes a seed today, but `random` should be required.
+
+## Known limitation (open)
+
+Raster companions are each made from the source: a layer carrying two of the separate families — copier (Xerox/Copy machine), tape lift, cuts (Slice/Tear), surface (Age/Distress/Ink loss), letter break — shows two prints. Within a family they compose (the surface pipeline runs Age → Distress → Ink loss on one print). The long-term fix is one per-layer print pipeline that every family feeds in stack order.
+
+The Copy Machine itself still sizes its halftone, mottle, wobble and drag in poster px rather than mm (correct at 300 dpi, coarse on a 72 dpi screen poster).
+

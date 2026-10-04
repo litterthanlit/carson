@@ -3,7 +3,6 @@
  */
 import { filters } from 'fabric'
 import type { Canvas, FabricImage, FabricObject } from 'fabric'
-import { getLayerDecayProfile } from './editorModel'
 import {
   buildFxFilters,
   fxChipLabel,
@@ -108,6 +107,13 @@ import {
 } from './tapeLiftTreatment'
 import { scaleTreatmentParams } from './instruments'
 import { markLiveArtifactsFresh } from './liveArtifacts'
+import {
+  SURFACE_SOURCE_ID_KEY,
+  SURFACE_TREATMENT_ID_KEY,
+  removeSurfaceCompanionForSource,
+  renderSurfaceTreatment,
+  type SurfaceTagger,
+} from './surfaceTreatment'
 import { handShove } from './hand'
 
 export type TreatmentType =
@@ -150,6 +156,8 @@ export type TransformBaseline = {
 }
 
 const ARTIFACT_TYPES = new Set<TreatmentType>([
+  'decay',
+  'distress',
   'slice',
   'crop',
   'tear',
@@ -164,6 +172,8 @@ const ARTIFACT_TYPES = new Set<TreatmentType>([
 const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'letter-break', 'tape-lift', 'type-strips'])
 
 const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
+  decay: SURFACE_SOURCE_ID_KEY,
+  distress: SURFACE_SOURCE_ID_KEY,
   slice: SLICE_SOURCE_ID_KEY,
   crop: CROP_SOURCE_ID_KEY,
   tear: TEAR_SOURCE_ID_KEY,
@@ -177,6 +187,8 @@ const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
 }
 
 const ARTIFACT_TREATMENT_KEYS: Partial<Record<TreatmentType, string>> = {
+  decay: SURFACE_TREATMENT_ID_KEY,
+  distress: SURFACE_TREATMENT_ID_KEY,
   slice: SLICE_TREATMENT_ID_KEY,
   crop: CROP_TREATMENT_ID_KEY,
   tear: TEAR_TREATMENT_ID_KEY,
@@ -354,18 +366,9 @@ export function buildTreatmentFilters(
   const output: filters.BaseFilter<string, object>[] = []
   for (const treatment of treatments.filter((item) => item.enabled)) {
     const params = scaleTreatmentParams(treatment.type, treatment.params, tensionScale)
-    // Xerox isn't a filter any more: it runs through the copier (see copierChain).
-    if (treatment.type === 'decay') {
-      const profile = getLayerDecayProfile(params.amount ?? 55)
-      output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
-      output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
-      output.push(markTreatmentFilter(new filters.Blur({ blur: profile.blur })))
-    } else if (treatment.type === 'distress') {
-      const intensity = (params.intensity ?? 70) / 100
-      output.push(markTreatmentFilter(new filters.Contrast({ contrast: 0.2 + intensity * 0.5 })))
-      output.push(markTreatmentFilter(new filters.Noise({ noise: 40 + intensity * 180 })))
-      output.push(markTreatmentFilter(new filters.Blur({ blur: 0.05 + intensity * 0.12 })))
-    } else if (treatment.type === 'cold-wash') {
+    // Xerox runs through the copier (copierChain); Age and Distress are physical
+    // surface processes (surfaceTreatment) — none of them are filters any more.
+    if (treatment.type === 'cold-wash') {
       output.push(markTreatmentFilter(new filters.Grayscale()))
       output.push(markTreatmentFilter(new filters.Contrast({ contrast: 0.42 })))
       output.push(markTreatmentFilter(new filters.BlendColor({ color: '#2f6f8f', mode: 'tint', alpha: 0.22 })))
@@ -432,11 +435,7 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1, pxPerMm
   }
 
   for (const treatment of filterTreatments) {
-    const params = scaleTreatmentParams(treatment.type, treatment.params, tensionScale)
-    if (treatment.type === 'decay') {
-      const profile = getLayerDecayProfile(params.amount ?? 55)
-      object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
-    } else if (treatment.type === 'cold-wash') {
+    if (treatment.type === 'cold-wash') {
       object.set({ opacity: 0.92, globalCompositeOperation: 'multiply' })
     }
   }
@@ -481,6 +480,7 @@ function removeAllArtifactsForSource(canvas: Canvas, sourceId: string) {
   removeGlyphFragmentsForSource(canvas, sourceId)
   removeLetterBreakPiecesForSource(canvas, sourceId)
   removeTapeLiftCompanionsForSource(canvas, sourceId)
+  removeSurfaceCompanionForSource(canvas, sourceId)
   removeDecayMarkFragmentsForSource(canvas, sourceId)
   removeMisprintFragmentsForSource(canvas, sourceId)
   removeTypeStripFragmentsForSource(canvas, sourceId)
@@ -494,6 +494,7 @@ export type ArtifactFragmentTaggers = {
   glyph: GlyphFragmentTagger
   letterBreak: LetterBreakTagger
   tapeLift: TapeLiftTagger
+  surface: SurfaceTagger
   decayMarks: DecayMarkFragmentTagger
   misprint: MisprintFragmentTagger
   typeStrips: TypeStripFragmentTagger
@@ -551,6 +552,16 @@ export async function renderTreatmentStackOnCanvas(
     if (treatment.enabled) renderDecayMarksTreatment(canvas, object, treatment, taggers.decayMarks, tensionScale)
     else removeDecayMarkFragments(canvas, treatment.id)
   }
+  // Age, Distress, Ink loss: one print, every surface process in stack order.
+  renderSurfaceTreatment(
+    canvas,
+    object,
+    treatments,
+    taggers.surface,
+    tensionScale,
+    pxPerMm,
+    typeof canvas.backgroundColor === 'string' ? canvas.backgroundColor : undefined,
+  )
   for (const treatment of treatments.filter((item) => item.type === 'misprint')) {
     if (treatment.enabled) await renderMisprintTreatment(canvas, object, treatment, taggers.misprint, tensionScale, pxPerMm, sheetWidth)
     else removeMisprintFragments(canvas, treatment.id)

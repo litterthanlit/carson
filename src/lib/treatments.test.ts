@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { surfaceSteps } from './surfaceTreatment'
 import {
   addTreatment,
   buildTreatmentFilters,
@@ -39,23 +40,21 @@ describe('treatments', () => {
     expect(stack[0].seed).toBe(2)
   })
 
-  it('builds filter stacks for xerox and decay', () => {
+  it('builds no filter stacks for xerox, age or distress — they are physical processes now', () => {
     const filters = buildTreatmentFilters([
       { id: '1', type: 'xerox', seed: 1, enabled: true, params: { generation: 5 } },
       { id: '2', type: 'decay', seed: 2, enabled: true, params: { amount: 40 } },
+      { id: '3', type: 'distress', seed: 3, enabled: true, params: { intensity: 70 } },
     ])
-    expect(filters.length).toBeGreaterThan(2)
+    expect(filters).toHaveLength(0)
   })
 
   it('lets Tension strengthen Age selected without changing stored amount', () => {
     const treatment = { id: '2', type: 'decay' as const, seed: 2, enabled: true, params: { amount: 40 } }
-    const rested = buildTreatmentFilters([treatment], 1)
-    const restless = buildTreatmentFilters([treatment], 2)
-    const restedNoise = rested.find((filter) => filter.type === 'Noise')
-    const restlessNoise = restless.find((filter) => filter.type === 'Noise')
-    expect(Number((restlessNoise as { noise?: number } | undefined)?.noise)).toBeGreaterThan(
-      Number((restedNoise as { noise?: number } | undefined)?.noise),
-    )
+    const rested = surfaceSteps([treatment], 1)
+    const restless = surfaceSteps([treatment], 2)
+    expect(rested[0].process).toBe('age')
+    expect(restless[0].amount).toBeGreaterThan(rested[0].amount)
     expect(treatment.params.amount).toBe(40)
   })
 

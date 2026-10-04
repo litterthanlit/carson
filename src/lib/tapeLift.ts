@@ -136,13 +136,13 @@ export function relaidPose(band: TapeBand, params: TapeLiftParams, random: () =>
   }
 }
 
-function smoothstep(edge0: number, edge1: number, value: number) {
+export function smoothstep(edge0: number, edge1: number, value: number) {
   const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(1e-6, edge1 - edge0)))
   return t * t * (3 - 2 * t)
 }
 
 /** Smooth value noise 0–1 with features about `cell` px across. */
-function valueNoise(width: number, height: number, cell: number, random: () => number): Float32Array {
+export function valueNoise(width: number, height: number, cell: number, random: () => number): Float32Array {
   const cols = Math.max(2, Math.ceil(width / cell) + 2)
   const rows = Math.max(2, Math.ceil(height / cell) + 2)
   const grid = new Float32Array(cols * rows)
