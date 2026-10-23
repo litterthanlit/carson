@@ -87,3 +87,47 @@ export async function applyCopyMachineChainAsync(
     host.postMessage(request, [request.pixels])
   })
 }
+
+/**
+ * Latest-wins runner, one task at a time per key. While a key's task runs,
+ * only the newest request waits behind it; the ones it replaced resolve null
+ * without running. The running task is never cut short, so its caller decides
+ * whether its result is still wanted.
+ */
+export function createLatestPerKey<T>() {
+  const newest = new Map<string, number>()
+  const running = new Map<string, Promise<unknown>>()
+  return async function run(key: string, task: () => Promise<T>): Promise<T | null> {
+    const ticket = (newest.get(key) ?? 0) + 1
+    newest.set(key, ticket)
+    while (running.has(key)) {
+      await running.get(key)?.catch(() => undefined)
+      if (newest.get(key) !== ticket) return null
+    }
+    if (newest.get(key) !== ticket) return null
+    const job = task()
+    running.set(key, job)
+    try {
+      return await job
+    } finally {
+      if (running.get(key) === job) running.delete(key)
+    }
+  }
+}
+
+const latestBake = createLatestPerKey<ImageData>()
+
+/**
+ * Bake for one layer, dropping requests a newer one replaced before they ran.
+ * A slider dragged across a slow bake queues one job, not one per step.
+ * Resolves null when superseded.
+ */
+export function applyCopyMachineChainLatest(
+  key: string,
+  sourceImageData: ImageData,
+  treatments: CopyMachineChainStep[],
+  exportScale = 1,
+  tensionScale = 1,
+): Promise<ImageData | null> {
+  return latestBake(key, () => applyCopyMachineChainAsync(sourceImageData, treatments, exportScale, tensionScale))
+}

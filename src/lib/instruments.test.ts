@@ -58,6 +58,20 @@ describe('instrument registry', () => {
     expect(resolveInstrumentParams('fold', { amount: 20 })).toEqual({ amount: 20, kind: 1 })
   })
 
+  it('plays Ink bleed as a Copy Machine pass with the drum inked unevenly', () => {
+    const instrument = getInstrument('ink-bleed')
+    expect(instrument).toMatchObject({ name: 'Ink bleed', treatmentType: 'copy-machine', scope: 'layer' })
+    expect(instrument.defaultParams.bleed).toBeGreaterThan(0)
+    expect(instrument.defaultParams.starve).toBeGreaterThan(0)
+    expect(instrument.defaultParams.slur).toBeGreaterThan(0)
+    expect(scaleTreatmentParams('copy-machine', { bleed: 30, starve: 20, slur: 10, dragAngle: 0 }, 2)).toMatchObject({
+      bleed: 60,
+      starve: 40,
+      slur: 20,
+      dragAngle: 0,
+    })
+  })
+
   it('treats Tension as an input to every intensity instrument', () => {
     expect(instrumentUsesTension('decay')).toBe(true)
     expect(instrumentUsesTension('decay-marks')).toBe(true)

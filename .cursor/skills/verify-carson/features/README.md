@@ -51,6 +51,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Component instances](./component-instances.md) covers save, insert, and detach of a linked mark.
 - [Xerox treatment](./xerox-treatment.md) covers Copy selected from Instruments and the Treatments tab.
 - [Copy machine](./copy-machine.md) covers Copy machine from Instruments and the Treatments chip.
+- [Ink bleed](./ink-bleed.md) covers the Ink bleed instrument and the Copy Machine ink sliders.
 - [Decay marks](./decay-marks.md) covers Age selected, Ink loss, and Fold marks as stack instruments.
 - [Misprint and type strips](./misprint-type-strips.md) covers Misprint offset and Type strip as stack instruments.
 - [Gesture performances](./gesture-performance.md) covers recording instrument plays, saving the chain, and replaying from Instruments and Commands.

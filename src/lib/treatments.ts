@@ -547,7 +547,9 @@ export async function renderTreatmentStackOnCanvas(
 
   if (!enabledArtifacts) {
     const baseline = readTransformBaseline(object)
-    restoreSliceSource(object, baseline?.opacity ?? 1)
+    // The copier already showed or hid its source; restoring it here would
+    // print the clean original over the copy, through every starved gap.
+    if (copyMachineTreatments.length === 0) restoreSliceSource(object, baseline?.opacity ?? 1)
     removeAllArtifactsForSource(canvas, sourceId)
   }
 

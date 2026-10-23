@@ -46,11 +46,15 @@ Carson met the copier at the Rapperswil workshop with Hans-Rudolf Lutz: "using c
 | Toner starvation | **Bands** | stripes across the direction of travel |
 | Dirt on the glass, a scratched drum | **Streaks** | lines along the direction of travel, printing or dropping out |
 | Toner dropout | **Voids** | irregular soft blobs |
+| The drum inked unevenly: wet trains run a few letters along the feed, so one word floods while the next starves (the Ray Gun subscription-card look) | **Ink bleed**, **Ink starve**, **Scan angle** | exact distance field per glyph; each edge measures its own stroke and the gap it faces, so ink swells into open paper first and only fuses letters or closes counters where the sheet runs wettest; the wet edge follows lumps and paper fibres, pooled ink rounds off by surface tension; dry patches thin strokes and drop chunks on the paper tooth (`src/lib/inkBleed.ts`) |
+| Wet ink dragged along the feed | **Slur**, **Scan angle** | per-line slips — short tails, the odd long dashed pull — from wet ink only |
 | Lid left open | **Lid edge** | black creeping in from the frame |
 | Copy of a copy, enlarged or reduced each time | **Generations**, **Copy size** | resample about the centre, soften, re-tone — forms erode and thicken |
-| Misregistered second pass | **Ghost**, **Ghost offset** | tonal-only echo companion |
+| Misregistered second pass | **Ghost**, **Ghost offset** | tonal-only echo companion — of the inked copy when ink load is on |
 
 An opaque source (a photo, a scrap) copies as a white sheet laid over what's below; a transparent layer (type) copies as toner only and overprints.
+
+**Ink bleed** (Instruments → Print, or ⌘K) is the Copy Machine with the drum inked unevenly along a horizontal feed: Ink bleed 75, Ink starve 60, Slur 35, no scan drift or bands. Re-roll for a different run of the ink; raise Ink bleed (or Tension) for the fused "SUBS" blobs. Spread scales with each stroke's own weight, so it reads the same at 12 pt and 300 pt.
 
 Gaps, in order of value:
 1. **Printer-error generator** — skipped lines, misfeed shift, a band of repeated scanlines (the "printer messed up" accident he scans in).

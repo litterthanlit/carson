@@ -4273,6 +4273,11 @@ function App() {
     )
   }
 
+  /** Copy Machine with the drum inked unevenly: flooded blobs, starved fragments, slurred streaks. */
+  async function applyInkBleedToSelected(seed = newSeed()) {
+    await playLayerInstrument('ink-bleed', seed)
+  }
+
   async function applyCopyMachineToPoster(seed = newSeed()) {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -5521,6 +5526,14 @@ function App() {
       run: () => void applyCopyMachineToSelected(),
     },
     {
+      id: 'ink-bleed',
+      label: 'Ink bleed',
+      keywords: ['ink bleed', 'ink spread', 'flood', 'starve', 'blot', 'slur', 'smear', 'over-inked', 'stamp', 'copier'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => void applyInkBleedToSelected(),
+    },
+    {
       id: 'copy-machine-poster',
       label: 'Run through the copier',
       keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier', 'poster', 'all layers'],
@@ -5974,6 +5987,7 @@ function App() {
             onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
             onApplyXerox={() => void applyXeroxToSelected()}
             onApplyCopyMachine={() => void applyCopyMachineToSelected()}
+            onApplyInkBleed={() => void applyInkBleedToSelected()}
             onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
             onApplyCopyScatterCopyGesture={() => void applyCopyScatterCopyGesture()}
             onAddMisprintDuplicate={() => void addMisprintDuplicate()}

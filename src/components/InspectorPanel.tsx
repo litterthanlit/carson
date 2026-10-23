@@ -770,6 +770,33 @@ export function InspectorPanel({
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                         <Slider
+                          label="Ink bleed"
+                          value={treatment.params.bleed ?? COPY_MACHINE_DEFAULTS.bleed}
+                          defaultValue={COPY_MACHINE_DEFAULTS.bleed}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { bleed: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Ink starve"
+                          value={treatment.params.starve ?? COPY_MACHINE_DEFAULTS.starve}
+                          defaultValue={COPY_MACHINE_DEFAULTS.starve}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { starve: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Slur"
+                          value={treatment.params.slur ?? COPY_MACHINE_DEFAULTS.slur}
+                          defaultValue={COPY_MACHINE_DEFAULTS.slur}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { slur: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
                           label="Bands"
                           value={treatment.params.bands ?? COPY_MACHINE_DEFAULTS.bands}
                           defaultValue={COPY_MACHINE_DEFAULTS.bands}

@@ -237,6 +237,26 @@ const FEATURES = {
     await capture(page, outDir, 'treatments')
   },
 
+  async 'ink-bleed'(page, outDir) {
+    await openTab(page, 'Layers')
+    await layerSelect(page, 'Oversized headline').click()
+    await page.getByRole('button', { name: 'Instruments' }).click()
+    const instruments = page.getByRole('complementary', { name: 'Instruments' })
+    await instruments.waitFor()
+    await instruments.getByRole('button', { name: /^Ink bleed/ }).click()
+    await page.getByRole('button', { name: 'Move tool' }).click()
+    await openTab(page, 'Treatments')
+    const body = await page.locator('body').innerText()
+    if (!/Copy·/.test(body)) fail('Ink bleed did not land a Copy chip')
+    for (const label of ['Ink bleed', 'Ink starve', 'Slur']) {
+      if (!body.includes(label)) fail(`Copy Machine controls are missing ${label}`)
+    }
+    // The bake runs in a worker; the trail logs the play once it has landed.
+    await page.getByText(/Applied Ink bleed/).first().waitFor({ timeout: 60000 })
+    await capture(page, outDir, 'treatments')
+    await page.getByRole('region', { name: 'Poster canvas' }).screenshot({ path: join(outDir, 'canvas.png') })
+  },
+
   async 'decay-marks'(page, outDir) {
     await openTab(page, 'Layers')
     await layerSelect(page, 'Oversized headline').click()
