@@ -28,6 +28,7 @@ import type { Gesture } from '../lib/gestures'
 import type { SavedInstrument } from '../lib/instrumentAssets'
 import { Slider } from './Slider'
 import { ScopeAll, ScopeSel } from './ScopeBadge'
+import { shortcutKeys } from '../lib/shortcuts'
 
 export type InstrumentsPaletteProps = {
   selected: boolean
@@ -249,7 +250,7 @@ export function InstrumentsPalette({
         <div className="preset-row">
           <button
             type="button"
-            title="Rearrange every layer into a new structure — Shift+R, then R to re-roll"
+            title={`Rearrange every layer into a new structure — ${shortcutKeys('scramble')}, then ${shortcutKeys('reroll')} to re-roll`}
             onClick={onScramble}
             disabled={scrambleDisabled}
           >
@@ -258,7 +259,7 @@ export function InstrumentsPalette({
           <button
             type="button"
             data-tour="scatter"
-            title="Scatter the selected layers — press R to re-roll"
+            title={`Scatter the selected layers — press ${shortcutKeys('reroll')} to re-roll`}
             onClick={onScatter}
             disabled={!selected}
           >
@@ -458,7 +459,7 @@ export function InstrumentsPalette({
           <button type="button" title="Crop tight into the center" onClick={() => onAggressiveCrop('close')} disabled={!selected}>
             <Crop size={16} /> Close crop <ScopeSel />
           </button>
-          <button type="button" title="Crop off-center — press R to re-roll" onClick={() => onAggressiveCrop('off-center')} disabled={!selected}>
+          <button type="button" title={`Crop off-center — press ${shortcutKeys('reroll')} to re-roll`} onClick={() => onAggressiveCrop('off-center')} disabled={!selected}>
             <Crop size={16} /> Off-center crop <ScopeSel />
           </button>
           <button type="button" title="Crop hard to one edge" onClick={() => onAggressiveCrop('edge')} disabled={!selected}>

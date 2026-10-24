@@ -10,7 +10,7 @@ export default defineConfig({
       resolveDependencies: (_filename, deps) =>
         deps.filter(
           (dep) =>
-            !/jspdf|html2canvas|purify|print-|FilterGallery|TextureGallery|CommandPalette|OnboardingModal|VariantCompare/.test(
+            !/jspdf|html2canvas|purify|print-|FilterGallery|TextureGallery|CommandPalette|OnboardingModal|VariantCompare|ShortcutSheet/.test(
               dep,
             ),
         ),

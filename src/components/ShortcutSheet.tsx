@@ -1,4 +1,6 @@
+import { X } from 'lucide-react'
 import { shortcutSheet } from '../lib/shortcuts'
+import { Dialog } from './Dialog'
 
 /** Every shortcut, generated from the registry so the list always matches the keys that run. */
 export function ShortcutSheet({ headingLevel = 3 }: { headingLevel?: 2 | 3 }) {
@@ -26,5 +28,20 @@ export function ShortcutSheet({ headingLevel = 3 }: { headingLevel?: 2 | 3 }) {
         </section>
       ))}
     </div>
+  )
+}
+
+/** The full shortcut reference, opened with ? or from Commands. */
+export function ShortcutSheetDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <Dialog labelledBy="shortcut-sheet-title" className="shortcut-dialog" onClose={onClose}>
+      <header className="shortcut-dialog-header">
+        <h2 id="shortcut-sheet-title">Keyboard shortcuts</h2>
+        <button type="button" className="icon-button" aria-label="Close keyboard shortcuts" data-autofocus onClick={onClose}>
+          <X size={16} />
+        </button>
+      </header>
+      <ShortcutSheet />
+    </Dialog>
   )
 }

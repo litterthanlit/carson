@@ -21,7 +21,7 @@ import {
 import { filterStateForCategory, loadFilterGalleryState, saveFilterGalleryState } from '../lib/galleryMemory'
 import { CategoryChips } from './CategoryChips'
 import { Slider } from './Slider'
-import { GalleryDialog } from './GalleryDialog'
+import { Dialog } from './Dialog'
 import { handleGridKeyDown } from './gridNavigation'
 
 /** Long side of rendered previews, in device pixels (thumbs show at 72 CSS px). */
@@ -192,7 +192,7 @@ export function FilterGalleryModal({
   const canApply = Boolean(source && selectedPreset && isPresetApplicable(selectedPreset, selectedIsImage))
 
   return (
-    <GalleryDialog labelledBy="filter-gallery-title" className="filter-gallery-modal" onClose={onClose}>
+    <Dialog labelledBy="filter-gallery-title" className="filter-gallery-modal" onClose={onClose}>
       <header className="filter-gallery-header">
         <div>
           <h2 id="filter-gallery-title">Filter Gallery</h2>
@@ -350,6 +350,6 @@ export function FilterGalleryModal({
       <p id="filter-gallery-needs-image" hidden>
         Needs an image layer.
       </p>
-    </GalleryDialog>
+    </Dialog>
   )
 }

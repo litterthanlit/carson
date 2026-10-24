@@ -491,6 +491,18 @@ textarea:focus-visible {
   color: var(--primary-text);
 }
 
+.primary-button.danger-button {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-text);
+}
+
+.primary-button.danger-button:hover:not(:disabled) {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+  color: var(--danger-text);
+}
+
 .scramble-button {
   min-height: 28px;
   padding: 0 10px;
@@ -1349,6 +1361,30 @@ input[type='color'] {
   margin-top: 6px;
 }
 
+.shortcut-dialog {
+  width: min(880px, calc(100vw - 32px));
+  padding: 20px 22px 22px;
+  border-radius: var(--radius-xl);
+  overflow: auto;
+}
+
+.shortcut-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shortcut-dialog-header h2 {
+  margin: 0;
+}
+
+.shortcut-dialog .shortcut-sheet {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px 28px;
+  margin-top: 14px;
+}
+
 .shortcut-group h2,
 .shortcut-group h3 {
   margin: 0 0 4px;
@@ -1829,16 +1865,6 @@ input[type='color'] {
   color: var(--text-muted);
 }
 
-.command-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: start center;
-  padding-top: 12vh;
-  background: rgb(0 0 0 / 0.5);
-}
-
 .command-palette {
   width: min(520px, calc(100vw - 32px));
   padding: 10px;
@@ -1986,11 +2012,6 @@ input[type='color'] {
   max-height: 420px;
   overflow: auto;
   list-style: none;
-}
-
-.unsaved-backdrop {
-  z-index: 60;
-  background: rgb(0 0 0 / 0.72);
 }
 
 .onboarding-modal {
@@ -2341,22 +2362,27 @@ input[type='color'] {
   color: var(--text-muted);
 }
 
-/* Native modal <dialog> shell (GalleryDialog): top layer, inert page, backdrop via ::backdrop. */
-.gallery-dialog {
+/* Native modal <dialog> shell (Dialog): top layer, inert page, backdrop via ::backdrop. */
+.app-dialog {
   margin: auto;
   max-width: none;
+  max-height: calc(100vh - 32px);
   outline: none;
 }
 
-.gallery-dialog[open] {
-  animation: gallery-dialog-in 160ms ease-out;
+.app-dialog-top {
+  margin-top: 12vh;
 }
 
-.gallery-dialog::backdrop {
+.app-dialog[open] {
+  animation: app-dialog-in 160ms ease-out;
+}
+
+.app-dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
 
-@keyframes gallery-dialog-in {
+@keyframes app-dialog-in {
   from {
     opacity: 0;
     transform: translateY(6px) scale(0.99);
@@ -2364,7 +2390,7 @@ input[type='color'] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gallery-dialog[open] {
+  .app-dialog[open] {
     animation: none;
   }
 }

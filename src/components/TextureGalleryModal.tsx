@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { CategoryChips } from './CategoryChips'
 import { Slider } from './Slider'
-import { GalleryDialog } from './GalleryDialog'
+import { Dialog } from './Dialog'
 import { handleGridKeyDown } from './gridNavigation'
 import { TexturePreview } from './TexturePreview'
 import type { PosterSnapshot, TexturePreviewSettings } from '../lib/texturePreview'
@@ -117,7 +117,7 @@ export function TextureGalleryModal({ open, posterSnapshot = null, onPlace, onCl
   const blendLabel = TEXTURE_BLEND_MODES.find((mode) => mode.value === blend)?.label ?? blend
 
   return (
-    <GalleryDialog
+    <Dialog
       labelledBy="texture-gallery-title"
       className="filter-gallery-modal texture-gallery-modal"
       onClose={onClose}
@@ -274,6 +274,6 @@ export function TextureGalleryModal({ open, posterSnapshot = null, onPlace, onCl
           </aside>
         </div>
       )}
-    </GalleryDialog>
+    </Dialog>
   )
 }

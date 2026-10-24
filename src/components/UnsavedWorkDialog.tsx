@@ -1,4 +1,5 @@
 import { unsavedWorkCopy, type ReplaceReason } from '../lib/newPoster'
+import { Dialog } from './Dialog'
 
 type UnsavedWorkDialogProps = {
   open: boolean
@@ -13,22 +14,20 @@ export function UnsavedWorkDialog({ open, reason, onCancel, onDiscard, onSave }:
   const copy = unsavedWorkCopy(reason)
 
   return (
-    <div className="command-backdrop unsaved-backdrop" role="presentation">
-      <div className="file-dialog glass-panel" role="dialog" aria-labelledby="unsaved-work-title">
-        <h2 id="unsaved-work-title">{copy.title}</h2>
-        <p>{copy.body}</p>
-        <div className="button-row">
-          <button type="button" className="primary-button" onClick={onSave}>
-            Save
-          </button>
-          <button type="button" onClick={onDiscard}>
-            Don&apos;t save
-          </button>
-          <button type="button" onClick={onCancel}>
-            Cancel
-          </button>
-        </div>
+    <Dialog labelledBy="unsaved-work-title" className="file-dialog" onClose={onCancel} closeOnBackdrop={false}>
+      <h2 id="unsaved-work-title">{copy.title}</h2>
+      <p>{copy.body}</p>
+      <div className="button-row">
+        <button type="button" className="primary-button" data-autofocus onClick={onSave}>
+          Save
+        </button>
+        <button type="button" onClick={onDiscard}>
+          Don&apos;t save
+        </button>
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
       </div>
-    </div>
+    </Dialog>
   )
 }

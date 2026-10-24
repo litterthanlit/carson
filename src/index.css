@@ -18,6 +18,9 @@
   --text-muted: #b3b3b3;
   --text-faint: #a3a3a3;
   --accent: #1473e6;
+  --danger: #e34850;
+  --danger-hover: #ec5b62;
+  --danger-text: #ffffff;
   --accent-hover: #2680eb;
   --accent-soft: rgb(20 115 230 / 0.22);
   --dial-track: #5c5c5c;
@@ -145,6 +148,9 @@ body {
   --text-muted: #5c5c5c;
   --text-faint: #707070;
   --accent: #1466d6;
+  --danger: #c9252d;
+  --danger-hover: #b21f27;
+  --danger-text: #ffffff;
   --accent-hover: #0f58bb;
   --accent-soft: rgb(20 102 214 / 0.1);
   --dial-track: #e0e0e0;

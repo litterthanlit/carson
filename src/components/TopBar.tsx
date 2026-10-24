@@ -193,7 +193,7 @@ export const TopBar = memo(function TopBar({
         <button
           type="button"
           className="command-button"
-          title={withShortcut('Search every action', 'commandPalette')}
+          title={`${withShortcut('Search every action', 'commandPalette')} · ${withShortcut('Keyboard shortcuts', 'shortcutSheet')}`}
           aria-label="Commands"
           aria-keyshortcuts={ariaKeyShortcuts('commandPalette')}
           onClick={onOpenCommands}

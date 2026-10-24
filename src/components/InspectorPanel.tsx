@@ -69,7 +69,6 @@ import { FrameControls } from './FrameControls'
 import { FRAME_COLOR, type FrameSpec } from '../lib/frameHandles'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
 import { ariaKeyShortcuts, shortcutKeys, withShortcut } from '../lib/shortcuts'
-import { ShortcutSheet } from './ShortcutSheet'
 
 export type InspectorPanelProps = {
   inspectorTab: InspectorTab
@@ -1875,10 +1874,6 @@ export function InspectorPanel({
             </div>
           </div>
 
-          <div className="panel-section">
-            <h2>Shortcuts</h2>
-            <ShortcutSheet />
-          </div>
         </>
       ) : null}
 

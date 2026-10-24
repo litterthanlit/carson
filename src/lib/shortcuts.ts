@@ -61,6 +61,7 @@ export const SHORTCUTS = [
   { id: 'saveAs', label: 'Save as', group: 'File', keys: ['Mod+Shift+S'], whileTyping: 'allow' },
   { id: 'export', label: 'Export', group: 'File', keys: ['Mod+E'], whileTyping: 'allow' },
   { id: 'commandPalette', label: 'Search every action', group: 'File', keys: ['Mod+K'], scope: 'app', whileTyping: 'allow' },
+  { id: 'shortcutSheet', label: 'Keyboard shortcuts', group: 'File', keys: ['?'], scope: 'app' },
 
   // Edit
   { id: 'undo', label: 'Undo', group: 'Edit', keys: ['Mod+Z'], whileTyping: 'canvas-text' },

@@ -30,7 +30,7 @@ export function CategoryChips<Id extends string>({ items, active, ariaLabel, onS
   }, [])
 
   // A remembered category can sit off-screen: jump there on open, glide on later changes.
-  // A passive effect, so it runs after GalleryDialog's showModal() has given the bar a layout.
+  // A passive effect, so it runs after Dialog's showModal() has given the bar a layout.
   useEffect(() => {
     const bar = barRef.current
     const chip = activeRef.current

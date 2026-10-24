@@ -234,6 +234,8 @@ import {
 } from './lib/explorationTrail'
 import type { CommandAction } from './lib/commands'
 import { isInControl, isTextEntry, matchShortcut, shortcutKeys, type KeyShortcutId, type TypingContext } from './lib/shortcuts'
+import { useAsk } from './hooks/useAsk'
+import { AskDialog } from './components/AskDialog'
 import { EditorCanvas } from './components/EditorCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
 import { InstrumentsPalette } from './components/InstrumentsPalette'
@@ -330,6 +332,9 @@ const TextureGalleryModal = lazy(() =>
 )
 const CompsGalleryModal = lazy(() =>
   import('./components/CompsGalleryModal').then((module) => ({ default: module.CompsGalleryModal })),
+)
+const ShortcutSheetDialog = lazy(() =>
+  import('./components/ShortcutSheet').then((module) => ({ default: module.ShortcutSheetDialog })),
 )
 
 type ChaosRun = {
@@ -448,6 +453,8 @@ function App() {
   const [dragLayerId, setDragLayerId] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
   const [commandOpen, setCommandOpen] = useState(false)
+  const [shortcutSheetOpen, setShortcutSheetOpen] = useState(false)
+  const ask = useAsk()
   const [performance, setPerformance] = useState(idlePerformance)
   const [filterGalleryOpen, setFilterGalleryOpen] = useState(false)
   const [textureGalleryOpen, setTextureGalleryOpen] = useState(false)
@@ -1104,6 +1111,7 @@ function App() {
     saveAs: () => openSaveAsDialog(),
     export: () => void exportPoster(),
     commandPalette: () => setCommandOpen(true),
+    shortcutSheet: () => setShortcutSheetOpen(true),
     // Edit
     undo: () => void handleUserUndo(),
     redo: () => {
@@ -2714,7 +2722,12 @@ function App() {
     const canvas = canvasRef.current
     const active = activeObject()
     if (!canvas || !active || active.type === 'activeselection' && canvas.getActiveObjects().length === 0) return
-    const name = window.prompt('Component name', selected?.name ?? 'Component')
+    const name = await ask.askText({
+      title: 'Save as component',
+      label: 'Component name',
+      defaultValue: selected?.name ?? 'Component',
+      submitLabel: 'Save component',
+    })
     if (!name) return
 
     let source = active
@@ -3194,10 +3207,10 @@ function App() {
     finalizeActive('Changed OpenType features')
   }
 
-  function saveCharacterStyleAction() {
+  async function saveCharacterStyleAction() {
     const object = activeObject()
     if (!object || object.type !== 'textbox') return
-    const name = window.prompt('Character style name', 'Accent')
+    const name = await ask.askText({ title: 'Save character style', label: 'Style name', defaultValue: 'Accent', submitLabel: 'Save style' })
     if (!name?.trim()) return
     const style = createCharacterStyleFromText(name.trim(), object, textSelection)
     setDocumentMeta((current) => {
@@ -3210,10 +3223,10 @@ function App() {
     setStatus(`Saved character style “${name.trim()}”`)
   }
 
-  function saveParagraphStyleAction() {
+  async function saveParagraphStyleAction() {
     const object = activeObject()
     if (!object || object.type !== 'textbox') return
-    const name = window.prompt('Paragraph style name', 'Body')
+    const name = await ask.askText({ title: 'Save paragraph style', label: 'Style name', defaultValue: 'Body', submitLabel: 'Save style' })
     if (!name?.trim()) return
     const style = createParagraphStyleFromText(name.trim(), object)
     setDocumentMeta((current) => {
@@ -3301,7 +3314,12 @@ function App() {
   async function saveTreatmentStackAsComponent() {
     const object = activeObject()
     if (!object || readTreatments(object).length === 0) return
-    const name = window.prompt('Treatment stack name', `${selected?.name ?? 'Layer'} stack`)
+    const name = await ask.askText({
+      title: 'Save treatment stack',
+      label: 'Stack name',
+      defaultValue: `${selected?.name ?? 'Layer'} stack`,
+      submitLabel: 'Save stack',
+    })
     if (!name) return
     const clone = await object.clone()
     const snapshot = clone.toObject(HISTORY_PROPS as unknown as string[]) as Record<string, unknown>
@@ -3319,12 +3337,12 @@ function App() {
     commitHistory(`Saved treatment stack “${name}”`)
   }
 
-  function saveTreatmentStackAsGesture() {
+  async function saveTreatmentStackAsGesture() {
     const object = activeObject()
     if (!object || readTreatments(object).length === 0) return
     const draft = gestureFromTreatments(readTreatments(object))
     if (draft.steps.length === 0) return
-    const name = window.prompt('Gesture name', draft.name)
+    const name = await ask.askText({ title: 'Save as gesture', label: 'Gesture name', defaultValue: draft.name, submitLabel: 'Save gesture' })
     if (!name?.trim()) return
     const gesture: Gesture = {
       ...draft,
@@ -3341,10 +3359,10 @@ function App() {
     commitHistory(`Saved gesture “${name.trim()}”`)
   }
 
-  function saveTreatmentAsInstrument(treatment: Treatment) {
+  async function saveTreatmentAsInstrument(treatment: Treatment) {
     const draft = savedInstrumentFromTreatment(treatment, newSavedInstrumentId())
     if (!draft) return
-    const name = window.prompt('Instrument name', draft.name)
+    const name = await ask.askText({ title: 'Save as instrument', label: 'Instrument name', defaultValue: draft.name, submitLabel: 'Save instrument' })
     if (!name?.trim()) return
     const asset: SavedInstrument = { ...draft, name: name.trim() }
     setDocumentMeta((current) => {
@@ -3367,10 +3385,10 @@ function App() {
     )
   }
 
-  function saveRecordedPerformance() {
+  async function saveRecordedPerformance() {
     const draft = gestureFromPerformance(performance, newGestureId())
     if (!draft) return
-    const name = window.prompt('Gesture name', draft.name)
+    const name = await ask.askText({ title: 'Save performance', label: 'Gesture name', defaultValue: draft.name, submitLabel: 'Save gesture' })
     if (!name?.trim()) return
     const gesture: Gesture = { ...draft, name: name.trim() }
     setDocumentMeta((current) => {
@@ -3450,14 +3468,14 @@ function App() {
     commitHistory(`Merged ${variant.name}`)
   }
 
-  function renameVariantById(variantId: string) {
+  async function renameVariantById(variantId: string) {
     if (!documentMeta) return
     const variant = findVariant(documentMeta, variantId)
     if (!variant) return
-    const name = window.prompt('Variant name', variant.name)
-    if (!name?.trim()) return
-    setDocumentMeta(renameVariant(documentMeta, variantId, name.trim()))
-    setStatus(`Renamed variant to ${name.trim()}`)
+    const name = await ask.askText({ title: 'Rename comp', label: 'Name', defaultValue: variant.name, submitLabel: 'Rename' })
+    if (!name) return
+    setDocumentMeta((current) => (current ? renameVariant(current, variantId, name) : current))
+    setStatus(`Renamed variant to ${name}`)
   }
 
   function completeOnboarding() {
@@ -3465,7 +3483,7 @@ function App() {
     setOnboardingOpen(false)
     setWalkthroughStep(null)
     walkthroughStepRef.current = null
-    setStatus('Try Scatter, then Xerox — press R to re-roll')
+    setStatus(`Try Scatter, then Xerox — press ${shortcutKeys('reroll')} to re-roll`)
   }
 
   function startWalkthrough() {
@@ -4354,7 +4372,7 @@ function App() {
     syncSelected()
     trackChaos('Scramble', seed, [], (next) => scrambleCanvas(next))
     commitHistory(`Scrambled into ${result.label} #${seed}`)
-    setStatus(`Scrambled into ${result.label} #${seed} — press R for another structure`)
+    setStatus(`Scrambled into ${result.label} #${seed} — press ${shortcutKeys('reroll')} for another structure`)
   }
 
   async function badCropAccident(seed = newSeed()) {
@@ -5086,7 +5104,12 @@ function App() {
       const existing = await findProjectByName(name)
       let id = projectId
       if (existing && existing.id !== projectId) {
-        const overwrite = window.confirm(`A poster named “${name}” already exists. Overwrite it?`)
+        const overwrite = await ask.askConfirm({
+          title: 'Replace saved poster?',
+          body: `A poster named “${name}” is already saved in this browser. Saving replaces it.`,
+          confirmLabel: 'Replace',
+          destructive: true,
+        })
         if (!overwrite) {
           setStatus('Save cancelled — rename the poster and try again')
           return
@@ -5195,7 +5218,13 @@ function App() {
   }
 
   async function deleteSavedProject(id: string, name: string) {
-    if (!window.confirm(`Delete saved poster “${name}”? This cannot be undone.`)) return
+    const confirmed = await ask.askConfirm({
+      title: 'Delete saved poster?',
+      body: `“${name}” will be removed from this browser. This can’t be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
+    if (!confirmed) return
     try {
       await deleteProject(id)
       setSavedProjects(await listProjects())
@@ -5489,6 +5518,14 @@ function App() {
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
     { id: 'new-poster', shortcut: 'newPoster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
+    {
+      id: 'keyboard-shortcuts',
+      shortcut: 'shortcutSheet',
+      label: 'Keyboard shortcuts',
+      keywords: ['keys', 'hotkeys', 'help', 'cheat sheet', 'shortcut'],
+      scope: 'any',
+      run: () => setShortcutSheetOpen(true),
+    },
     { id: 'open-poster', shortcut: 'openPoster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
     ...(['dropShadow', 'outerGlow', 'outline'] as const).map((kind) => {
       const label = kind === 'dropShadow' ? 'Drop shadow' : kind === 'outerGlow' ? 'Outer glow' : 'Outline'
@@ -5783,6 +5820,7 @@ function App() {
     <main className={screen === 'home' ? 'home-root' : 'editor-shell'} data-tour={walkthroughStep ?? undefined}>
       <Suspense fallback={null}>
         {commandOpen ? <CommandPalette open commands={commands} onClose={() => setCommandOpen(false)} /> : null}
+        {shortcutSheetOpen ? <ShortcutSheetDialog onClose={() => setShortcutSheetOpen(false)} /> : null}
         {onboardingOpen ? (
           <OnboardingModal
             open
@@ -5887,6 +5925,7 @@ function App() {
           />
         ) : null}
       </Suspense>
+      <AskDialog request={ask.request} onAnswer={ask.answer} />
       {screen === 'home' ? (
         <HomeScreen
           loading={!homeReady}

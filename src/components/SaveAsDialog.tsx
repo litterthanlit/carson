@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { saveAsDialogCopy, saveAsNameError } from '../lib/fileIdentity'
+import { Dialog } from './Dialog'
 
 type SaveAsDialogProps = {
   open: boolean
@@ -22,12 +23,13 @@ export function SaveAsDialog({ open, suggestedName, existingNames, onSaveAs, onC
   const error = saveAsNameError(name, existingNames)
 
   return (
-    <div className="command-backdrop" role="presentation" onMouseDown={onClose}>
-      <div
-        className="file-dialog glass-panel"
-        role="dialog"
-        aria-labelledby="save-as-title"
-        onMouseDown={(event) => event.stopPropagation()}
+    <Dialog labelledBy="save-as-title" className="file-dialog" onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (error) return
+          onSaveAs(name.trim())
+        }}
       >
         <h2 id="save-as-title">{copy.title}</h2>
         <p className="hint">{copy.body}</p>
@@ -38,7 +40,7 @@ export function SaveAsDialog({ open, suggestedName, existingNames, onSaveAs, onC
             onChange={(event) => setName(event.target.value)}
             aria-label="Save as name"
             aria-invalid={Boolean(error)}
-            autoFocus
+            data-autofocus
           />
         </label>
         {error ? (
@@ -47,22 +49,14 @@ export function SaveAsDialog({ open, suggestedName, existingNames, onSaveAs, onC
           </p>
         ) : null}
         <div className="button-row">
-          <button
-            type="button"
-            className="primary-button"
-            disabled={Boolean(error)}
-            onClick={() => {
-              if (error) return
-              onSaveAs(name.trim())
-            }}
-          >
+          <button type="submit" className="primary-button" disabled={Boolean(error)}>
             {copy.submit}
           </button>
           <button type="button" onClick={onClose}>
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </Dialog>
   )
 }
