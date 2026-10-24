@@ -237,9 +237,17 @@ export function renderCopyMachineChain(
   return applyCopyMachineChain(sourceToImageData(source, exportScale), treatments, exportScale, tensionScale)
 }
 
-/** True when any enabled pass in the chain lays ink unevenly. */
-export function copyMachineChainInks(chain: Pick<Treatment, 'enabled' | 'params'>[]): boolean {
-  return chain.some((step) => step.enabled && !inkLoadIsIdle(copyMachineParamsFromRecord(step.params)))
+/**
+ * True when any enabled pass reads the press — uneven ink, or the drum's
+ * bands, streaks, dropouts and mottle — and so depends on where the layer
+ * sits on the sheet.
+ */
+export function copyMachineChainUsesPress(chain: Pick<Treatment, 'enabled' | 'params'>[]): boolean {
+  return chain.some((step) => {
+    if (!step.enabled) return false
+    const params = copyMachineParamsFromRecord(step.params)
+    return !inkLoadIsIdle(params) || params.bands > 0 || params.streaks > 0 || params.voids > 0 || params.grain > 0
+  })
 }
 
 /** Where a layer's raster lies on the press: its bounding box, in raster px per poster px. */
@@ -256,7 +264,7 @@ export function copyMachineSheetPatch(
   }
 }
 
-/** Cache text for an inked bake on a press: the run, and the spot on the sheet. */
+/** Cache text for a bake on a press: the run, and the spot on the sheet. */
 export function copyMachinePressSignature(press: Press | null, bounds: { left: number; top: number }): string {
   if (!press) return ''
   return `|press:${pressSignature(press)}@${bounds.left.toFixed(1)},${bounds.top.toFixed(1)}`
@@ -354,9 +362,9 @@ export async function renderCopyMachineTreatment(
 
   const chain = treatments.filter((item) => item.type === 'copy-machine')
   const bounds = source.getBoundingRect()
-  // On a press, uneven ink depends on where the layer sits on the sheet.
+  // On a press, the ink and the drum depend on where the layer sits on the sheet.
   const press = canvasPress(canvas)
-  const inkPress = press && copyMachineChainInks(chain) ? press : null
+  const inkPress = press && copyMachineChainUsesPress(chain) ? press : null
   const cacheKey = copyMachineBakeCacheKey(
     sourceId,
     chain,

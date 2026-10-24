@@ -10,7 +10,7 @@ import { PRESS_CHECK_DEFAULTS, renderPressCheckPass } from './pressCheck'
 import { misprintPoseForTreatment } from './misprintTreatment'
 import { typeStripInkOpacity } from './typeStripsTreatment'
 import { copyMachineGhostDelta, COPY_MACHINE_DEFAULTS, COPY_MACHINE_INK_BLEED } from './copyMachine'
-import { copyMachineChainInks, copyMachinePressSignature, copyMachineSheetPatch } from './copyMachineTreatment'
+import { copyMachineChainUsesPress, copyMachinePressSignature, copyMachineSheetPatch } from './copyMachineTreatment'
 import { createSeededRandom } from './random'
 import type { Treatment } from './treatments'
 
@@ -107,6 +107,21 @@ describe('companions follow their source', () => {
     expect(isCompanionPoseStale(object)).toBe(true)
     stampCompanionPose(object)
     expect((object as unknown as Record<string, unknown>)[COMPANION_POSE_KEY]).toBe(companionPoseStamp(object))
+  })
+
+  it('re-places an aged or xeroxed layer after a move only on a press', () => {
+    const off = layer([{ type: 'decay', enabled: true }])
+    stampCompanionPose(off, false)
+    ;(off as unknown as { left: number }).left = 80
+    expect(isCompanionPoseStale(off, false)).toBe(false)
+    const on = layer([{ type: 'xerox', enabled: true }])
+    stampCompanionPose(on, true)
+    ;(on as unknown as { left: number }).left = 80
+    expect(isCompanionPoseStale(on, true)).toBe(true)
+    const marked = layer([{ type: 'decay-marks', enabled: true }])
+    stampCompanionPose(marked)
+    ;(marked as unknown as { top: number }).top = 300
+    expect(isCompanionPoseStale(marked)).toBe(true)
   })
 
   it('leaves layers without companions, and layers inside a multi-selection, alone', () => {
@@ -211,11 +226,14 @@ describe('echoes and strips on the press', () => {
 })
 
 describe('the copier on the press', () => {
-  it('only ties a bake to its spot on the sheet when the drum inks unevenly', () => {
+  it('ties a bake to its spot on the sheet when its ink or drum reads the press', () => {
     const step = (params: Record<string, number>) => ({ enabled: true, params })
-    expect(copyMachineChainInks([step({ ...COPY_MACHINE_DEFAULTS })])).toBe(false)
-    expect(copyMachineChainInks([step({ ...COPY_MACHINE_INK_BLEED })])).toBe(true)
-    expect(copyMachineChainInks([{ enabled: false, params: { ...COPY_MACHINE_INK_BLEED } }])).toBe(false)
+    const quiet = { ...COPY_MACHINE_DEFAULTS, grain: 0, bands: 0, streaks: 0, voids: 0 }
+    expect(copyMachineChainUsesPress([step(quiet)])).toBe(false)
+    expect(copyMachineChainUsesPress([step({ ...COPY_MACHINE_DEFAULTS })])).toBe(true)
+    expect(copyMachineChainUsesPress([step({ ...quiet, streaks: 10 })])).toBe(true)
+    expect(copyMachineChainUsesPress([step({ ...COPY_MACHINE_INK_BLEED })])).toBe(true)
+    expect(copyMachineChainUsesPress([{ enabled: false, params: { ...COPY_MACHINE_INK_BLEED } }])).toBe(false)
     expect(copyMachinePressSignature(null, { left: 1, top: 2 })).toBe('')
     expect(copyMachinePressSignature(press, { left: 10, top: 20.25 })).toBe('|press:777/0/800x600@10.0,20.3')
   })

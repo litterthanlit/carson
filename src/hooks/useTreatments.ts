@@ -28,6 +28,7 @@ import { stripTypeStripFragments } from '../lib/typeStripsTreatment'
 import { stripLetterBreakPieces } from '../lib/letterBreakTreatment'
 import { withLayerSyncSuppressed } from '../lib/layerSync'
 import { stampCompanionPose } from '../lib/companionFollow'
+import { canvasPress } from '../lib/press'
 import type { LayerKind } from '../types/editor'
 import { newSeed } from '../lib/random'
 
@@ -134,7 +135,7 @@ export function useTreatments({
         } finally {
           // Companions now sit where the source does; a later drag shows as stale.
           // Stamped even if the render failed, so a bad layer can't retry every frame.
-          stampCompanionPose(target)
+          stampCompanionPose(target, canvasPress(canvas) !== null)
         }
       })
       canvas.requestRenderAll()

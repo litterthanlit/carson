@@ -10,14 +10,24 @@
  * - toner: ink spreads (dot gain), sits on a clustered halftone screen, mottles
  *   in solids, speckles the paper and pinholes the blacks
  * - bands / streaks: toner starvation across the scan, dirt and scratches on
- *   the drum along it
+ *   the drum along it — on a poster's press these sit at fixed places on the
+ *   sheet, so a scratch runs through every layer copied across it
  * - edge: the lid left open — black creeping in from the frame
  * - generations: a copy of a copy, resized each time, losing and thickening detail
  *
  * Pure, seeded and headless-testable; the worker and export run the same code.
  */
 import { applyInkLoad, inkLoadIsIdle } from './inkBleed'
-import type { SheetPatch } from './press'
+import {
+  pressBands,
+  pressStreaks,
+  pressVoids,
+  SHEET_SALT,
+  sheetFeedBasis,
+  sheetLineNoise,
+  sheetNoise,
+  type SheetPatch,
+} from './press'
 import { createSeededRandom } from './random'
 
 export type CopyMachineParams = {
@@ -613,6 +623,102 @@ function tonerDensity(
   return density
 }
 
+/** An irregular soft dropout — three lobes round a circle. */
+function stampVoid(
+  density: Float32Array,
+  width: number,
+  height: number,
+  cx: number,
+  cy: number,
+  radius: number,
+  lobes: readonly number[],
+) {
+  const x0 = Math.max(0, Math.floor(cx - radius * 1.4))
+  const x1 = Math.min(width - 1, Math.ceil(cx + radius * 1.4))
+  const y0 = Math.max(0, Math.floor(cy - radius * 1.4))
+  const y1 = Math.min(height - 1, Math.ceil(cy + radius * 1.4))
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const angle = Math.atan2(y - cy, x - cx)
+      const reach =
+        radius *
+        (1 + 0.22 * Math.sin(angle * 2 + lobes[0]) + 0.14 * Math.sin(angle * 3 + lobes[1]) + 0.08 * Math.sin(angle * 5 + lobes[2]))
+      const distance = Math.hypot(x - cx, y - cy)
+      const coverage = 1 - smoothstep(reach * 0.7, reach, distance)
+      if (coverage > 0) density[y * width + x] *= 1 - 0.95 * coverage
+    }
+  }
+}
+
+/** Along- and across-feed coordinates of raster pixel (x, y) are a0 + x·ax + y·ay. */
+function sheetAxes(sheet: SheetPatch) {
+  const { ux, uy, vx, vy } = sheetFeedBasis(sheet.press)
+  const px = sheet.originX + 0.5 * sheet.unit
+  const py = sheet.originY + 0.5 * sheet.unit
+  return {
+    u0: px * ux + py * uy,
+    ux: sheet.unit * ux,
+    uy: sheet.unit * uy,
+    v0: px * vx + py * vy,
+    vx: sheet.unit * vx,
+    vy: sheet.unit * vy,
+  }
+}
+
+function rangeOver(width: number, height: number, start: number, dx: number, dy: number) {
+  const values = [start, start + (width - 1) * dx, start + (height - 1) * dy, start + (width - 1) * dx + (height - 1) * dy]
+  return { low: Math.min(...values), high: Math.max(...values) }
+}
+
+/** Starvation bands at the press's places across the feed, wherever this raster sits. */
+function applySheetBands(density: Float32Array, width: number, height: number, bands: number, sheet: SheetPatch) {
+  const axes = sheetAxes(sheet)
+  const span = rangeOver(width, height, axes.u0, axes.ux, axes.uy)
+  const active = pressBands(sheet.press, Math.round((2 + bands * 7) * 2.6)).filter(
+    (band) => band.center + band.half > span.low && band.center - band.half < span.high,
+  )
+  if (active.length === 0) return
+  const depthScale = Math.min(1, bands)
+  for (let y = 0; y < height; y++) {
+    let u = axes.u0 + y * axes.uy
+    for (let x = 0; x < width; x++, u += axes.ux) {
+      let profile = 1
+      for (const band of active) {
+        const distance = Math.abs(u - band.center)
+        if (distance >= band.half) continue
+        profile = Math.min(profile, 1 - band.depth * depthScale * smoothstep(0, 1, 1 - distance / band.half))
+      }
+      if (profile < 1) density[y * width + x] *= profile
+    }
+  }
+}
+
+/** Drum dirt and scratches at the press's places along the feed, breaking up the same way on every layer. */
+function applySheetStreaks(density: Float32Array, width: number, height: number, streaks: number, sheet: SheetPatch) {
+  const axes = sheetAxes(sheet)
+  const span = rangeOver(width, height, axes.v0, axes.vx, axes.vy)
+  const unit = Math.max(1e-6, sheet.unit)
+  const active = pressStreaks(sheet.press, Math.round(streaks * 6 * 2.6 + 1)).filter(
+    (streak) => streak.position + streak.half + unit > span.low && streak.position - streak.half - unit < span.high,
+  )
+  if (active.length === 0) return
+  for (let y = 0; y < height; y++) {
+    let u = axes.u0 + y * axes.uy
+    let v = axes.v0 + y * axes.vy
+    for (let x = 0; x < width; x++, u += axes.ux, v += axes.vx) {
+      for (const streak of active) {
+        const coverage = Math.max(0, Math.min(1, (streak.half - Math.abs(v - streak.position)) / unit + 0.5))
+        if (coverage <= 0) continue
+        // Streaks break up along their length instead of ruling a perfect line.
+        const present = smoothstep(-0.35, 0.1, sheetLineNoise(sheet.press, streak.salt, u, 40)) * coverage * streak.strength
+        if (present <= 0) continue
+        const i = y * width + x
+        density[i] = streak.dark ? density[i] + (1 - density[i]) * present : density[i] * (1 - present)
+      }
+    }
+  }
+}
+
 /**
  * The toner side of a copy, on top of whatever the spatial passes did.
  * Contrast drives spread and curve; grain drives specks, pinholes, ragged edges
@@ -652,7 +758,7 @@ export function applyTonalPasses(
 
   // Mottle: solids never lie down evenly.
   if (grain > 0.01) {
-    const mottle = noisePlane(width, height, 12 * pixelScale, random)
+    const mottle = sheet ? sheetNoise(sheet, width, height, 12, 12, SHEET_SALT.mottle) : noisePlane(width, height, 12 * pixelScale, random)
     const amount = 0.13 * Math.min(1, grain)
     for (let i = 0; i < density.length; i++) {
       const solid = smoothstep(0.55, 1, density[i])
@@ -664,7 +770,9 @@ export function applyTonalPasses(
 
   // Bands: toner starvation in stripes across the direction of travel.
   const bands = Math.min(1.5, paramUnit(params.bands))
-  if (bands > 0.01) {
+  if (bands > 0.01 && sheet) {
+    applySheetBands(density, width, height, bands, sheet)
+  } else if (bands > 0.01) {
     const profile = new Float32Array(lines).fill(1)
     const count = Math.max(2, Math.round(2 + bands * 7))
     for (let band = 0; band < count; band++) {
@@ -683,7 +791,9 @@ export function applyTonalPasses(
 
   // Streaks: dirt on the glass prints a line, a scratched drum drops one out.
   const streaks = Math.min(1.5, paramUnit(params.streaks ?? 0))
-  if (streaks > 0.01) {
+  if (streaks > 0.01 && sheet) {
+    applySheetStreaks(density, width, height, streaks, sheet)
+  } else if (streaks > 0.01) {
     const count = Math.round(streaks * 6 + random() * 2)
     for (let streak = 0; streak < count; streak++) {
       const position = random() * across
@@ -729,7 +839,17 @@ export function applyTonalPasses(
 
   // Voids: irregular dropouts where the paper didn't take toner.
   const voids = Math.min(1.5, paramUnit(params.voids))
-  if (voids > 0.01) {
+  if (voids > 0.01 && sheet) {
+    // The sheet's dropouts that fall on this raster.
+    const { originX, originY, unit } = sheet
+    for (const blob of pressVoids(sheet.press, Math.round(voids * 40))) {
+      const radius = Math.max(3, (blob.radius * Math.min(1, voids)) / unit)
+      const cx = (blob.x - originX) / unit - 0.5
+      const cy = (blob.y - originY) / unit - 0.5
+      if (cx + radius * 1.4 < 0 || cy + radius * 1.4 < 0 || cx - radius * 1.4 > width || cy - radius * 1.4 > height) continue
+      stampVoid(density, width, height, cx, cy, radius, blob.lobes)
+    }
+  } else if (voids > 0.01) {
     const count = Math.max(1, Math.round(voids * 6))
     const shortSide = Math.min(width, height)
     for (let blob = 0; blob < count; blob++) {
@@ -737,21 +857,7 @@ export function applyTonalPasses(
       const cy = random() * height
       const radius = Math.max(3, (0.02 + random() * 0.1) * shortSide * Math.min(1, voids))
       const lobes = [random(), random(), random()].map((value) => value * Math.PI * 2)
-      const x0 = Math.max(0, Math.floor(cx - radius * 1.4))
-      const x1 = Math.min(width - 1, Math.ceil(cx + radius * 1.4))
-      const y0 = Math.max(0, Math.floor(cy - radius * 1.4))
-      const y1 = Math.min(height - 1, Math.ceil(cy + radius * 1.4))
-      for (let y = y0; y <= y1; y++) {
-        for (let x = x0; x <= x1; x++) {
-          const angle = Math.atan2(y - cy, x - cx)
-          const reach =
-            radius *
-            (1 + 0.22 * Math.sin(angle * 2 + lobes[0]) + 0.14 * Math.sin(angle * 3 + lobes[1]) + 0.08 * Math.sin(angle * 5 + lobes[2]))
-          const distance = Math.hypot(x - cx, y - cy)
-          const coverage = 1 - smoothstep(reach * 0.7, reach, distance)
-          if (coverage > 0) density[y * width + x] *= 1 - 0.95 * coverage
-        }
-      }
+      stampVoid(density, width, height, cx, cy, radius, lobes)
     }
   }
 

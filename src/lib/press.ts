@@ -8,6 +8,10 @@
  *   continuous under every layer
  * - registration: the plates slip once for the run, so every misprint and
  *   copier ghost on the poster shifts the same way
+ * - drum: starvation bands across the feed, dirt streaks along it and toner
+ *   dropouts sit at fixed places on the sheet, through every copied layer
+ * - age: the sheet's own folds, the wear that gathers along them and at the
+ *   edges, and the light it hung in — one side faded more than the other
  *
  * Coordinates are poster px. Values come from a hashed lattice, so any patch
  * of the sheet — a layer's raster, a worker, an export at 4× — samples the
@@ -54,6 +58,14 @@ export const SHEET_SALT = {
   dashes: 8,
   registration: 9,
   paper: 10,
+  bands: 11,
+  streaks: 12,
+  voids: 13,
+  mottle: 14,
+  folds: 15,
+  wear: 16,
+  exposure: 17,
+  chips: 18,
 } as const
 
 export function newPressRun(seed = newSeed(), feedAngle = DEFAULT_FEED_ANGLE): PressRun {
@@ -316,4 +328,242 @@ export function canvasPress(canvas: object): Press | null {
 export function pressSignature(press: Press | null): string {
   if (!press) return ''
   return `${press.seed}/${press.feedAngle}/${Math.round(press.width)}x${Math.round(press.height)}`
+}
+
+/** Hash in 0..1 for the k-th draw of one field — a fixed list of candidates per run. */
+function sheetDraw(press: Press, salt: number, k: number, d: number): number {
+  return (sheetHash(press.seed, salt, k, d) + 1) / 2
+}
+
+/** Along-feed (u) and across-feed (v) coordinates of a poster point. */
+export function sheetFeedCoords(press: Press, x: number, y: number): { u: number; v: number } {
+  const { c, s } = feedBasis(press)
+  return { u: x * c + y * s, v: -x * s + y * c }
+}
+
+/** Unit steps of u and v per poster px in x and in y. */
+export function sheetFeedBasis(press: Press): { ux: number; uy: number; vx: number; vy: number } {
+  const { c, s } = feedBasis(press)
+  return { ux: c, uy: s, vx: -s, vy: c }
+}
+
+/** Range of u and v the sheet covers. */
+export function sheetFeedExtent(press: Press): { uMin: number; uMax: number; vMin: number; vMax: number } {
+  let uMin = Infinity
+  let uMax = -Infinity
+  let vMin = Infinity
+  let vMax = -Infinity
+  for (const [x, y] of [
+    [0, 0],
+    [press.width, 0],
+    [0, press.height],
+    [press.width, press.height],
+  ]) {
+    const { u, v } = sheetFeedCoords(press, x, y)
+    uMin = Math.min(uMin, u)
+    uMax = Math.max(uMax, u)
+    vMin = Math.min(vMin, v)
+    vMax = Math.max(vMax, v)
+  }
+  return { uMin, uMax, vMin, vMax }
+}
+
+export type DrumBand = {
+  /** Centre along the feed (u, poster px). */
+  center: number
+  half: number
+  /** 0..1 before the Bands setting scales it. */
+  depth: number
+}
+
+/**
+ * Toner starvation bands for the whole run, in the order they appear as the
+ * setting rises: a band is a stripe across the feed, wherever it falls on
+ * the sheet, so it runs through every layer copied there.
+ */
+export function pressBands(press: Press, count: number): DrumBand[] {
+  const { uMin, uMax } = sheetFeedExtent(press)
+  const length = uMax - uMin
+  return Array.from({ length: Math.max(0, Math.min(32, Math.round(count))) }, (_, k) => ({
+    center: uMin + sheetDraw(press, SHEET_SALT.bands, k, 0) * length,
+    half: Math.max(2, (0.004 + sheetDraw(press, SHEET_SALT.bands, k, 1) * 0.025) * length),
+    depth: 0.2 + sheetDraw(press, SHEET_SALT.bands, k, 2) * 0.5,
+  }))
+}
+
+export type DrumStreak = {
+  /** Position across the feed (v, poster px). */
+  position: number
+  half: number
+  /** Dirt prints a dark line; a scratched drum drops one out. */
+  dark: boolean
+  strength: number
+  /** Which flicker field breaks this streak up along its length. */
+  salt: number
+}
+
+/** Drum dirt and scratches for the run: lines along the feed at fixed places across it. */
+export function pressStreaks(press: Press, count: number): DrumStreak[] {
+  const { vMin, vMax } = sheetFeedExtent(press)
+  const width = vMax - vMin
+  return Array.from({ length: Math.max(0, Math.min(32, Math.round(count))) }, (_, k) => ({
+    position: vMin + sheetDraw(press, SHEET_SALT.streaks, k, 0) * width,
+    half: 0.35 + sheetDraw(press, SHEET_SALT.streaks, k, 1) * 1.1,
+    dark: sheetDraw(press, SHEET_SALT.streaks, k, 2) < 0.62,
+    strength: 0.45 + sheetDraw(press, SHEET_SALT.streaks, k, 3) * 0.5,
+    salt: SHEET_SALT.streaks * 64 + k,
+  }))
+}
+
+export type DrumVoid = { x: number; y: number; radius: number; lobes: [number, number, number] }
+
+/** Toner dropouts for the run: soft blobs at fixed places on the sheet. Radius before the Voids setting. */
+export function pressVoids(press: Press, count: number): DrumVoid[] {
+  const short = Math.min(press.width, press.height)
+  return Array.from({ length: Math.max(0, Math.min(64, Math.round(count))) }, (_, k) => ({
+    x: sheetDraw(press, SHEET_SALT.voids, k, 0) * press.width,
+    y: sheetDraw(press, SHEET_SALT.voids, k, 1) * press.height,
+    radius: Math.max(3, (0.02 + sheetDraw(press, SHEET_SALT.voids, k, 2) * 0.1) * short * 0.35),
+    lobes: [
+      sheetDraw(press, SHEET_SALT.voids, k, 3) * Math.PI * 2,
+      sheetDraw(press, SHEET_SALT.voids, k, 4) * Math.PI * 2,
+      sheetDraw(press, SHEET_SALT.voids, k, 5) * Math.PI * 2,
+    ],
+  }))
+}
+
+export type SheetFold = {
+  /** 'x': a vertical crease at x = position; 'y': a horizontal one at y = position. */
+  axis: 'x' | 'y'
+  position: number
+  /** Degrees off true: a hand fold is never quite square. */
+  angle: number
+}
+
+/**
+ * How the sheet was folded: in half across, and in half or in thirds down —
+ * the folds of a poster mailed, pinned up, taken down. Fixed per run.
+ */
+export function pressFolds(press: Press): SheetFold[] {
+  const draw = (k: number) => sheetDraw(press, SHEET_SALT.folds, k, 0)
+  const folds: SheetFold[] = []
+  if (draw(0) < 0.85) {
+    folds.push({ axis: 'x', position: press.width * (0.5 + (draw(1) - 0.5) * 0.06), angle: (draw(2) - 0.5) * 2.4 })
+  }
+  const thirds = draw(3) < 0.45
+  const marks = thirds ? [1 / 3, 2 / 3] : [0.5]
+  marks.forEach((mark, index) => {
+    folds.push({
+      axis: 'y',
+      position: press.height * (mark + (draw(4 + index) - 0.5) * 0.04),
+      angle: (draw(6 + index) - 0.5) * 2.4,
+    })
+  })
+  return folds
+}
+
+function smoothRange(edge0: number, edge1: number, value: number): number {
+  const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(1e-6, edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+/** Distance in poster px from a point to the nearest fold line. */
+export function distanceToFold(press: Press, x: number, y: number, folds = pressFolds(press)): number {
+  let best = Infinity
+  for (const fold of folds) {
+    const tilt = Math.tan((fold.angle * Math.PI) / 180)
+    const distance =
+      fold.axis === 'x'
+        ? Math.abs(x - (fold.position + (y - press.height / 2) * tilt))
+        : Math.abs(y - (fold.position + (x - press.width / 2) * tilt))
+    best = Math.min(best, distance)
+  }
+  return best
+}
+
+/**
+ * How worn the sheet is at a point, 0..1: scuffs everywhere, more at the
+ * edges and corners that got handled, most along the folds where the ink
+ * cracks.
+ */
+export function pressWearAt(press: Press, x: number, y: number, folds = pressFolds(press)): number {
+  const short = Math.min(press.width, press.height)
+  const scuff = (sheetValueAt(press, SHEET_SALT.wear, x, y, short * 0.07, short * 0.07) + 1) / 2
+  const edge = Math.min(x, y, press.width - x, press.height - y)
+  const edgeWear = 1 - smoothRange(0, short * 0.05, edge)
+  const foldWear = 1 - smoothRange(0, short * 0.025, distanceToFold(press, x, y, folds))
+  return Math.min(1, scuff * 0.45 + edgeWear * 0.45 + foldWear * 0.6)
+}
+
+/**
+ * How much light the sheet took at a point, 0..1: it hung with one edge to
+ * the window, so that side faded most, in blotches where it curled.
+ */
+export function pressExposureAt(press: Press, x: number, y: number): number {
+  const side = Math.floor(sheetDraw(press, SHEET_SALT.exposure, 0, 0) * 4)
+  const toward =
+    side === 0 ? 1 - x / press.width : side === 1 ? x / press.width : side === 2 ? 1 - y / press.height : y / press.height
+  const short = Math.min(press.width, press.height)
+  const blotch = (sheetValueAt(press, SHEET_SALT.exposure, x, y, short * 0.35, short * 0.35) + 1) / 2
+  return Math.max(0, Math.min(1, 0.2 + toward * 0.55 + blotch * 0.25))
+}
+
+export type WearChip = { x: number; y: number; width: number; height: number; angle: number }
+
+/**
+ * Ink-loss chips inside a box on the sheet. Sites sit on one lattice across
+ * the whole sheet and are ranked by how worn the sheet is there, so chips line
+ * the folds and edges and two overlapping layers share the same ones. Every
+ * box gets at least its few most worn sites, and no more than its size allows.
+ */
+export function pressWearChips(
+  press: Press,
+  box: { left: number; top: number; width: number; height: number },
+  decay: number,
+): WearChip[] {
+  const short = Math.min(press.width, press.height)
+  const cell = short * 0.03
+  const folds = pressFolds(press)
+  const progress = Math.max(0, Math.min(1, decay))
+  const sites: { chip: WearChip; score: number }[] = []
+  const i0 = Math.floor(box.left / cell)
+  const i1 = Math.floor((box.left + box.width) / cell)
+  const j0 = Math.floor(box.top / cell)
+  const j1 = Math.floor((box.top + box.height) / cell)
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      const x = (i + (sheetHash(press.seed, SHEET_SALT.chips, i, j) + 1) / 2) * cell
+      const y = (j + (sheetHash(press.seed, SHEET_SALT.chips + 1, i, j) + 1) / 2) * cell
+      if (x < box.left || x > box.left + box.width || y < box.top || y > box.top + box.height) continue
+      const luck = (sheetHash(press.seed, SHEET_SALT.chips + 2, i, j) + 1) / 2
+      const size = (sheetHash(press.seed, SHEET_SALT.chips + 3, i, j) + 1) / 2
+      sites.push({
+        score: pressWearAt(press, x, y, folds) * 0.8 + luck * 0.45,
+        chip: {
+          x,
+          y,
+          width: short * (0.012 + size * 0.04),
+          height: short * (0.003 + size * 0.01),
+          angle: sheetHash(press.seed, SHEET_SALT.chips + 4, i, j) * 9,
+        },
+      })
+    }
+  }
+  sites.sort((a, b) => b.score - a.score)
+  const share = Math.sqrt((box.width * box.height) / Math.max(1, press.width * press.height * 0.15))
+  const cap = Math.round((4 + progress * 10) * Math.max(0.6, Math.min(2, share)))
+  const floor = Math.min(cap, 2 + Math.round(progress * 3))
+  const threshold = 1.02 - progress * 0.5
+  const worn = sites.filter((site) => site.score >= threshold).length
+  return sites.slice(0, Math.min(cap, Math.max(floor, worn))).map((site) => site.chip)
+}
+
+/** Smooth 1-D noise along one line of the sheet, -1..1 — how a streak flickers along its length. */
+export function sheetLineNoise(press: Press, salt: number, t: number, cell: number): number {
+  const g = t / Math.max(1e-6, cell)
+  const k = Math.floor(g)
+  const f = smooth(g - k)
+  const a = sheetHash(press.seed, salt, k, 0x1d)
+  const b = sheetHash(press.seed, salt, k + 1, 0x1d)
+  return a + (b - a) * f
 }

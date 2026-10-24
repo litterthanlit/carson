@@ -1,6 +1,6 @@
 # Press
 
-Every poster prints on one press run. Copier ink, misprint echoes, type strips and Press Check share its ink map, paper and plate slip, so a wet train that floods the headline also darkens the caption beside it. The Print tab's Press card shows the run, re-inks it, turns the feed and switches it off.
+Every poster prints on one press run. Copier ink, misprint echoes, type strips and Press Check share its ink map, paper and plate slip, so a wet train that floods the headline also darkens the caption beside it. The copier's drum bands and streaks, Fold marks, ink-loss chips, Age and Xerox follow the same sheet, so the poster ages as one object. The Print tab's Press card shows the run, re-inks it, turns the feed and switches it off.
 
 ## Sub-features
 
@@ -8,6 +8,8 @@ Every poster prints on one press run. Copier ink, misprint echoes, type strips a
 - `press-ink-map` shows the wet and dry trains over the poster.
 - `press-reink` rolls a new run, and undo returns the previous one.
 - `press-off` takes the poster off the press, and switching back returns to the same run.
+- `press-drum` runs Copy Machine streaks through every copied layer at the same places along the feed.
+- `press-folds` creases every layer with Fold marks on the sheet's own folds, dashed on the ink map.
 
 ## How to get to it (user POV)
 
@@ -33,3 +35,5 @@ Preconditions:
 - Posters saved before the press open with the switch off and keep their look until it is turned on.
 - On the press, Ink bleed follows the press's feed angle, not the Copy Machine's `Scan angle`.
 - A big layer at print resolution takes seconds to re-ink after a move or a re-ink. Wait for the bake before judging the canvas.
+- Fold marks only crease a layer that a sheet fold crosses. Show the ink map to see where the folds are.
+- Drum streaks run along the feed: at 0° they are horizontal lines, at 90° vertical ones.

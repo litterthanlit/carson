@@ -1,11 +1,14 @@
 /**
  * Companions that follow their source — the copier's bake and ghost, a
- * misprint echo, type strips. Each is placed from the source's pose when it
- * renders, so a drag must carry them along live and re-render them where the
- * source comes to rest: on a press the spot on the sheet sets the ink.
+ * misprint echo, type strips, decay marks. Each is placed from the source's
+ * pose when it renders, so a drag must carry them along live and re-render
+ * them where the source comes to rest. On a press the spot on the sheet also
+ * sets the ink, the folds, the wear and the light — so an aged or xeroxed
+ * layer re-renders there too.
  */
 import type { Canvas, FabricObject } from 'fabric'
 import { COPY_GHOST_SOURCE_ID_KEY, COPY_MACHINE_SOURCE_ID_KEY } from './copyMachineTreatment'
+import { DECAY_MARK_SOURCE_ID_KEY } from './decayMarksTreatment'
 import { MISPRINT_SOURCE_ID_KEY } from './misprintTreatment'
 import { readTreatments, type TreatmentType } from './treatments'
 import { TYPE_STRIP_SOURCE_ID_KEY } from './typeStripsTreatment'
@@ -15,6 +18,16 @@ export const POSE_FOLLOWING_TREATMENTS: ReadonlySet<TreatmentType> = new Set<Tre
   'copy-machine',
   'misprint',
   'type-strips',
+  'decay-marks',
+])
+
+/** Treatments with no companions whose look, on a press, is set by the spot on the sheet. */
+export const PRESS_PLACED_TREATMENTS: ReadonlySet<TreatmentType> = new Set<TreatmentType>(['decay', 'xerox'])
+
+/** Everything a press re-renders when its run changes. */
+export const PRESS_TREATMENTS: ReadonlySet<TreatmentType> = new Set<TreatmentType>([
+  ...POSE_FOLLOWING_TREATMENTS,
+  ...PRESS_PLACED_TREATMENTS,
 ])
 
 export const COMPANION_POSE_KEY = 'companionPose'
@@ -24,6 +37,7 @@ const COMPANION_SOURCE_KEYS = [
   COPY_GHOST_SOURCE_ID_KEY,
   MISPRINT_SOURCE_ID_KEY,
   TYPE_STRIP_SOURCE_ID_KEY,
+  DECAY_MARK_SOURCE_ID_KEY,
 ] as const
 
 type Pose = { left: number; top: number; angle: number; scaleX: number; scaleY: number }
@@ -47,14 +61,17 @@ export function companionPoseStamp(object: FabricObject): string {
   return [pose.left.toFixed(2), pose.top.toFixed(2), pose.angle.toFixed(2), pose.scaleX.toFixed(4), pose.scaleY.toFixed(4)].join(',')
 }
 
-export function hasPoseFollowingTreatments(object: FabricObject): boolean {
-  return readTreatments(object).some((item) => item.enabled && POSE_FOLLOWING_TREATMENTS.has(item.type))
+/** True when the layer must re-render after it moves: companions always, the press's placement on one. */
+export function hasPoseFollowingTreatments(object: FabricObject, onPress = false): boolean {
+  return readTreatments(object).some(
+    (item) => item.enabled && (POSE_FOLLOWING_TREATMENTS.has(item.type) || (onPress && PRESS_PLACED_TREATMENTS.has(item.type))),
+  )
 }
 
-/** Remember the pose the companions were just rendered at (or forget it when there are none). */
-export function stampCompanionPose(object: FabricObject) {
+/** Remember the pose the layer was just rendered at (or forget it when nothing depends on it). */
+export function stampCompanionPose(object: FabricObject, onPress = false) {
   const target = record(object)
-  if (hasPoseFollowingTreatments(object)) target[COMPANION_POSE_KEY] = companionPoseStamp(object)
+  if (hasPoseFollowingTreatments(object, onPress)) target[COMPANION_POSE_KEY] = companionPoseStamp(object)
   else delete target[COMPANION_POSE_KEY]
 }
 
@@ -63,11 +80,11 @@ export function stampCompanionPose(object: FabricObject) {
  * companions were rendered. Inside a multi-selection a layer's pose is
  * relative to the selection, so it waits until the selection lets go.
  */
-export function isCompanionPoseStale(object: FabricObject): boolean {
+export function isCompanionPoseStale(object: FabricObject, onPress = false): boolean {
   const stamp = record(object)[COMPANION_POSE_KEY]
   if (typeof stamp !== 'string') return false
   if (object.group?.type === 'activeselection') return false
-  if (!hasPoseFollowingTreatments(object)) return false
+  if (!hasPoseFollowingTreatments(object, onPress)) return false
   return stamp !== companionPoseStamp(object)
 }
 

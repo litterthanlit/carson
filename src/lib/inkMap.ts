@@ -1,14 +1,17 @@
 /**
  * The press's ink trains as a picture — a guide for placing type on the wet
  * and dry parts of the sheet. Ink-blue where the run went wet, amber where it
- * went dry, clear where it printed clean. Never exported.
+ * went dry, clear where it printed clean; the sheet's folds dashed across it.
+ * Never exported.
  */
-import { pressInkPlane, type Press } from './press'
+import { pressFolds, pressInkPlane, type Press, type SheetFold } from './press'
 
 export type InkMapOverlay = {
   image: HTMLCanvasElement
   /** Feed direction in degrees, for the arrow drawn beside the map. */
   feedAngle: number
+  /** The sheet's folds, drawn as dashed creases. */
+  folds: SheetFold[]
 }
 
 /** Map resolution: the trains are broad, so a few hundred px covers any sheet. */
@@ -49,7 +52,7 @@ export function renderInkMap(press: Press): InkMapOverlay | null {
   const context = image.getContext('2d')
   if (!context) return null
   context.putImageData(new ImageData(inkMapPixels(press, width, height), width, height), 0, 0)
-  return { image, feedAngle: press.feedAngle }
+  return { image, feedAngle: press.feedAngle, folds: pressFolds(press) }
 }
 
 /** Draw the map over the poster and a feed arrow in its corner, sized for the screen. */
@@ -63,6 +66,21 @@ export function drawInkMap(
   ctx.imageSmoothingEnabled = true
   ctx.drawImage(overlay.image, 0, 0, sheet.width, sheet.height)
   const unit = 1 / Math.max(1e-3, displayScale)
+  ctx.lineWidth = 1.5 * unit
+  ctx.strokeStyle = 'rgba(17, 17, 17, 0.55)'
+  ctx.setLineDash([8 * unit, 6 * unit])
+  for (const fold of overlay.folds ?? []) {
+    const tilt = Math.tan((fold.angle * Math.PI) / 180)
+    ctx.beginPath()
+    if (fold.axis === 'x') {
+      ctx.moveTo(fold.position + (0 - sheet.height / 2) * tilt, 0)
+      ctx.lineTo(fold.position + (sheet.height / 2) * tilt, sheet.height)
+    } else {
+      ctx.moveTo(0, fold.position + (0 - sheet.width / 2) * tilt)
+      ctx.lineTo(sheet.width, fold.position + (sheet.width / 2) * tilt)
+    }
+    ctx.stroke()
+  }
   const length = 26 * unit
   const cx = 22 * unit + length / 2
   const cy = 22 * unit + length / 2

@@ -65,9 +65,13 @@ A real poster comes off one machine in one run: one sheet of paper, one roller's
 | **Ink map**: wet and dry trains laid along the feed, sized by the sheet, not by any layer | Copy Machine ink load (where it floods, starves and slurs), Press Check ink spread (further in wet trains), misprint echoes and type strips (as dark as the ink where they land) |
 | **Paper**: one sheet's tooth and fibres, the grain running with the feed | Copy Machine ink edges and dropouts, Press Check tooth |
 | **Plate slip**: one direction for the run | Misprint echoes, the copier's ghost, Press Check plates |
-| **Feed** | Ink trains, paper grain and slur |
+| **Drum**: starvation bands across the feed, dirt and scratch streaks along it, toner dropouts and mottle — at fixed places on the sheet | Copy Machine Bands, Streaks, Voids and Grain: a scratch runs through every layer copied across it; the print-scan surface lays its scan bands on the same bands |
+| **Folds**: the sheet folded in half across and in half or thirds down | Fold marks crease every layer at the same lines; the ink map dashes them in |
+| **Wear**: scuffs everywhere, more at the handled edges, most along the folds | Ink-loss chips sit at the most worn spots under each layer, and overlapping layers share them |
+| **Light**: the sheet hung with one edge to the window, faded in blotches | Age goes further on the sunny side; Xerox prints harder in wet ink and lighter in dry |
+| **Feed** | Ink trains, paper grain, slur, drum bands and streaks |
 
-Values come from a hashed lattice in poster coordinates, so any patch of the sheet (a layer's raster, a worker, a 4× export) samples the same ink and paper as every other, and two layers side by side flood together across the gap. A layer's place on the sheet is part of its look: drag a copied headline and its copy rides along, then re-inks where it settles.
+Values come from a hashed lattice in poster coordinates, so any patch of the sheet (a layer's raster, a worker, a 4× export) samples the same ink and paper as every other, and two layers side by side flood together across the gap. A layer's place on the sheet is part of its look: drag a copied headline and its copy rides along, then re-inks, re-streaks and re-creases where it settles. The poster ages as one object, not as a stack of separately aged layers.
 
 Print tab → **Press**: Re-ink (a new run; undoable, and the top-bar Re-roll re-inks again), **Show ink map** (wet in blue, dry in amber, with a feed arrow), **Feed angle**, and the switch. Off, each effect inks on its own: that's how posters saved before the press print, and they open with it off so they keep their look.
 

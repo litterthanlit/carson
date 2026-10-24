@@ -1,9 +1,12 @@
 /**
  * Non-destructive decay marks — ink-loss chips and fold creases live on the stack.
  * Source stays editable; fragments are companions re-rendered from seed + Tension.
+ * On the poster's press they are the sheet's own: its folds crease every layer
+ * at the same lines, and ink flakes off where the sheet is most worn.
  */
 import { Rect, type Canvas, type FabricObject } from 'fabric'
-import { createLayerDecayMarks, type LayerDecayMark, type SliceSource } from './editorModel'
+import { createLayerDecayMarks, getLayerDecayProfile, type LayerDecayMark, type SliceSource } from './editorModel'
+import { canvasPress, pressFolds, pressWearChips, type Press } from './press'
 import { scaleInstrumentParams } from './instrumentTension'
 import { createSeededRandom } from './random'
 import { readSliceProp } from './sliceTreatment'
@@ -75,15 +78,77 @@ export function decayMarksForTreatment(
   source: SliceSource,
   treatment: Treatment,
   tensionScale = 1,
+  press?: Press | null,
 ): LayerDecayMark[] {
   const kind = decayMarkKindFromParams(treatment.params)
   const params = scaleInstrumentParams(treatment.params, TENSION_KEYS, tensionScale)
-  const marks = createLayerDecayMarks(source, {
-    amount: params.amount ?? 55,
-    random: createSeededRandom(treatment.seed),
-  })
+  const amount = params.amount ?? 55
+  const marks = press
+    ? sheetDecayMarks(source, amount, press)
+    : createLayerDecayMarks(source, {
+        amount,
+        random: createSeededRandom(treatment.seed),
+      })
   if (kind === 'all') return marks
   return marks.filter((mark) => mark.kind === kind)
+}
+
+/**
+ * The sheet's decay where this layer lies: a crease for each fold of the
+ * sheet that crosses it, and chips at its most worn spots.
+ */
+export function sheetDecayMarks(source: SliceSource, amount: number, press: Press): LayerDecayMark[] {
+  const progress = getLayerDecayProfile(amount).amount / 100
+  const marks: LayerDecayMark[] = []
+  const right = source.left + source.width
+  const bottom = source.top + source.height
+  const round = (value: number) => Math.round(value * 100) / 100
+  pressWearChips(press, source, progress).forEach((chip, index) => {
+    marks.push({
+      id: `${source.id}-ink-loss-${index + 1}`,
+      kind: 'ink-loss',
+      left: round(chip.x - chip.width / 2),
+      top: round(chip.y - chip.height / 2),
+      width: round(chip.width),
+      height: round(chip.height),
+      angle: round(chip.angle),
+      opacity: round(0.5 + progress * 0.35),
+    })
+  })
+  pressFolds(press).forEach((fold, index) => {
+    const tilt = Math.tan((fold.angle * Math.PI) / 180)
+    if (fold.axis === 'y') {
+      // A crease across the sheet: where it meets this layer's left edge.
+      const top = fold.position + (source.left - press.width / 2) * tilt
+      const mid = fold.position + (source.left + source.width / 2 - press.width / 2) * tilt
+      if (mid < source.top || mid > bottom) return
+      marks.push({
+        id: `${source.id}-fold-${index + 1}`,
+        kind: 'fold',
+        left: round(source.left),
+        top: round(top),
+        width: round(source.width),
+        height: 2,
+        angle: round(fold.angle),
+        opacity: round(0.12 + progress * 0.22),
+      })
+    } else {
+      const left = fold.position + (source.top - press.height / 2) * tilt
+      const mid = fold.position + (source.top + source.height / 2 - press.height / 2) * tilt
+      if (mid < source.left || mid > right) return
+      marks.push({
+        id: `${source.id}-fold-${index + 1}`,
+        kind: 'fold',
+        left: round(left),
+        top: round(source.top),
+        width: 2,
+        height: round(source.height),
+        angle: round(-fold.angle),
+        opacity: round(0.12 + progress * 0.22),
+      })
+    }
+  })
+  return marks
 }
 
 export type DecayMarkFragmentTagger = (object: FabricObject, mark: LayerDecayMark, index: number) => void
@@ -110,6 +175,7 @@ export function renderDecayMarksTreatment(
     },
     treatment,
     tensionScale,
+    canvasPress(canvas),
   )
 
   marks.forEach((mark, index) => {

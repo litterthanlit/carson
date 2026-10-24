@@ -3,7 +3,13 @@
  */
 import { filters } from 'fabric'
 import type { Canvas, FabricImage, FabricObject } from 'fabric'
-import { getLayerDecayProfile, getPrintScanProfile } from './editorModel'
+import {
+  getLayerDecayProfile,
+  getPrintScanProfile,
+  type LayerDecayProfile,
+  type PrintScanProfile,
+} from './editorModel'
+import { canvasPress, pressExposureAt, pressInkDensityAt } from './press'
 import {
   buildFxFilters,
   fxChipLabel,
@@ -329,21 +335,59 @@ export function treatmentLabel(treatment: Treatment): string {
   }
 }
 
+/** Where a layer sits on its poster's press: the light the sheet took there, and how wet the ink ran. */
+export type PressPlacement = {
+  /** 0..1, see pressExposureAt. */
+  exposure: number
+  /** 0.56..1, see pressInkDensityAt. */
+  density: number
+}
+
+/** The press placement of a layer on a canvas, read at the centre of its bounds; null off a press. */
+export function pressPlacementOf(object: FabricObject): PressPlacement | null {
+  const canvas = object.canvas
+  const press = canvas ? canvasPress(canvas) : null
+  if (!press) return null
+  const bounds = object.getBoundingRect()
+  const x = bounds.left + bounds.width / 2
+  const y = bounds.top + bounds.height / 2
+  return { exposure: pressExposureAt(press, x, y), density: pressInkDensityAt(press, x, y) }
+}
+
+/** Age on the press: a layer where the sheet took more light ages further, and less in the shade. */
+export function decayProfileOnPress(amount: number, placement?: PressPlacement | null): LayerDecayProfile {
+  if (!placement) return getLayerDecayProfile(amount)
+  return getLayerDecayProfile(Math.min(100, amount * (0.55 + 0.9 * placement.exposure)))
+}
+
+/** Xerox on the press: harder and darker where the run's ink was wet, lighter where it was dry. */
+export function xeroxProfileOnPress(generation: number, placement?: PressPlacement | null): PrintScanProfile {
+  const profile = getPrintScanProfile(generation)
+  if (!placement) return profile
+  const wet = (placement.density - 0.78) / 0.22
+  return {
+    ...profile,
+    contrast: Math.round(profile.contrast * (1 + 0.3 * wet) * 100) / 100,
+    opacity: Math.round(Math.min(1, profile.opacity * (0.92 + 0.08 * wet)) * 100) / 100,
+  }
+}
+
 export function buildTreatmentFilters(
   treatments: Treatment[],
   tensionScale = 1,
+  placement?: PressPlacement | null,
 ): filters.BaseFilter<string, object>[] {
   const output: filters.BaseFilter<string, object>[] = []
   for (const treatment of treatments.filter((item) => item.enabled)) {
     const params = scaleTreatmentParams(treatment.type, treatment.params, tensionScale)
     if (treatment.type === 'xerox') {
-      const profile = getPrintScanProfile(params.generation ?? 5)
+      const profile = xeroxProfileOnPress(params.generation ?? 5, placement)
       output.push(markTreatmentFilter(new filters.Grayscale()))
       output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
       output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
       output.push(markTreatmentFilter(new filters.Blur({ blur: profile.blur })))
     } else if (treatment.type === 'decay') {
-      const profile = getLayerDecayProfile(params.amount ?? 55)
+      const profile = decayProfileOnPress(params.amount ?? 55, placement)
       output.push(markTreatmentFilter(new filters.Contrast({ contrast: profile.contrast })))
       output.push(markTreatmentFilter(new filters.Noise({ noise: profile.noise })))
       output.push(markTreatmentFilter(new filters.Blur({ blur: profile.blur })))
@@ -406,7 +450,8 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
   }
   if (scatter) applyScatterTransform(object, scatter, tensionScale)
 
-  const built = buildTreatmentFilters(filterTreatments, tensionScale)
+  const placement = pressPlacementOf(object)
+  const built = buildTreatmentFilters(filterTreatments, tensionScale, placement)
   const filterable = object as FabricImage
   if (typeof filterable.applyFilters === 'function') {
     const existing = (filterable.filters ?? []).filter((filter) => !isTreatmentFilter(filter))
@@ -417,10 +462,10 @@ function applySyncTreatmentStack(object: FabricObject, tensionScale = 1) {
   for (const treatment of filterTreatments) {
     const params = scaleTreatmentParams(treatment.type, treatment.params, tensionScale)
     if (treatment.type === 'xerox') {
-      const profile = getPrintScanProfile(params.generation ?? 5)
+      const profile = xeroxProfileOnPress(params.generation ?? 5, placement)
       object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
     } else if (treatment.type === 'decay') {
-      const profile = getLayerDecayProfile(params.amount ?? 55)
+      const profile = decayProfileOnPress(params.amount ?? 55, placement)
       object.set({ opacity: profile.opacity, globalCompositeOperation: 'multiply' })
     } else if (treatment.type === 'cold-wash') {
       object.set({ opacity: 0.92, globalCompositeOperation: 'multiply' })

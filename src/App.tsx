@@ -99,13 +99,15 @@ import {
 import {
   bindCanvasPress,
   bindPress,
+  canvasPress,
   newPressRun,
   pressSignature,
   readPressRun,
   type PressRun,
 } from './lib/press'
 import { renderInkMap, type InkMapOverlay } from './lib/inkMap'
-import { followSourceLive, isCompanionPoseStale, POSE_FOLLOWING_TREATMENTS } from './lib/companionFollow'
+import { createPressScanArtifacts } from './lib/pressSurface'
+import { followSourceLive, isCompanionPoseStale, PRESS_TREATMENTS } from './lib/companionFollow'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
 import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
 import { alignObjects, buildLayoutGrid, clampGridOverlay, distributeObjects, gridTensionScale, layoutSnapLines, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
@@ -609,7 +611,7 @@ function App() {
     if (!canvas) return
     const layers = canvas
       .getObjects()
-      .filter((object) => readTreatments(object).some((item) => POSE_FOLLOWING_TREATMENTS.has(item.type)))
+      .filter((object) => readTreatments(object).some((item) => PRESS_TREATMENTS.has(item.type)))
     for (const object of layers) await refreshTreatmentStack(object)
     await refreshPosterTreatments()
   }
@@ -848,7 +850,8 @@ function App() {
     let recutting = false
     canvas.on('after:render', () => {
       if (recutting || (canvas as unknown as { _currentTransform?: unknown })._currentTransform) return
-      const stale = canvas.getObjects().find((object) => isLetterBreakStale(object) || isCompanionPoseStale(object))
+      const onPress = canvasPress(canvas) !== null
+      const stale = canvas.getObjects().find((object) => isLetterBreakStale(object) || isCompanionPoseStale(object, onPress))
       if (!stale) return
       // The user moved it: that pose is the new resting place, unless Scatter owns the pose.
       if (!readTreatments(stale).some((item) => item.type === 'scatter' && item.enabled)) {
@@ -4734,6 +4737,29 @@ function App() {
   function addPrintScanSurface(seed = newSeed()) {
     const canvas = canvasRef.current
     if (!canvas) return
+    const press = canvasPress(canvas)
+    if (press) {
+      // On the press, the scan bands sit where the drum starved and the drift runs with the feed.
+      createPressScanArtifacts(press, { generation: xeroxGeneration, random: createSeededRandom(seed) }).forEach((artifact) => {
+        const object = new Rect({
+          left: artifact.centerX,
+          top: artifact.centerY,
+          originX: 'center',
+          originY: 'center',
+          width: artifact.width,
+          height: artifact.height,
+          fill: artifact.kind === 'band' ? '#111111' : ACCENTS[0],
+          opacity: artifact.opacity,
+          angle: artifact.angle,
+          globalCompositeOperation: 'multiply',
+        })
+        tagObject(object, 'shape', artifact.kind === 'band' ? 'Xerox band' : 'Scanner drift')
+        canvas.add(object)
+      })
+      trackChaos('Surface wear', seed, [], (next) => addPrintScanSurface(next))
+      commitHistory(`Added print-scan surface #${seed}`)
+      return
+    }
     const artifacts = createPrintScanArtifacts(poster, { generation: xeroxGeneration, random: createSeededRandom(seed) })
 
     artifacts.forEach((artifact) => {
