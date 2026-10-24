@@ -68,6 +68,8 @@ import { ScopeSel } from './ScopeBadge'
 import { FrameControls } from './FrameControls'
 import { FRAME_COLOR, type FrameSpec } from '../lib/frameHandles'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
+import { ariaKeyShortcuts, shortcutKeys, withShortcut } from '../lib/shortcuts'
+import { ShortcutSheet } from './ShortcutSheet'
 
 export type InspectorPanelProps = {
   inspectorTab: InspectorTab
@@ -1156,7 +1158,8 @@ export function InspectorPanel({
             <button
               type="button"
               className="layers-footer-button"
-              title="Group layers (⌘G)"
+              title={withShortcut('Group layers', 'group')}
+              aria-keyshortcuts={ariaKeyShortcuts('group')}
               aria-label="Group layers"
               disabled={!canGroupLayers}
               onClick={onGroupLayers}
@@ -1166,7 +1169,8 @@ export function InspectorPanel({
             <button
               type="button"
               className="layers-footer-button"
-              title="Ungroup (⇧⌘G)"
+              title={withShortcut('Ungroup', 'ungroup')}
+              aria-keyshortcuts={ariaKeyShortcuts('ungroup')}
               aria-label="Ungroup"
               disabled={!canUngroupLayers}
               onClick={onUngroupLayers}
@@ -1178,7 +1182,8 @@ export function InspectorPanel({
               <button
                 type="button"
                 className="layers-footer-button"
-                title="Duplicate layer (⌘D)"
+                title={withShortcut('Duplicate layer', 'duplicate')}
+                aria-keyshortcuts={ariaKeyShortcuts('duplicate')}
                 aria-label="Duplicate layer"
                 disabled={!selected}
                 onClick={onDuplicateLayer}
@@ -1243,12 +1248,12 @@ export function InspectorPanel({
                 {canGroupLayers || canUngroupLayers ? (
                   <div className="button-row">
                     {canGroupLayers ? (
-                      <button type="button" title="Group selected layers (Cmd+G)" onClick={onGroupLayers}>
+                      <button type="button" title={withShortcut('Group selected layers', 'group')} aria-keyshortcuts={ariaKeyShortcuts('group')} onClick={onGroupLayers}>
                         Group
                       </button>
                     ) : null}
                     {canUngroupLayers ? (
-                      <button type="button" title="Ungroup (Cmd+Shift+G)" onClick={onUngroupLayers}>
+                      <button type="button" title={withShortcut('Ungroup', 'ungroup')} aria-keyshortcuts={ariaKeyShortcuts('ungroup')} onClick={onUngroupLayers}>
                         Ungroup
                       </button>
                     ) : null}
@@ -1554,7 +1559,7 @@ export function InspectorPanel({
                   />
                   {selectedLayerIds.length <= 1 && onStartWarp ? (
                     <div className="button-row">
-                      <button type="button" title="Drag four corners for perspective (⌘K: Distort)" onClick={() => onStartWarp('distort')}>
+                      <button type="button" title={`Drag four corners for perspective (also in Commands, ${shortcutKeys('commandPalette')})`} onClick={() => onStartWarp('distort')}>
                         Distort
                       </button>
                       <button type="button" title="Bend the layer with a 4×4 mesh" onClick={() => onStartWarp('mesh')}>
@@ -1872,47 +1877,7 @@ export function InspectorPanel({
 
           <div className="panel-section">
             <h2>Shortcuts</h2>
-            <ul className="shortcut-list">
-              <li>
-                <kbd>Cmd+Z</kbd> Undo · <kbd>Cmd+Shift+Z</kbd> Redo
-              </li>
-              <li>
-                <kbd>Cmd+D</kbd> Duplicate · <kbd>Delete</kbd> Remove
-              </li>
-              <li>
-                <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant · <kbd>Cmd+Shift+B</kbd> Comps gallery · <kbd>Cmd+F</kbd> Filter gallery
-              </li>
-              <li>
-                <kbd>Tab</kbd> Cycle layers (canvas focused) · <kbd>Shift+Tab</kbd> Reverse
-              </li>
-              <li>
-                <kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10
-              </li>
-              <li>
-                <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>F</kbd> Frame · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
-              </li>
-              <li>
-                Mask: drag conceal · <kbd>Alt</kbd>-drag reveal · <kbd>[</kbd> <kbd>]</kbd> brush size
-              </li>
-              <li>
-                <kbd>B</kbd> Block · <kbd>P</kbd> Bezier pen · <kbd>G</kbd> Grid · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble
-              </li>
-              <li>
-                Pen: click anchors · drag handles · <kbd>Enter</kbd> finish · click start to close · <kbd>Esc</kbd> cancel
-              </li>
-              <li>
-                <kbd>Cmd+G</kbd> Group · <kbd>Cmd+Shift+G</kbd> Ungroup
-              </li>
-              <li>
-                <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom
-              </li>
-              <li>
-                <kbd>Cmd+K</kbd> Combine / Subtract shapes
-              </li>
-              <li>
-                <kbd>Space+Drag</kbd> Pan · <kbd>Cmd+Drag</kbd> No snapping
-              </li>
-            </ul>
+            <ShortcutSheet />
           </div>
         </>
       ) : null}
@@ -2222,7 +2187,7 @@ export function InspectorPanel({
           </div>
           <h3>Variations</h3>
           <p className="hint">
-            Fork with <kbd>Cmd+B</kbd>. Trail under the canvas is spatial undo. Comps gallery compares named looks.
+            Fork with <kbd>{shortcutKeys('forkVariant')}</kbd>. Trail under the canvas is spatial undo. Comps gallery compares named looks.
           </p>
           <div className="button-row">
             <button type="button" onClick={onOpenCompsGallery}>

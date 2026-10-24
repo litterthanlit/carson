@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import type { EditorTool, PenKind } from '../types/editor'
 import type { SelectionMode } from '../lib/selection'
+import { ariaKeyShortcuts, withShortcut } from '../lib/shortcuts'
 
 type Flyout = 'shape' | 'select' | 'brush' | 'mask' | null
 
@@ -97,8 +98,9 @@ export const ToolRail = memo(function ToolRail({
       <button
         type="button"
         className={tool === 'move' ? 'active' : undefined}
-        title="Move (V)"
+        title={withShortcut('Move', 'moveTool')}
         aria-label="Move tool"
+        aria-keyshortcuts={ariaKeyShortcuts('moveTool')}
         aria-pressed={tool === 'move'}
         onClick={() => selectTool('move')}
       >
@@ -108,8 +110,9 @@ export const ToolRail = memo(function ToolRail({
       <button
         type="button"
         className={tool === 'text' ? 'active' : undefined}
-        title="Text — click the canvas to place (T)"
+        title={withShortcut('Text — click the canvas to place', 'textTool')}
         aria-label="Text tool"
+        aria-keyshortcuts={ariaKeyShortcuts('textTool')}
         aria-pressed={tool === 'text'}
         onClick={() => selectTool('text')}
       >
@@ -119,8 +122,9 @@ export const ToolRail = memo(function ToolRail({
         <button
           type="button"
           className={tool === 'shape' ? 'active' : undefined}
-          title="Shape (S) — Block, ellipse, line, star, pen"
+          title={`${withShortcut('Shape', 'shapeTool')} — block, ellipse, line, star, pen`}
           aria-label="Shape tool"
+          aria-keyshortcuts={ariaKeyShortcuts('shapeTool')}
           aria-pressed={tool === 'shape'}
           aria-expanded={flyout === 'shape'}
           onClick={() => {
@@ -148,8 +152,9 @@ export const ToolRail = memo(function ToolRail({
               type="button"
               role="menuitem"
               className={penMode && penKind === 'bezier' ? 'active' : undefined}
-              title="Click-to-place bezier pen (P)"
+              title={withShortcut('Click-to-place bezier pen', 'penTool')}
               aria-label="Pen"
+              aria-keyshortcuts={ariaKeyShortcuts('penTool')}
               aria-pressed={penMode && penKind === 'bezier'}
               onClick={() => {
                 onTogglePenMode()
@@ -178,8 +183,9 @@ export const ToolRail = memo(function ToolRail({
       <button
         type="button"
         className={tool === 'frame' ? 'active' : undefined}
-        title="Frame (F) — drag frame handles onto the poster, or click a layer to frame it"
+        title={`${withShortcut('Frame', 'frameTool')} — drag frame handles onto the poster, or click a layer to frame it`}
         aria-label="Frame tool"
+        aria-keyshortcuts={ariaKeyShortcuts('frameTool')}
         aria-pressed={tool === 'frame'}
         onClick={() => selectTool(tool === 'frame' ? 'move' : 'frame')}
       >
@@ -204,8 +210,9 @@ export const ToolRail = memo(function ToolRail({
           <button
             type="button"
             className={tool === 'select' ? 'active' : undefined}
-            title="Select (L) — marquee or lasso a region, then mask it or lift it to a new layer"
+            title={`${withShortcut('Select', 'selectTool')} — marquee or lasso a region, then mask it or lift it to a new layer`}
             aria-label="Select tool"
+            aria-keyshortcuts={ariaKeyShortcuts('selectTool')}
             aria-pressed={tool === 'select'}
             aria-expanded={flyout === 'select'}
             onClick={() => {
@@ -246,8 +253,9 @@ export const ToolRail = memo(function ToolRail({
           <button
             type="button"
             className={tool === 'brush' ? 'active' : undefined}
-            title="Brush (B) · Eraser (E) — pressure-sensitive paint on its own layer"
+            title={`${withShortcut('Brush', 'brushTool')} · ${withShortcut('Eraser', 'eraserTool')} — pressure-sensitive paint on its own layer`}
             aria-label="Brush tool"
+            aria-keyshortcuts={ariaKeyShortcuts('brushTool')}
             aria-pressed={tool === 'brush'}
             aria-expanded={flyout === 'brush'}
             onClick={() => {
@@ -273,8 +281,9 @@ export const ToolRail = memo(function ToolRail({
         <button
           type="button"
           className={tool === 'mask' ? 'active' : undefined}
-          title="Mask (M) — paint alpha, clip to shape, scrapes"
+          title={`${withShortcut('Mask', 'maskTool')} — paint alpha, clip to shape, scrapes`}
           aria-label="Mask tool"
+          aria-keyshortcuts={ariaKeyShortcuts('maskTool')}
           aria-pressed={tool === 'mask'}
           aria-expanded={flyout === 'mask'}
           onClick={() => {
@@ -308,8 +317,9 @@ export const ToolRail = memo(function ToolRail({
       <button
         type="button"
         className={tool === 'instruments' ? 'active' : undefined}
-        title="Instruments (I) — xerox, scatter, decay, accidents"
+        title={`${withShortcut('Instruments', 'instrumentsTool')} — xerox, scatter, decay, accidents`}
         aria-label="Instruments"
+        aria-keyshortcuts={ariaKeyShortcuts('instrumentsTool')}
         aria-pressed={tool === 'instruments'}
         onClick={() => selectTool(tool === 'instruments' ? 'move' : 'instruments')}
       >

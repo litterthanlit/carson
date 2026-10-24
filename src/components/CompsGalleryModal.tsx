@@ -1,4 +1,5 @@
 import type { DocumentVariant } from '../lib/document'
+import { shortcutKeys } from '../lib/shortcuts'
 
 export function CompsGalleryModal({
   open,
@@ -44,7 +45,7 @@ export function CompsGalleryModal({
           </div>
         </div>
         {variants.length === 0 ? (
-          <p className="comps-gallery-empty">No comps yet. Fork with Cmd+B to keep this look.</p>
+          <p className="comps-gallery-empty">No comps yet. Fork with {shortcutKeys('forkVariant')} to keep this look.</p>
         ) : (
           <ul className="comps-gallery-grid">
             {variants.map((variant) => (

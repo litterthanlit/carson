@@ -2,11 +2,15 @@
  * Command palette registry (Horizon 2.9).
  */
 
+import type { ShortcutId } from './shortcuts'
+
 export type CommandAction = {
   id: string
   label: string
   keywords: string[]
   scope?: 'selection' | 'canvas' | 'any'
+  /** The keyboard shortcut that runs the same action, shown beside it. */
+  shortcut?: ShortcutId
   disabled?: boolean
   run: () => void
 }

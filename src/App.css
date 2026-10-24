@@ -1343,21 +1343,48 @@ input[type='color'] {
   color: var(--text-muted);
 }
 
+.shortcut-sheet {
+  display: grid;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.shortcut-group h2,
+.shortcut-group h3 {
+  margin: 0 0 4px;
+  font: 600 10px/1.4 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .shortcut-list {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
   gap: 3px;
-  font-size: 10px;
-  color: var(--text-muted);
+  font-size: 11px;
+  color: var(--text);
 }
 
 .shortcut-list li {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: baseline;
-  gap: 4px 6px;
+  gap: 4px 10px;
+}
+
+.shortcut-label small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.shortcut-keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 3px;
 }
 
 .shortcut-list kbd {
@@ -1840,6 +1867,21 @@ input[type='color'] {
   border-radius: var(--radius);
   background: transparent;
   border-color: transparent;
+}
+
+.command-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-meta kbd {
+  padding: 0 5px;
+  border: 1px solid var(--bg-muted);
+  border-radius: 3px;
+  background: var(--surface-sunken);
+  font: 500 11px/1.5 var(--font-mono);
+  color: var(--text-muted);
 }
 
 .command-list button.active,

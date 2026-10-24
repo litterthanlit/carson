@@ -1,4 +1,5 @@
 import type { DocumentVariant } from '../lib/document'
+import { shortcutKeys } from '../lib/shortcuts'
 
 export function VariantCompareModal({
   open,
@@ -26,7 +27,7 @@ export function VariantCompareModal({
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="variant-compare-title">Compare variations</h2>
-        <p className="hint">Restore replaces the canvas. Use <kbd>Cmd+Z</kbd> to walk back.</p>
+        <p className="hint">Restore replaces the canvas. Use <kbd>{shortcutKeys('undo')}</kbd> to walk back.</p>
         <div className="variant-compare-grid">
           <figure>
             <figcaption>Current</figcaption>

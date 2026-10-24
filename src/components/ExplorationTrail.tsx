@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { ChevronDown, GitFork, LayoutGrid } from 'lucide-react'
 import type { TrailFrame } from '../lib/explorationTrail'
 import { activeTrailFrame } from '../lib/explorationTrail'
+import { ariaKeyShortcuts, withShortcut } from '../lib/shortcuts'
 
 type ExplorationTrailProps = {
   frames: TrailFrame[]
@@ -82,11 +83,11 @@ export function ExplorationTrail({
           )}
         </div>
       )}
-      <button type="button" className="trail-fork" onClick={onFork} title="Fork current state (Cmd+B)">
+      <button type="button" className="trail-fork" onClick={onFork} title={withShortcut('Fork current state', 'forkVariant')} aria-keyshortcuts={ariaKeyShortcuts('forkVariant')}>
         <GitFork size={13} />
         Fork
       </button>
-      <button type="button" className="trail-gallery" onClick={onOpenGallery} title="Open comps gallery (Cmd+Shift+B)" aria-label={galleryLabel}>
+      <button type="button" className="trail-gallery" onClick={onOpenGallery} title={withShortcut('Open comps gallery', 'openCompsGallery')} aria-keyshortcuts={ariaKeyShortcuts('openCompsGallery')} aria-label={galleryLabel}>
         <LayoutGrid size={13} />
         Comps
       </button>

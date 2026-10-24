@@ -233,6 +233,7 @@ import {
   type TrailFrame,
 } from './lib/explorationTrail'
 import type { CommandAction } from './lib/commands'
+import { isInControl, isTextEntry, matchShortcut, shortcutKeys, type KeyShortcutId, type TypingContext } from './lib/shortcuts'
 import { EditorCanvas } from './components/EditorCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
 import { InstrumentsPalette } from './components/InstrumentsPalette'
@@ -1046,37 +1047,105 @@ function App() {
     }
   }
 
-  // Keyboard layer: full shortcut coverage. Stable listener reads handlers via ref.
-  const keyActionsRef = useRef<Record<string, () => void>>({})
+  // Keyboard layer. Every shortcut is declared once in lib/shortcuts; these are the handlers it dispatches to.
+  // A handler returns false when there is nothing to act on, which leaves the key to the browser.
+  function nudgeSelection(dx: number, dy: number) {
+    const canvas = canvasRef.current
+    const object = canvas?.getActiveObject()
+    if (!canvas || !object) return false
+    const objectId = String(readObjectProp(object, 'id') ?? '')
+    if (!nudgeSessionRef.current || nudgeSessionRef.current.objectId !== objectId) {
+      nudgeSessionRef.current = { objectId, before: captureObjectPatch(object) }
+    }
+    object.set({ left: (object.left ?? 0) + dx, top: (object.top ?? 0) + dy })
+    object.setCoords()
+    canvas.requestRenderAll()
+    syncSelected()
+    if (nudgeTimerRef.current) window.clearTimeout(nudgeTimerRef.current)
+    nudgeTimerRef.current = window.setTimeout(() => {
+      const session = nudgeSessionRef.current
+      nudgeSessionRef.current = null
+      if (!session) return
+      const after = captureObjectPatch(object)
+      if (session.before === after) return
+      commitObjectPatchHistoryRef.current(session.objectId, 'Nudged layer', session.before, after)
+    }, 350)
+    return true
+  }
+
+  function nudgeFromKey(event: KeyboardEvent, step: number) {
+    const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+    const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+    return nudgeSelection(dx, dy)
+  }
+
+  function resizeBrushFromKey(direction: 1 | -1) {
+    if (editorToolRef.current === 'mask') {
+      setMaskBrushSize((value) => (direction > 0 ? Math.min(100, value + 6) : Math.max(4, value - 6)))
+      setStatus(direction > 0 ? 'Mask brush larger' : 'Mask brush smaller')
+      return
+    }
+    const factor = direction > 0 ? 1.2 : 1 / 1.2
+    setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
+  }
+
+  function selectEditorTool(tool: EditorTool, status?: string) {
+    setPenMode(false)
+    setEditorTool(tool)
+    if (status) setStatus(status)
+  }
+
+  const keyActionsRef = useRef<Record<KeyShortcutId, (event?: KeyboardEvent) => boolean | void>>(null!)
   keyActionsRef.current = {
-    undo: () => {
-      void handleUserUndo()
-    },
+    // File
+    newPoster: () => openNewPosterDialog(),
+    openPoster: () => openOpenPosterDialog(),
+    save: () => void saveProjectAction(),
+    saveAs: () => openSaveAsDialog(),
+    export: () => void exportPoster(),
+    commandPalette: () => setCommandOpen(true),
+    // Edit
+    undo: () => void handleUserUndo(),
     redo: () => {
       clearBlendPreview({ render: false })
       redo()
     },
-    save: () => void saveProjectAction(),
-    saveAs: () => openSaveAsDialog(),
-    duplicatePoster: () => void duplicatePosterAction(),
-    newPoster: () => openNewPosterDialog(),
-    openPoster: () => openOpenPosterDialog(),
-    export: () => void exportPoster(),
     duplicate: () => void duplicateSelected(),
-    delete: deleteSelected,
-    deselect: () => {
+    delete: () => {
+      if (bezierPenActionsRef.current.undoPoint()) return
+      if (pathEditMode && pathEditActionsRef.current.deleteSelectedAnchor()) return
+      // With a pixel selection, Delete masks the area out (Photoshop) instead of deleting the layer.
+      if (pixelSelectionRef.current) void applySelectionRegion('conceal', 'Masked out selection')
+      else deleteSelected()
+    },
+    group: () => void groupSelection(),
+    ungroup: () => void ungroupSelection(),
+    cancel: () => {
+      if (warpEditRef.current) return finishWarpEdit(false)
+      if (bezierPenActionsRef.current.cancel()) return
+      if (pixelSelectionRef.current) return setPixelSelection(null)
       canvasRef.current?.discardActiveObject()
       canvasRef.current?.requestRenderAll()
       syncSelected()
     },
-    addText: () => setEditorTool('text'),
-    addShape,
+    confirm: () => {
+      if (warpEditRef.current) return finishWarpEdit(true)
+      return bezierPenActionsRef.current.finish()
+    },
+    nudge: (event) => (event ? nudgeFromKey(event, 1) : false),
+    nudgeFar: (event) => (event ? nudgeFromKey(event, 10) : false),
+    cycleLayers: () => cycleCanvasSelection(false),
+    cycleLayersBack: () => cycleCanvasSelection(true),
+    // Selection
+    selectionViaCopy: () => void liftSelectionToLayer(false),
+    selectionViaCut: () => void liftSelectionToLayer(true),
+    selectionInvert: () =>
+      setPixelSelection((current) => (current ? { ...current, inverted: !current.inverted } : current)),
+    // View
     zoomFit: () => setZoom(null),
     zoom100: () => zoomAround(1),
     zoomIn: () => stepZoom(1),
     zoomOut: () => stepZoom(-1),
-    reroll: () => void rerollLast(),
-    scramble: () => void scrambleCanvas(),
     toggleLayoutGrid: () => {
       setShowLayoutGrid((value) => {
         const next = !value
@@ -1084,118 +1153,49 @@ function App() {
         return next
       })
     },
-    commandPalette: () => setCommandOpen(true),
-    forkVariant: () => void forkVariation(),
-    openCompsGallery: () => setCompsGalleryOpen(true),
-    togglePen: () => togglePenKind('bezier'),
-    togglePencil: () => togglePenKind('freehand'),
-    moveTool: () => {
-      setPenMode(false)
-      setEditorTool('move')
-    },
-    shapeTool: () => {
-      setPenMode(false)
-      setEditorTool('shape')
-    },
-    frameTool: () => {
-      setPenMode(false)
-      setEditorTool('frame')
-      setStatus('Frame — drag to draw (Shift square, Alt from center), or click a layer to frame it')
-    },
+    // Tools
+    moveTool: () => selectEditorTool('move'),
+    textTool: () => setEditorTool('text'),
+    shapeTool: () => selectEditorTool('shape'),
+    penTool: () => togglePenKind('bezier'),
+    frameTool: () => selectEditorTool('frame', 'Frame — drag to draw (Shift square, Alt from center), or click a layer to frame it'),
+    selectTool: () => selectEditorTool('select', 'Select — drag a marquee (Shift square, Alt from center), then mask or lift it'),
     brushTool: () => {
-      setPenMode(false)
-      setEditorTool('brush')
+      selectEditorTool('brush', `Brush — paint on a new layer or the selected paint layer · [ ] size · ${shortcutKeys('eraserTool')} eraser`)
       setBrush((current) => ({ ...current, erase: false }))
-      setStatus('Brush — paint on a new layer or the selected paint layer · [ ] size · E eraser')
     },
     eraserTool: () => {
-      setPenMode(false)
-      setEditorTool('brush')
+      selectEditorTool('brush', 'Eraser — erases paint layers; on other layers it paints the mask')
       setBrush((current) => ({ ...current, erase: true }))
-      setStatus('Eraser — erases paint layers; on other layers it paints the mask')
     },
-    selectTool: () => {
-      setPenMode(false)
-      setEditorTool('select')
-      setStatus('Select — drag a marquee (Shift square, Alt from center), then mask or lift it')
-    },
-    selectionMaskOut: () => void applySelectionRegion('conceal', 'Masked out selection'),
-    selectionViaCopy: () => void liftSelectionToLayer(false),
-    selectionViaCut: () => void liftSelectionToLayer(true),
-    selectionInvert: () =>
-      setPixelSelection((current) => (current ? { ...current, inverted: !current.inverted } : current)),
-    selectionClear: () => setPixelSelection(null),
-    maskTool: () => {
-      setPenMode(false)
-      setEditorTool('mask')
-      setStatus('Mask — paint to conceal, Alt to reveal, clip from the flyout')
-    },
-    group: () => void groupSelection(),
-    ungroup: () => void ungroupSelection(),
+    maskTool: () => selectEditorTool('mask', 'Mask — paint to conceal, Alt to reveal, clip from the flyout'),
     instrumentsTool: () => {
       setPenMode(false)
       setEditorTool((current) => (current === 'instruments' ? 'move' : 'instruments'))
     },
+    brushSmaller: () => resizeBrushFromKey(-1),
+    brushLarger: () => resizeBrushFromKey(1),
+    // Play
+    reroll: () => void rerollLast(),
+    scramble: () => void scrambleCanvas(),
+    forkVariant: () => void forkVariation(),
+    openCompsGallery: () => setCompsGalleryOpen(true),
     filterGallery: () => setFilterGalleryOpen(true),
   }
 
   useEffect(() => {
-    const isTypingContext = (target: EventTarget | null) => {
-      const element = target as HTMLElement | null
-      if (element?.closest?.('input, textarea, select, [contenteditable="true"], [role="listbox"], .blend-picker, .font-picker')) return true
+    const typingContext = (target: EventTarget | null): TypingContext => {
       const active = canvasRef.current?.getActiveObject() as (FabricObject & { isEditing?: boolean }) | null
-      return Boolean(active?.isEditing)
-    }
-
-    const nudgeSelection = (dx: number, dy: number) => {
-      const canvas = canvasRef.current
-      const object = canvas?.getActiveObject()
-      if (!canvas || !object) return false
-      const objectId = String(readObjectProp(object, 'id') ?? '')
-      if (!nudgeSessionRef.current || nudgeSessionRef.current.objectId !== objectId) {
-        nudgeSessionRef.current = { objectId, before: captureObjectPatch(object) }
-      }
-      object.set({ left: (object.left ?? 0) + dx, top: (object.top ?? 0) + dy })
-      object.setCoords()
-      canvas.requestRenderAll()
-      syncSelected()
-      if (nudgeTimerRef.current) window.clearTimeout(nudgeTimerRef.current)
-      nudgeTimerRef.current = window.setTimeout(() => {
-        const session = nudgeSessionRef.current
-        nudgeSessionRef.current = null
-        if (!session) return
-        const after = captureObjectPatch(object)
-        if (session.before === after) return
-        commitObjectPatchHistoryRef.current(session.objectId, 'Nudged layer', session.before, after)
-      }, 350)
-      return true
+      if (active?.isEditing) return 'canvas-text'
+      return isTextEntry(target as Element | null) ? 'field' : null
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
       // A modal dialog owns the keyboard; editor shortcuts must not act on the poster behind it.
       if (document.querySelector('[aria-modal="true"]')) return
-      const actions = keyActionsRef.current
-      const meta = event.metaKey || event.ctrlKey
-      if (meta) {
-        const key = event.key.toLowerCase()
-        if (key === 'n') {
-          event.preventDefault()
-          actions.newPoster()
-          return
-        }
-        if (key === 'o') {
-          event.preventDefault()
-          actions.openPoster()
-          return
-        }
-        if (key === 'k' && screenRef.current === 'home') {
-          event.preventDefault()
-          actions.commandPalette()
-          return
-        }
-      }
-      if (screenRef.current !== 'editor') return
-      if (event.key === ' ' && !isTypingContext(event.target)) {
+      const typing = typingContext(event.target)
+      const inControl = isInControl(event.target as Element | null)
+      if (screenRef.current === 'editor' && event.key === ' ' && !typing && !inControl) {
         if (!spaceDownRef.current) {
           spaceDownRef.current = true
           setIsPanMode(true)
@@ -1209,164 +1209,18 @@ function App() {
         return
       }
 
-      if (meta) {
-        const key = event.key.toLowerCase()
-        if (key === 'z') {
-          event.preventDefault()
-          if (event.shiftKey) actions.redo()
-          else actions.undo()
-        } else if (key === 'y') {
-          event.preventDefault()
-          actions.redo()
-        } else if (key === 's') {
-          event.preventDefault()
-          if (event.shiftKey) actions.saveAs()
-          else actions.save()
-        } else if (key === 'e') {
-          event.preventDefault()
-          actions.export()
-        } else if (key === 'd' && !isTypingContext(event.target)) {
-          event.preventDefault()
-          actions.duplicate()
-        } else if (key === '0') {
-          event.preventDefault()
-          actions.zoomFit()
-        } else if (key === '1') {
-          event.preventDefault()
-          actions.zoom100()
-        } else if (key === '=' || key === '+') {
-          event.preventDefault()
-          actions.zoomIn()
-        } else if (key === '-') {
-          event.preventDefault()
-          actions.zoomOut()
-        } else if (key === 'k') {
-          event.preventDefault()
-          actions.commandPalette()
-        } else if (key === 'b') {
-          event.preventDefault()
-          if (event.shiftKey) actions.openCompsGallery()
-          else actions.forkVariant()
-        } else if (key === 'g' && !isTypingContext(event.target)) {
-          event.preventDefault()
-          if (event.shiftKey) actions.ungroup()
-          else actions.group()
-        } else if (key === 'f') {
-          event.preventDefault()
-          actions.filterGallery()
-        } else if (key === 'j' && pixelSelectionRef.current) {
-          event.preventDefault()
-          if (event.shiftKey) actions.selectionViaCut()
-          else actions.selectionViaCopy()
-        } else if (key === 'i' && event.shiftKey && pixelSelectionRef.current) {
-          event.preventDefault()
-          actions.selectionInvert()
-        }
-        return
-      }
-
-      if (isTypingContext(event.target)) return
-
-      if (warpEditRef.current && (event.key === 'Enter' || event.key === 'Escape')) {
-        event.preventDefault()
-        finishWarpEdit(event.key === 'Enter')
-        return
-      }
-
-      const canvasFocused = document.activeElement?.closest('.canvas-scroll') != null
-      if (event.key === 'Tab' && canvasFocused) {
-        event.preventDefault()
-        cycleCanvasSelection(event.shiftKey)
-        return
-      }
-
-      if (event.key === 'Enter' && bezierPenActionsRef.current.finish()) {
-        event.preventDefault()
-        return
-      }
-
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (bezierPenActionsRef.current.undoPoint()) {
-          event.preventDefault()
-          return
-        }
-        if (!isTypingContext(event.target) && pathEditMode && pathEditActionsRef.current.deleteSelectedAnchor()) {
-          event.preventDefault()
-          return
-        }
-        event.preventDefault()
-        // With a pixel selection, Delete masks the area out (Photoshop) instead of deleting the layer.
-        if (pixelSelectionRef.current) actions.selectionMaskOut()
-        else actions.delete()
-      } else if (event.key === 'Escape') {
-        if (bezierPenActionsRef.current.cancel()) {
-          event.preventDefault()
-          return
-        }
-        if (pixelSelectionRef.current) {
-          actions.selectionClear()
-          return
-        }
-        actions.deselect()
-      } else if (event.key === 'ArrowLeft') {
-        if (nudgeSelection(event.shiftKey ? -10 : -1, 0)) event.preventDefault()
-      } else if (event.key === 'ArrowRight') {
-        if (nudgeSelection(event.shiftKey ? 10 : 1, 0)) event.preventDefault()
-      } else if (event.key === 'ArrowUp') {
-        if (nudgeSelection(0, event.shiftKey ? -10 : -1)) event.preventDefault()
-      } else if (event.key === 'ArrowDown') {
-        if (nudgeSelection(0, event.shiftKey ? 10 : 1)) event.preventDefault()
-      } else if (event.key.toLowerCase() === 't') {
-        actions.addText()
-      } else if (event.key.toLowerCase() === 'v') {
-        event.preventDefault()
-        actions.moveTool()
-      } else if (event.key.toLowerCase() === 's') {
-        event.preventDefault()
-        actions.shapeTool()
-      } else if (event.key.toLowerCase() === 'f') {
-        event.preventDefault()
-        actions.frameTool()
-      } else if (event.key.toLowerCase() === 'l') {
-        event.preventDefault()
-        actions.selectTool()
-      } else if (event.key.toLowerCase() === 'm') {
-        event.preventDefault()
-        actions.maskTool()
-      } else if (event.key === '[' && editorToolRef.current === 'mask') {
-        event.preventDefault()
-        setMaskBrushSize((value) => Math.max(4, value - 6))
-        setStatus('Mask brush smaller')
-      } else if (event.key === ']' && editorToolRef.current === 'mask') {
-        event.preventDefault()
-        setMaskBrushSize((value) => Math.min(100, value + 6))
-        setStatus('Mask brush larger')
-      } else if (event.key.toLowerCase() === 'i') {
-        event.preventDefault()
-        actions.instrumentsTool()
-      } else if (event.key.toLowerCase() === 'b') {
-        event.preventDefault()
-        actions.brushTool()
-      } else if (event.key.toLowerCase() === 'e') {
-        event.preventDefault()
-        actions.eraserTool()
-      } else if ((event.key === '[' || event.key === ']') && editorToolRef.current === 'brush') {
-        event.preventDefault()
-        const factor = event.key === ']' ? 1.2 : 1 / 1.2
-        setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
-      } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
-        actions.togglePen()
-      } else if (event.key.toLowerCase() === 'g') {
-        event.preventDefault()
-        actions.toggleLayoutGrid()
-      } else if (event.key.toLowerCase() === 'r') {
-        if (event.shiftKey) {
-          event.preventDefault()
-          actions.scramble()
-        } else {
-          actions.reroll()
-        }
-      }
+      const shortcut = matchShortcut(event, {
+        screen: screenRef.current,
+        typing,
+        inControl,
+        canvasFocused: document.activeElement?.closest('.canvas-scroll') != null,
+        hasPixelSelection: pixelSelectionRef.current != null,
+        tool: editorToolRef.current,
+      })
+      if (!shortcut) return
+      const handled = keyActionsRef.current[shortcut.id as KeyShortcutId](event)
+      if (handled === false || shortcut.preventDefault === false) return
+      event.preventDefault()
     }
 
     const onKeyUp = (event: KeyboardEvent) => {
@@ -1392,7 +1246,6 @@ function App() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Cmd/Ctrl + wheel zoom (needs a non-passive native listener).
@@ -5635,8 +5488,8 @@ function App() {
   }
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
-    { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
-    { id: 'open-poster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
+    { id: 'new-poster', shortcut: 'newPoster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
+    { id: 'open-poster', shortcut: 'openPoster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
     ...(['dropShadow', 'outerGlow', 'outline'] as const).map((kind) => {
       const label = kind === 'dropShadow' ? 'Drop shadow' : kind === 'outerGlow' ? 'Outer glow' : 'Outline'
       const on = Boolean(selected?.layerStyle?.[kind])
@@ -5658,7 +5511,7 @@ function App() {
     })),
     { id: 'distort', label: 'Distort / perspective', keywords: ['perspective', 'distort', 'transform', 'corner', 'skew', 'free transform'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('distort') },
     { id: 'warp', label: 'Warp', keywords: ['warp', 'mesh', 'bend', 'transform', 'puppet'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('mesh') },
-    { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
+    { id: 'filter-gallery', shortcut: 'filterGallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
     {
@@ -5732,7 +5585,7 @@ function App() {
     })),
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
     {
-      id: 'scramble',
+      id: 'scramble', shortcut: 'scramble',
       label: 'Scramble layout',
       keywords: ['scramble', 'shuffle', 'rearrange', 'structure', 'layout', 'riff'],
       scope: 'canvas',
@@ -5746,12 +5599,12 @@ function App() {
     { id: 'type-strips', label: 'Type strip', keywords: ['type', 'strip', 'repeat', 'print'], scope: 'selection', disabled: !selectedIsText, run: () => addTypeStrip() },
     { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
-    { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
+    { id: 'export', shortcut: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
     { id: 'export-plates', label: 'Export CMYK plates', keywords: ['cmyk', 'plates', 'print', 'separation', 'cyan', 'magenta'], scope: 'canvas', run: () => void exportCmykPlates() },
-    { id: 'pen-tool', label: 'Pen tool', keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
-    { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
+    { id: 'pen-tool', shortcut: 'penTool', label: 'Pen tool', keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
+    { id: 'save', shortcut: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
     {
-      id: 'save-as',
+      id: 'save-as', shortcut: 'saveAs',
       label: 'Save as',
       keywords: ['save as', 'copy', 'duplicate', 'file'],
       scope: 'canvas',
@@ -5766,8 +5619,8 @@ function App() {
       disabled: screen !== 'editor',
       run: () => void duplicatePosterAction(),
     },
-    { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
-    { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
+    { id: 'fork', shortcut: 'forkVariant', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
+    { id: 'comps-gallery', shortcut: 'openCompsGallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
     {
       id: 'weave',
@@ -5801,11 +5654,11 @@ function App() {
       run: () => addCropMarks(),
     },
     {
-      id: 'frame-tool',
+      id: 'frame-tool', shortcut: 'frameTool',
       label: 'Frame tool',
       keywords: ['frame', 'handles', 'chrome', 'figma', 'bounding box', 'ui', 'draw', 'tool'],
       scope: 'canvas',
-      run: () => keyActionsRef.current.frameTool?.(),
+      run: () => keyActionsRef.current.frameTool(),
     },
     {
       id: 'frame-selection',
@@ -5863,9 +5716,9 @@ function App() {
       disabled: !selected,
       run: () => void combineSelectedBoolean('subtract'),
     },
-    { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns', 'layout'], scope: 'canvas', run: () => keyActionsRef.current.toggleLayoutGrid() },
+    { id: 'grid', shortcut: 'toggleLayoutGrid', label: 'Toggle layout grid', keywords: ['grid', 'columns', 'layout'], scope: 'canvas', run: () => keyActionsRef.current.toggleLayoutGrid() },
     {
-      id: 'group-layers',
+      id: 'group-layers', shortcut: 'group',
       label: 'Group layers',
       keywords: ['group', 'folder', 'nest'],
       scope: 'selection',
@@ -5873,7 +5726,7 @@ function App() {
       run: () => void groupSelection(),
     },
     {
-      id: 'ungroup-layers',
+      id: 'ungroup-layers', shortcut: 'ungroup',
       label: 'Ungroup',
       keywords: ['ungroup', 'split'],
       scope: 'selection',

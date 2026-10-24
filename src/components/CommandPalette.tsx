@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CommandAction } from '../lib/commands'
 import { filterCommands } from '../lib/commands'
+import { ariaKeyShortcuts, shortcutKeys } from '../lib/shortcuts'
 
 function commandTitle(command: CommandAction) {
   if (command.disabled) return 'Select a layer first'
@@ -84,11 +85,15 @@ export function CommandPalette({
                   className={i === index ? 'active' : undefined}
                   disabled={command.disabled}
                   title={commandTitle(command)}
+                  aria-keyshortcuts={command.shortcut ? ariaKeyShortcuts(command.shortcut) : undefined}
                   onMouseEnter={() => setIndex(i)}
                   onClick={() => run(command)}
                 >
                   <span>{command.label}</span>
-                  {command.scope ? <small aria-hidden="true">{command.scope}</small> : null}
+                  <span className="command-meta">
+                    {command.shortcut ? <kbd aria-hidden="true">{shortcutKeys(command.shortcut)}</kbd> : null}
+                    {command.scope ? <small aria-hidden="true">{command.scope}</small> : null}
+                  </span>
                 </button>
               </li>
             ))

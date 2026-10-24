@@ -11,6 +11,7 @@ import {
   type Point,
   type SelectionMode,
 } from '../lib/selection'
+import { ariaKeyShortcuts, withShortcut } from '../lib/shortcuts'
 
 type SelectionOverlayProps = {
   posterWidth: number
@@ -160,11 +161,11 @@ export function SelectionOverlay({
           <button type="button" disabled={!targetName} title="Hide everything outside the selection" onClick={onKeepOnly}>
             Keep only
           </button>
-          <button type="button" disabled={!targetName} title="Lift the selected area to a new layer (⌘J)" onClick={onLayerViaCopy}>
+          <button type="button" disabled={!targetName} title={withShortcut('Lift the selected area to a new layer', 'selectionViaCopy')} aria-keyshortcuts={ariaKeyShortcuts('selectionViaCopy')} onClick={onLayerViaCopy}>
             <Copy size={13} aria-hidden />
             Layer via copy
           </button>
-          <button type="button" disabled={!targetName} title="Cut the selected area to a new layer (⇧⌘J)" onClick={onLayerViaCut}>
+          <button type="button" disabled={!targetName} title={withShortcut('Cut the selected area to a new layer', 'selectionViaCut')} aria-keyshortcuts={ariaKeyShortcuts('selectionViaCut')} onClick={onLayerViaCut}>
             <Scissors size={13} aria-hidden />
             Cut
           </button>
@@ -172,7 +173,8 @@ export function SelectionOverlay({
           <button
             type="button"
             aria-pressed={selection.inverted}
-            title="Invert selection (⇧⌘I)"
+            title={withShortcut('Invert selection', 'selectionInvert')}
+            aria-keyshortcuts={ariaKeyShortcuts('selectionInvert')}
             onClick={() => onSelectionChange({ ...selection, inverted: !selection.inverted })}
           >
             <FlipHorizontal2 size={13} aria-hidden />

@@ -7,6 +7,7 @@ import type { PosterPreset, PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
 import { ExplorationTrail } from './ExplorationTrail'
 import type { TrailFrame } from '../lib/explorationTrail'
+import { ariaKeyShortcuts, withShortcut } from '../lib/shortcuts'
 
 type EditorCanvasProps = {
   poster: PosterPreset
@@ -176,16 +177,16 @@ export const EditorCanvas = memo(function EditorCanvas({
           </span>
         ) : null}
         <span className="zoom-controls">
-          <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Cmd+-)" onClick={() => onStepZoom(-1)}>
+          <button type="button" className="icon-button" aria-label="Zoom out" title={withShortcut('Zoom out', 'zoomOut')} aria-keyshortcuts={ariaKeyShortcuts('zoomOut')} onClick={() => onStepZoom(-1)}>
             <ZoomOut size={15} />
           </button>
-          <button type="button" className="zoom-readout" title="Reset to 100% (Cmd+1)" onClick={onZoom100}>
+          <button type="button" className="zoom-readout" title={withShortcut('Reset to 100%', 'zoom100')} aria-keyshortcuts={ariaKeyShortcuts('zoom100')} onClick={onZoom100}>
             {Math.round(displayScale * 100)}%
           </button>
-          <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in (Cmd+=)" onClick={() => onStepZoom(1)}>
+          <button type="button" className="icon-button" aria-label="Zoom in" title={withShortcut('Zoom in', 'zoomIn')} aria-keyshortcuts={ariaKeyShortcuts('zoomIn')} onClick={() => onStepZoom(1)}>
             <ZoomIn size={15} />
           </button>
-          <button type="button" className="icon-button" aria-label="Fit poster to view" title="Fit to view (Cmd+0)" onClick={onZoomFit}>
+          <button type="button" className="icon-button" aria-label="Fit poster to view" title={withShortcut('Fit to view', 'zoomFit')} aria-keyshortcuts={ariaKeyShortcuts('zoomFit')} onClick={onZoomFit}>
             <Maximize size={15} />
           </button>
           <button

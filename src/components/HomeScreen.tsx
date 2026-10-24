@@ -5,6 +5,7 @@ import { formatProjectTimestamp, posterAspectRatio } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
 import { ThemeToggle } from './ThemeToggle'
 import { buildCarsonPoster, CARSON_PAPER, type CarsonTextSpec } from '../lib/carsonPoster'
+import { ariaKeyShortcuts, withShortcut } from '../lib/shortcuts'
 
 export type HomeStartPreset = 'a3' | 'instagram' | 'square'
 
@@ -202,12 +203,12 @@ export function HomeScreen({
         <div className="home-top-actions">
           <ThemeToggle className="home-ghost-button theme-toggle" />
           {onOpenPoster ? (
-            <button type="button" className="home-ghost-button" onClick={onOpenPoster} title="Open a saved poster (⌘O)">
+            <button type="button" className="home-ghost-button" onClick={onOpenPoster} title={withShortcut('Open a saved poster', 'openPoster')} aria-keyshortcuts={ariaKeyShortcuts('openPoster')}>
               <FolderOpen size={14} aria-hidden />
               <span className="home-button-label">Open poster</span>
             </button>
           ) : null}
-          <button type="button" className="primary-button" onClick={onNewPoster} title="Pick any size (⌘N)">
+          <button type="button" className="primary-button" onClick={onNewPoster} title={withShortcut('Pick any size', 'newPoster')} aria-keyshortcuts={ariaKeyShortcuts('newPoster')}>
             <Plus size={14} aria-hidden />
             New poster
           </button>

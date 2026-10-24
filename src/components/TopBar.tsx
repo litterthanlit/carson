@@ -16,6 +16,7 @@ import {
 import { BrandMark } from './BrandMark'
 import { TensionDial } from './TensionDial'
 import { ThemeToggle } from './ThemeToggle'
+import { ariaKeyShortcuts, isApplePlatform, shortcutKeys, withShortcut, type ShortcutId } from '../lib/shortcuts'
 
 type TopBarProps = {
   projectName: string
@@ -40,9 +41,7 @@ type TopBarProps = {
 
 type FileItem = {
   label: string
-  shortcut?: string
-  /** ARIA key-shortcut syntax, e.g. "Meta+N". */
-  keys?: string
+  shortcut?: ShortcutId
   icon: typeof Save
   run: () => void
 }
@@ -103,7 +102,7 @@ function FileMenu({ items }: { items: FileItem[] }) {
                 type="button"
                 role="menuitem"
                 aria-label={item.label}
-                aria-keyshortcuts={item.keys}
+                aria-keyshortcuts={item.shortcut ? ariaKeyShortcuts(item.shortcut) : undefined}
                 onClick={() => {
                   setOpen(false)
                   item.run()
@@ -111,7 +110,7 @@ function FileMenu({ items }: { items: FileItem[] }) {
               >
                 <Icon size={14} aria-hidden />
                 <span>{item.label}</span>
-                {item.shortcut ? <kbd aria-hidden>{item.shortcut}</kbd> : null}
+                {item.shortcut ? <kbd aria-hidden>{shortcutKeys(item.shortcut)}</kbd> : null}
               </button>
             )
           })}
@@ -142,9 +141,9 @@ export const TopBar = memo(function TopBar({
   onExport,
 }: TopBarProps) {
   const fileItems: FileItem[] = [
-    { label: 'New poster', shortcut: '⌘N', keys: 'Meta+N', icon: FilePlus2, run: onNewPoster },
-    { label: 'Open poster', shortcut: '⌘O', keys: 'Meta+O', icon: FolderOpen, run: onOpenPoster },
-    { label: 'Save as', shortcut: '⇧⌘S', keys: 'Meta+Shift+S', icon: Files, run: onSaveAs },
+    { label: 'New poster', shortcut: 'newPoster', icon: FilePlus2, run: onNewPoster },
+    { label: 'Open poster', shortcut: 'openPoster', icon: FolderOpen, run: onOpenPoster },
+    { label: 'Save as', shortcut: 'saveAs', icon: Files, run: onSaveAs },
     { label: 'Duplicate poster', icon: Copy, run: onDuplicatePoster },
     { label: 'Home', icon: House, run: onHome },
   ]
@@ -171,7 +170,8 @@ export const TopBar = memo(function TopBar({
             type="button"
             className={isDirty ? 'save-state dirty' : 'save-state'}
             aria-label="Save"
-            title="Save to this browser (⌘S)"
+            title={withShortcut('Save to this browser', 'save')}
+            aria-keyshortcuts={ariaKeyShortcuts('save')}
             onClick={onSave}
           >
             {isDirty ? <Save size={12} aria-hidden /> : <span className="save-dot" aria-hidden />}
@@ -182,31 +182,51 @@ export const TopBar = memo(function TopBar({
       <TensionDial value={tension} onChange={onTensionChange} onCommit={onTensionCommit} />
       <div className="top-actions" aria-label="Poster actions">
         <div className="top-cluster" role="group" aria-label="History">
-          <button type="button" className="icon-button" data-tour="undo" aria-label="Undo" title="Undo (⌘Z)" onClick={onUndo}>
+          <button type="button" className="icon-button" data-tour="undo" aria-label="Undo" title={withShortcut('Undo', 'undo')} aria-keyshortcuts={ariaKeyShortcuts('undo')} onClick={onUndo}>
             <Undo2 size={15} />
           </button>
-          <button type="button" className="icon-button" aria-label="Redo" title="Redo (⇧⌘Z)" onClick={onRedo}>
+          <button type="button" className="icon-button" aria-label="Redo" title={withShortcut('Redo', 'redo')} aria-keyshortcuts={ariaKeyShortcuts('redo')} onClick={onRedo}>
             <Redo2 size={15} />
           </button>
         </div>
         <ThemeToggle />
-        <button type="button" className="command-button" title="Search every action (⌘K)" aria-label="Commands" onClick={onOpenCommands}>
-          <Command size={13} aria-hidden />
-          <span>K</span>
+        <button
+          type="button"
+          className="command-button"
+          title={withShortcut('Search every action', 'commandPalette')}
+          aria-label="Commands"
+          aria-keyshortcuts={ariaKeyShortcuts('commandPalette')}
+          onClick={onOpenCommands}
+        >
+          {isApplePlatform() ? (
+            <>
+              <Command size={13} aria-hidden />
+              <span aria-hidden>K</span>
+            </>
+          ) : (
+            <span aria-hidden>{shortcutKeys('commandPalette')}</span>
+          )}
         </button>
         <span className="top-divider" aria-hidden />
         <button
           type="button"
           className="scramble-button"
-          title="Rearrange every layer into a new structure (Shift+R). Press R to try another."
+          title={`${withShortcut('Rearrange every layer into a new structure', 'scramble')}. Press ${shortcutKeys('reroll')} to try another.`}
           aria-label="Scramble layout"
+          aria-keyshortcuts={ariaKeyShortcuts('scramble')}
           disabled={scrambleDisabled}
           onClick={onScramble}
         >
           <Shuffle size={14} />
           Scramble
         </button>
-        <button type="button" className="primary-button" title="Export the poster (⌘E)" onClick={onExport}>
+        <button
+          type="button"
+          className="primary-button"
+          title={withShortcut('Export the poster', 'export')}
+          aria-keyshortcuts={ariaKeyShortcuts('export')}
+          onClick={onExport}
+        >
           <Download size={14} />
           Export
         </button>

@@ -1,3 +1,5 @@
+import { shortcutKeys } from './shortcuts'
+
 export const WALKTHROUGH_STEPS = ['scatter', 'xerox', 'reroll', 'undo'] as const
 
 export type WalkthroughStep = (typeof WALKTHROUGH_STEPS)[number]
@@ -28,15 +30,15 @@ const COPY: Record<WalkthroughStep, Omit<WalkthroughCopy, 'index' | 'total'>> = 
   },
   reroll: {
     title: 'Re-roll the accident',
-    body: 'Same move, new seed. Press R, or the dice in the stage bar.',
-    hint: 'R or Re-roll',
-    status: 'Press R to re-roll',
+    body: `Same move, new seed. Press ${shortcutKeys('reroll')}, or the dice in the stage bar.`,
+    hint: `${shortcutKeys('reroll')} or Re-roll`,
+    status: `Press ${shortcutKeys('reroll')} to re-roll`,
   },
   undo: {
     title: 'Walk it back',
-    body: 'Every accident reverses. Cmd+Z, or Undo in the header.',
-    hint: 'Cmd+Z or Undo',
-    status: 'Undo it — Cmd+Z',
+    body: `Every accident reverses. ${shortcutKeys('undo')}, or Undo in the header.`,
+    hint: `${shortcutKeys('undo')} or Undo`,
+    status: `Undo it — ${shortcutKeys('undo')}`,
   },
 }
 
