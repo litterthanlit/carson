@@ -46,11 +46,30 @@ Carson met the copier at the Rapperswil workshop with Hans-Rudolf Lutz: "using c
 | Toner starvation | **Bands** | stripes across the direction of travel |
 | Dirt on the glass, a scratched drum | **Streaks** | lines along the direction of travel, printing or dropping out |
 | Toner dropout | **Voids** | irregular soft blobs |
+| The drum inked unevenly: wet trains run a few letters along the feed, so one word floods while the next starves (the Ray Gun subscription-card look) | **Ink bleed**, **Ink starve**, **Scan angle** | exact distance field per glyph; each edge measures its own stroke and the gap it faces, so ink swells into open paper first and only fuses letters or closes counters where the sheet runs wettest; the wet edge follows lumps and paper fibres, pooled ink rounds off by surface tension; dry patches thin strokes and drop chunks on the paper tooth (`src/lib/inkBleed.ts`) |
+| Wet ink dragged along the feed | **Slur**, **Scan angle** | per-line slips — short tails, the odd long dashed pull — from wet ink only |
 | Lid left open | **Lid edge** | black creeping in from the frame |
 | Copy of a copy, enlarged or reduced each time | **Generations**, **Copy size** | resample about the centre, soften, re-tone — forms erode and thicken |
-| Misregistered second pass | **Ghost**, **Ghost offset** | tonal-only echo companion |
+| Misregistered second pass | **Ghost**, **Ghost offset** | tonal-only echo companion — of the inked copy when ink load is on |
 
 An opaque source (a photo, a scrap) copies as a white sheet laid over what's below; a transparent layer (type) copies as toner only and overprints.
+
+**Ink bleed** (Instruments → Print, or ⌘K) is the Copy Machine with the drum inked unevenly: Ink bleed 75, Ink starve 60, Slur 35, no scan drift or bands. Raise Ink bleed (or Tension) for the fused "SUBS" blobs. Spread scales with each stroke's own weight, so it reads the same at 12 pt and 300 pt. On a press (below), where it floods is the press's business: move the type into a wet train, or re-ink the press.
+
+### The press — one run for the whole poster
+
+A real poster comes off one machine in one run: one sheet of paper, one roller's ink, one feed, one plate slip. So every new poster prints on a **press** (`src/lib/press.ts`), and the ink effects sample it instead of each rolling its own dice:
+
+| Shared by the run | Who reads it |
+|---|---|
+| **Ink map**: wet and dry trains laid along the feed, sized by the sheet, not by any layer | Copy Machine ink load (where it floods, starves and slurs), Press Check ink spread (further in wet trains), misprint echoes and type strips (as dark as the ink where they land) |
+| **Paper**: one sheet's tooth and fibres, the grain running with the feed | Copy Machine ink edges and dropouts, Press Check tooth |
+| **Plate slip**: one direction for the run | Misprint echoes, the copier's ghost, Press Check plates |
+| **Feed** | Ink trains, paper grain and slur |
+
+Values come from a hashed lattice in poster coordinates, so any patch of the sheet (a layer's raster, a worker, a 4× export) samples the same ink and paper as every other, and two layers side by side flood together across the gap. A layer's place on the sheet is part of its look: drag a copied headline and its copy rides along, then re-inks where it settles.
+
+Print tab → **Press**: Re-ink (a new run; undoable, and the top-bar Re-roll re-inks again), **Show ink map** (wet in blue, dry in amber, with a feed arrow), **Feed angle**, and the switch. Off, each effect inks on its own: that's how posters saved before the press print, and they open with it off so they keep their look.
 
 Gaps, in order of value:
 1. **Printer-error generator** — skipped lines, misfeed shift, a band of repeated scanlines (the "printer messed up" accident he scans in).

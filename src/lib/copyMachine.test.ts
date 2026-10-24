@@ -8,6 +8,7 @@ import {
   applyTonalPasses,
   buildDisplacementField,
   COPY_MACHINE_DEFAULTS,
+  COPY_MACHINE_INK_BLEED,
   copyMachineGhostDelta,
   copyMachineGhostOpacity,
   copyMachineLayerSeeds,
@@ -287,6 +288,19 @@ describe('copyMachineTreatment ghost resolve', () => {
       seed: 2,
       params: { ghost: 10, ghostOffset: 8 },
     })
+  })
+
+  it('echoes the inked copy instead of inking the original twice', async () => {
+    const { copyMachineGhostInput } = await import('./copyMachineTreatment')
+    const source = createCheckerboard(8)
+    const baked = createCheckerboard(8, 2)
+    const plain = copyMachineGhostInput(COPY_MACHINE_DEFAULTS, source, baked)
+    expect(plain.source).toBe(source)
+    expect(plain.params).toBe(COPY_MACHINE_DEFAULTS)
+    const inked = copyMachineGhostInput(COPY_MACHINE_INK_BLEED, source, baked)
+    expect(inked.source).toBe(baked)
+    expect(inked.params).toMatchObject({ bleed: 0, starve: 0, slur: 0, contrast: COPY_MACHINE_INK_BLEED.contrast })
+    expect(copyMachineGhostInput(COPY_MACHINE_INK_BLEED, source, undefined).source).toBe(source)
   })
 
   it('returns null when ghost is off', async () => {
@@ -592,5 +606,77 @@ describe('copyMachine scan drift', () => {
       if (changed) changedRows++
     }
     expect(changedRows).toBeGreaterThan(FIXTURE_SIZE / 2)
+  })
+})
+
+describe('copyMachine ink load', () => {
+  function headline(): ImageData {
+    // Two letter-ish blocks with a 4 px gap and a 4 px counter in the first.
+    const image = new ImageData(96, 48)
+    for (let y = 12; y < 36; y++) {
+      for (let x = 10; x < 86; x++) {
+        const gap = x >= 46 && x < 50
+        const counter = x >= 24 && x < 28 && y >= 20 && y < 28
+        if (!gap && !counter) image.data[(y * 96 + x) * 4 + 3] = 255
+      }
+    }
+    return image
+  }
+
+  function inkAlpha(image: ImageData): number {
+    let sum = 0
+    for (let i = 3; i < image.data.length; i += 4) sum += image.data[i]
+    return sum
+  }
+
+  it('leaves older copies untouched when bleed, starve and slur are zero', () => {
+    const source = headline()
+    const legacy = { ...QUIET } as Record<string, unknown>
+    delete legacy.bleed
+    delete legacy.starve
+    delete legacy.slur
+    const withoutInk = applyTonalPasses(source, legacy as typeof QUIET, createSeededRandom(21))
+    const idleInk = applyTonalPasses(source, { ...QUIET, bleed: 0, starve: 0, slur: 0 }, createSeededRandom(21))
+    expect(imageDataDigest(idleInk.data)).toBe(imageDataDigest(withoutInk.data))
+  })
+
+  it('floods the gaps between letters shut and starves ink away', () => {
+    const source = headline()
+    const clean = applyTonalPasses(source, QUIET, createSeededRandom(22))
+    // Tension can take bleed past 100; at that load most of the sheet runs wet.
+    const flooded = applyTonalPasses(source, { ...QUIET, bleed: 200, dragAngle: 0 }, createSeededRandom(22))
+    const starved = applyTonalPasses(source, { ...QUIET, starve: 100, dragAngle: 0 }, createSeededRandom(22))
+    expect(inkAlpha(flooded)).toBeGreaterThan(inkAlpha(clean) * 1.1)
+    expect(inkAlpha(starved)).toBeLessThan(inkAlpha(clean) * 0.9)
+    // Share of the 4 px gap between the letters that took ink. Where it closes
+    // depends on where the sheet ran wet, so read it across a few rolls.
+    const gapFill = (image: ImageData) => {
+      let sum = 0
+      for (let y = 12; y < 36; y++) for (let x = 46; x < 50; x++) sum += image.data[(y * 96 + x) * 4 + 3]
+      return sum / (24 * 4 * 255)
+    }
+    const seeds = [22, 23, 24, 25, 26, 27, 28, 29]
+    const mean = (params: typeof QUIET) =>
+      seeds.reduce((total, seed) => total + gapFill(applyTonalPasses(source, params, createSeededRandom(seed))), 0) / seeds.length
+    expect(mean({ ...QUIET, bleed: 200, dragAngle: 0 })).toBeGreaterThan(mean(QUIET) + 0.25)
+  })
+
+  it('reads the ink params from a record, defaulting to none', () => {
+    expect(copyMachineParamsFromRecord({})).toMatchObject({ bleed: 0, starve: 0, slur: 0 })
+    expect(copyMachineParamsFromRecord({ bleed: 40, slur: 10 })).toMatchObject({ bleed: 40, starve: 0, slur: 10 })
+  })
+
+  it('scales ink with tension like every other intensity', () => {
+    const scaled = scaleCopyMachineParams({ ...COPY_MACHINE_DEFAULTS, bleed: 30, starve: 20, slur: 10 }, 2)
+    expect(scaled).toMatchObject({ bleed: 60, starve: 40, slur: 20 })
+  })
+
+  it('ships an Ink bleed preset that floods, starves and slurs along a horizontal feed', () => {
+    expect(COPY_MACHINE_INK_BLEED.bleed).toBeGreaterThan(0)
+    expect(COPY_MACHINE_INK_BLEED.starve).toBeGreaterThan(0)
+    expect(COPY_MACHINE_INK_BLEED.slur).toBeGreaterThan(0)
+    expect(COPY_MACHINE_INK_BLEED.dragAngle).toBe(0)
+    const pass = () => renderCopyMachinePass(headline(), COPY_MACHINE_INK_BLEED, createSeededRandom(23))
+    expect(imageDataDigest(pass().data)).toBe(imageDataDigest(pass().data))
   })
 })

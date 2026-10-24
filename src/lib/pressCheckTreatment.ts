@@ -9,6 +9,7 @@ import {
   renderPressCheckPass,
   scalePressCheckParams,
 } from './pressCheck'
+import { canvasPress } from './press'
 import { createSeededRandom } from './random'
 import type { Treatment } from './treatments'
 
@@ -119,7 +120,10 @@ export async function renderPressCheckTreatment(
 
   const params = scalePressCheckParams(pressCheckParamsFromRecord(treatment.params), tensionScale)
   const pixelScale = snapshot.width / Math.max(1, poster.width)
-  const imageData = renderPressCheckPass(snapshot, params, createSeededRandom(treatment.seed), pixelScale)
+  // On the poster's press this is its final run; the snapshot covers the whole sheet.
+  const press = canvasPress(canvas)
+  const sheet = press ? { press, originX: 0, originY: 0, unit: 1 / pixelScale } : undefined
+  const imageData = renderPressCheckPass(snapshot, params, createSeededRandom(treatment.seed), pixelScale, sheet)
   const image = await FabricImage.fromURL(imageDataToDataUrl(imageData), { crossOrigin: 'anonymous' })
   image.set({
     left: 0,

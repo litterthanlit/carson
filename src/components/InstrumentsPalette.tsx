@@ -4,6 +4,7 @@ import {
   Columns3,
   Copy,
   Crop,
+  Droplet,
   Droplets,
   Eraser,
   FlipHorizontal,
@@ -73,6 +74,7 @@ export type InstrumentsPaletteProps = {
   onCloneTypeAsTexture: () => void
   onApplyXerox: () => void
   onApplyCopyMachine: () => void
+  onApplyInkBleed: () => void
   onApplyCopyMachineToPoster: () => void
   onApplyCopyScatterCopyGesture: () => void
   onAddMisprintDuplicate: () => void
@@ -142,6 +144,7 @@ export function InstrumentsPalette({
   onCloneTypeAsTexture,
   onApplyXerox,
   onApplyCopyMachine,
+  onApplyInkBleed,
   onApplyCopyMachineToPoster,
   onApplyCopyScatterCopyGesture,
   onAddMisprintDuplicate,
@@ -330,6 +333,14 @@ export function InstrumentsPalette({
         <div className="preset-row">
           <button type="button" title="Photocopy warp — source stays editable" onClick={onApplyCopyMachine} disabled={!selected}>
             <Printer size={16} /> Copy machine <ScopeSel />
+          </button>
+          <button
+            type="button"
+            title="Uneven ink — lines flood into blobs, starve to fragments, slur along the feed"
+            onClick={onApplyInkBleed}
+            disabled={!selected}
+          >
+            <Droplet size={16} /> Ink bleed <ScopeSel />
           </button>
           <button type="button" title="Run every visible layer through the copier" onClick={onApplyCopyMachineToPoster} disabled={layerCount === 0}>
             <Copy size={16} /> Run through copier <ScopeAll />

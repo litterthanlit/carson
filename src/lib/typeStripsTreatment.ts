@@ -1,10 +1,12 @@
 /**
  * Non-destructive type strips — repeated print bars live on the stack.
  * Source stays editable; fragments are companions re-rendered from seed + Tension.
+ * On the poster's press each strip prints as solid as the ink was where it lies.
  */
 import { Rect, Textbox, type Canvas, type FabricObject } from 'fabric'
 import { createTypeStrips, type TypeStrip } from './editorModel'
 import { scaleInstrumentParams } from './instrumentTension'
+import { canvasPress, pressInkDensityAt, type Press } from './press'
 import { createSeededRandom } from './random'
 import { readSliceProp } from './sliceTreatment'
 import type { Treatment } from './treatments'
@@ -85,6 +87,15 @@ export function typeStripsForTreatment(
 
 export type TypeStripFragmentTagger = (object: FabricObject, strip: TypeStrip, part: 'block' | 'label') => void
 
+/**
+ * Opacity of a strip's ink — the black bar when inverted, the lettering when
+ * not; paper is paper either way. 0.96 off the press, as before.
+ */
+export function typeStripInkOpacity(strip: Pick<TypeStrip, 'left' | 'top' | 'width' | 'height'>, press: Press | null): number {
+  if (!press) return 0.96
+  return 0.96 * pressInkDensityAt(press, strip.left + strip.width / 2, strip.top + strip.height / 2)
+}
+
 export function renderTypeStripsTreatment(
   canvas: Canvas,
   source: FabricObject,
@@ -110,7 +121,9 @@ export function renderTypeStripsTreatment(
     tensionScale,
   )
 
+  const press = canvasPress(canvas)
   strips.forEach((strip) => {
+    const ink = typeStripInkOpacity(strip, press)
     const block = new Rect({
       left: strip.left,
       top: strip.top,
@@ -118,7 +131,7 @@ export function renderTypeStripsTreatment(
       height: strip.height,
       fill: strip.inverted ? '#111111' : '#f8f6ef',
       angle: strip.angle,
-      opacity: 0.96,
+      opacity: strip.inverted ? ink : 0.96,
       selectable: false,
       evented: false,
       [TYPE_STRIP_SOURCE_ID_KEY]: sourceId,
@@ -137,6 +150,8 @@ export function renderTypeStripsTreatment(
       charSpacing: -20,
       fill: strip.inverted ? '#f8f6ef' : '#111111',
       angle: strip.angle,
+      // Dry ink lets the paper through; knocked-out lettering is paper already.
+      opacity: strip.inverted || !press ? 1 : ink / 0.96,
       selectable: false,
       evented: false,
       [TYPE_STRIP_SOURCE_ID_KEY]: sourceId,

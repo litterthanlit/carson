@@ -1,8 +1,13 @@
 /**
  * Press Check — live physical-print look as a document treatment.
  * Ink spread, plate misregistration, and paper tooth. Pure, seeded, DPI-aware.
+ *
+ * On a poster's press (see press.ts) it is the final run of that press: ink
+ * spreads further in the run's wet trains than its dry ones, the plates slip
+ * the way the run slips, and the tooth is the same sheet the layers sit on.
  */
 import { instrumentTensionScale } from './instrumentTension'
+import { pressInkPlane, pressRegistration, SHEET_SALT, sheetNoise, type SheetPatch } from './press'
 
 export type PressCheckParams = {
   inkSpread: number
@@ -170,6 +175,37 @@ export function applyInkSpread(imageData: ImageData, inkSpread: number, exportSc
   return out
 }
 
+/**
+ * On the press, dark inks bleed by how wet the run was there: barely in a dry
+ * train, nearly twice as far in a wet one.
+ */
+export function applyInkSpreadOnPress(
+  imageData: ImageData,
+  inkSpread: number,
+  sheet: SheetPatch,
+  exportScale = 1,
+): ImageData {
+  const radius = paramUnit(inkSpread) * MAX_INK_RADIUS_PX * pressCheckPixelScale(exportScale)
+  if (radius < 0.5) return clonePressCheckImageData(imageData)
+
+  const { width, height, data } = imageData
+  const trains = pressInkPlane(sheet, width, height)
+  const dry = boxBlurAxis(boxBlurAxis(imageData, radius * 0.35, true), radius * 0.35, false).data
+  const wet = boxBlurAxis(boxBlurAxis(imageData, radius * 1.9, true), radius * 1.9, false).data
+  const out = clonePressCheckImageData(imageData)
+  const outData = out.data
+  for (let p = 0, i = 0; p < trains.length; p++, i += 4) {
+    const t = Math.max(0, Math.min(1, (trains[p] + 1) / 2))
+    const w = t * t * (3 - 2 * t)
+    for (let c = 0; c < 3; c++) {
+      const spread = dry[i + c] + (wet[i + c] - dry[i + c]) * w
+      outData[i + c] = Math.min(data[i + c], Math.round(spread))
+    }
+    outData[i + 3] = data[i + 3]
+  }
+  return out
+}
+
 /** CMY-ish plate shift: R/G/B sample from seeded opposite offsets. */
 export function applyMisregistration(
   imageData: ImageData,
@@ -181,8 +217,23 @@ export function applyMisregistration(
   if (offset < 0.25) return clonePressCheckImageData(imageData)
 
   const angle = random() * Math.PI * 2
-  const dx = Math.cos(angle) * offset
-  const dy = Math.sin(angle) * offset
+  return shiftPlates(imageData, Math.cos(angle) * offset, Math.sin(angle) * offset)
+}
+
+/** On the press the plates slip the way the whole run slips — the same way as every misprint on it. */
+export function applyMisregistrationOnPress(
+  imageData: ImageData,
+  misregistration: number,
+  sheet: SheetPatch,
+  exportScale = 1,
+): ImageData {
+  const offset = paramUnit(misregistration) * MAX_MISREG_PX * pressCheckPixelScale(exportScale)
+  if (offset < 0.25) return clonePressCheckImageData(imageData)
+  const slip = pressRegistration(sheet.press)
+  return shiftPlates(imageData, slip.dx * offset, slip.dy * offset)
+}
+
+function shiftPlates(imageData: ImageData, dx: number, dy: number): ImageData {
   const { width, height, data } = imageData
   const out = clonePressCheckImageData(imageData)
   const outData = out.data
@@ -261,13 +312,41 @@ export function applyPaperTooth(
   return out
 }
 
-/** Full Press Check pass: bleed → plates → tooth. */
+/** The press's own sheet, its grain the size of the tooth above, measured on the poster. */
+export function applyPaperToothOnPress(imageData: ImageData, paperTooth: number, sheet: SheetPatch): ImageData {
+  const amount = paramUnit(paperTooth)
+  if (amount < 0.01) return clonePressCheckImageData(imageData)
+  const { width, height, data } = imageData
+  const out = clonePressCheckImageData(imageData)
+  const outData = out.data
+  const grain = sheetNoise(sheet, width, height, 7, 7, SHEET_SALT.paper)
+  const depth = 0.08 + amount * 0.22
+  for (let p = 0, i = 0; p < grain.length; p++, i += 4) {
+    const tooth = (grain[p] + 1) / 2
+    const mul = 1 - (tooth - 0.5) * 2 * depth
+    outData[i] = Math.max(0, Math.min(255, Math.round(data[i] * mul)))
+    outData[i + 1] = Math.max(0, Math.min(255, Math.round(data[i + 1] * mul * 0.995)))
+    outData[i + 2] = Math.max(0, Math.min(255, Math.round(data[i + 2] * mul * 0.97)))
+  }
+  return out
+}
+
+/**
+ * Full Press Check pass: bleed → plates → tooth. With a `sheet` it is the
+ * poster's press run (no dice of its own); without one, the legacy look.
+ */
 export function renderPressCheckPass(
   imageData: ImageData,
   params: PressCheckParams,
   random: () => number,
   exportScale = 1,
+  sheet?: SheetPatch,
 ): ImageData {
+  if (sheet) {
+    const spread = applyInkSpreadOnPress(imageData, params.inkSpread, sheet, exportScale)
+    const plates = applyMisregistrationOnPress(spread, params.misregistration, sheet, exportScale)
+    return applyPaperToothOnPress(plates, params.paperTooth, sheet)
+  }
   const spread = applyInkSpread(imageData, params.inkSpread, exportScale)
   const plates = applyMisregistration(spread, params.misregistration, random, exportScale)
   return applyPaperTooth(plates, params.paperTooth, random, exportScale)

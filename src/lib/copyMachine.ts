@@ -5,6 +5,8 @@
  * - wobble: paper and drum slip, a seeded displacement field
  * - drag: the original moved while the scan bar ran, so each scanline catches it
  *   at a different offset and fast moves smear along the slip
+ * - ink load: the drum never inks evenly — wet patches flood past every edge
+ *   and fuse letters, dry ones starve and break up, wet ink slurs along the feed
  * - toner: ink spreads (dot gain), sits on a clustered halftone screen, mottles
  *   in solids, speckles the paper and pinholes the blacks
  * - bands / streaks: toner starvation across the scan, dirt and scratches on
@@ -14,6 +16,8 @@
  *
  * Pure, seeded and headless-testable; the worker and export run the same code.
  */
+import { applyInkLoad, inkLoadIsIdle } from './inkBleed'
+import type { SheetPatch } from './press'
 import { createSeededRandom } from './random'
 
 export type CopyMachineParams = {
@@ -31,6 +35,12 @@ export type CopyMachineParams = {
   streaks: number
   /** Lid-open black border creeping in from the frame. */
   edge: number
+  /** Ink load (see inkBleed): flood where the drum ran wet… */
+  bleed: number
+  /** …drop-out where it ran dry… */
+  starve: number
+  /** …and wet ink dragged along the feed. */
+  slur: number
   /** Copy of a copy: how many times the sheet went through the machine (1–8). */
   generations: number
   /** Reduce/enlarge per generation, in percent (100 = same size). */
@@ -51,11 +61,53 @@ export const COPY_MACHINE_DEFAULTS: CopyMachineParams = {
   bands: 25,
   streaks: 20,
   edge: 0,
+  bleed: 0,
+  starve: 0,
+  slur: 0,
   generations: 1,
   copyScale: 100,
   ghost: 20,
   ghostOffset: 3,
 }
+
+/**
+ * The Ink bleed instrument: one clean pass with the drum inked unevenly along
+ * a horizontal feed — some lines flood into blobs, some starve to fragments,
+ * wet ink slurs to the right. No scan drift, bands or lid so the ink reads.
+ */
+export const COPY_MACHINE_INK_BLEED: CopyMachineParams = {
+  ...COPY_MACHINE_DEFAULTS,
+  contrast: 80,
+  grain: 22,
+  voids: 0,
+  wobble: 12,
+  drag: 0,
+  dragAngle: 0,
+  bands: 0,
+  streaks: 0,
+  bleed: 75,
+  starve: 60,
+  slur: 35,
+  ghost: 15,
+}
+
+/** Intensity keys Tension multiplies; scan angle, generations and copy size stay put. */
+export const COPY_MACHINE_TENSION_KEYS = [
+  'contrast',
+  'grain',
+  'voids',
+  'wobble',
+  'wobbleFreq',
+  'drag',
+  'bands',
+  'streaks',
+  'edge',
+  'bleed',
+  'starve',
+  'slur',
+  'ghost',
+  'ghostOffset',
+] as const
 
 export const MAX_COPY_GENERATIONS = 8
 
@@ -89,6 +141,9 @@ export function scaleCopyMachineParams(params: CopyMachineParams, tensionScale =
     bands: params.bands * scale,
     streaks: params.streaks * scale,
     edge: params.edge * scale,
+    bleed: params.bleed * scale,
+    starve: params.starve * scale,
+    slur: params.slur * scale,
     ghost: params.ghost * scale,
     ghostOffset: params.ghostOffset * scale,
   }
@@ -360,6 +415,9 @@ export function copyMachineParamsFromRecord(params: Record<string, number>): Cop
     bands: params.bands ?? COPY_MACHINE_DEFAULTS.bands,
     streaks: params.streaks ?? COPY_MACHINE_DEFAULTS.streaks,
     edge: params.edge ?? COPY_MACHINE_DEFAULTS.edge,
+    bleed: params.bleed ?? COPY_MACHINE_DEFAULTS.bleed,
+    starve: params.starve ?? COPY_MACHINE_DEFAULTS.starve,
+    slur: params.slur ?? COPY_MACHINE_DEFAULTS.slur,
     generations: params.generations ?? COPY_MACHINE_DEFAULTS.generations,
     copyScale: params.copyScale ?? COPY_MACHINE_DEFAULTS.copyScale,
     ghost: params.ghost ?? COPY_MACHINE_DEFAULTS.ghost,
@@ -372,7 +430,7 @@ export function copyMachineParamsToRecord(params: CopyMachineParams): Record<str
 }
 
 export type TonalParams = Pick<CopyMachineParams, 'contrast' | 'grain' | 'bands' | 'voids'> &
-  Partial<Pick<CopyMachineParams, 'streaks' | 'edge' | 'dragAngle'>>
+  Partial<Pick<CopyMachineParams, 'streaks' | 'edge' | 'dragAngle' | 'bleed' | 'starve' | 'slur'>>
 
 /** Toner black — never quite #000 on a real copy. */
 const TONER = 18
@@ -518,6 +576,8 @@ function tonerDensity(
   params: TonalParams,
   random: () => number,
   pixelScale: number,
+  /** Flooded ink (0–1) fills the screen: no dots where it ran wet. */
+  wet?: Float32Array,
 ): Float32Array {
   const contrast = Math.min(1.5, paramUnit(params.contrast))
   const grain = Math.min(1.5, paramUnit(params.grain))
@@ -545,7 +605,7 @@ function tonerDensity(
       const u = (x + y) * c45 * freq
       const v = (x - y) * c45 * freq
       const dot = (Math.cos(u) + Math.cos(v)) * 0.25
-      const t = threshold + dot * screen + (random() - 0.5) * rough
+      const t = threshold + dot * screen * (wet ? 1 - wet[i] : 1) + (random() - 0.5) * rough
       const curved = smoothstep(t - soft, t + soft, blurred[i])
       density[i] = ink[i] + (curved - ink[i]) * mix
     }
@@ -564,6 +624,8 @@ export function applyTonalPasses(
   params: TonalParams,
   random: () => number,
   exportScale = 1,
+  /** Where this raster lies on the poster's press — its ink load then comes from there. */
+  sheet?: SheetPatch,
 ): ImageData {
   const { width, height } = imageData
   const out = cloneImageData(imageData)
@@ -575,7 +637,18 @@ export function applyTonalPasses(
   const lines = alongY ? height : width
   const across = alongY ? width : height
 
-  const density = tonerDensity(inkPlane(imageData), width, height, params, random, pixelScale)
+  // Ink load first: how much toner the drum carried to each part of the sheet.
+  // Left at zero it draws no random numbers, so older copies render unchanged.
+  let ink = inkPlane(imageData)
+  let wet: Float32Array | undefined
+  const inkLoad = {
+    bleed: params.bleed ?? 0,
+    starve: params.starve ?? 0,
+    slur: params.slur ?? 0,
+    dragAngle: params.dragAngle ?? COPY_MACHINE_DEFAULTS.dragAngle,
+  }
+  if (!inkLoadIsIdle(inkLoad)) ({ ink, wet } = applyInkLoad(ink, width, height, inkLoad, random, pixelScale, sheet))
+  const density = tonerDensity(ink, width, height, params, random, pixelScale, wet)
 
   // Mottle: solids never lie down evenly.
   if (grain > 0.01) {
@@ -583,7 +656,9 @@ export function applyTonalPasses(
     const amount = 0.13 * Math.min(1, grain)
     for (let i = 0; i < density.length; i++) {
       const solid = smoothstep(0.55, 1, density[i])
-      density[i] *= 1 - amount * solid * (0.5 + 0.5 * mottle[i])
+      // A flooded solid lies down evenly; only the dry parts mottle in full.
+      const even = wet ? 1 - 0.8 * wet[i] : 1
+      density[i] *= 1 - amount * solid * even * (0.5 + 0.5 * mottle[i])
     }
   }
 
@@ -760,8 +835,9 @@ export function renderCopyMachinePass(
   params: CopyMachineParams,
   random: () => number,
   exportScale = 1,
+  sheet?: SheetPatch,
 ): ImageData {
-  let output = applyTonalPasses(applySpatialPasses(imageData, params, random, exportScale), params, random, exportScale)
+  let output = applyTonalPasses(applySpatialPasses(imageData, params, random, exportScale), params, random, exportScale, sheet)
   const generations = Math.max(1, Math.min(MAX_COPY_GENERATIONS, Math.round(params.generations ?? 1)))
   for (let generation = 1; generation < generations; generation++) {
     output = resampleGeneration(output, params.copyScale ?? 100, exportScale)
@@ -773,7 +849,7 @@ export function renderCopyMachinePass(
       random,
       exportScale,
     )
-    output = applyTonalPasses(applyDisplacement(output, field), params, random, exportScale)
+    output = applyTonalPasses(applyDisplacement(output, field), params, random, exportScale, sheet)
   }
   return output
 }
@@ -789,13 +865,14 @@ export function applyCopyMachineChain(
   treatments: CopyMachineChainStep[],
   exportScale = 1,
   tensionScale = 1,
+  sheet?: SheetPatch,
 ): ImageData {
   let imageData = sourceImageData
   for (const treatment of treatments) {
     if (!treatment.enabled) continue
     const params = scaleCopyMachineParams(copyMachineParamsFromRecord(treatment.params), tensionScale)
     const random = createSeededRandom(treatment.seed)
-    imageData = renderCopyMachinePass(imageData, params, random, exportScale)
+    imageData = renderCopyMachinePass(imageData, params, random, exportScale, sheet)
   }
   return imageData
 }
@@ -816,8 +893,17 @@ export function copyMachineGhostOpacity(ghost: number): number {
 }
 
 /** Pixel offset for the misregistration echo (right + slightly up). */
-export function copyMachineGhostDelta(ghostOffset: number): { dx: number; dy: number } {
+export function copyMachineGhostDelta(
+  ghostOffset: number,
+  /** The press's plate slip (unit vector): every echo on the poster then shifts the same way. */
+  slip?: { dx: number; dy: number },
+): { dx: number; dy: number } {
   const offset = Math.max(0, ghostOffset)
+  if (slip) {
+    // As far as the default echo travels (right and up), along the run's slip.
+    const distance = offset * Math.hypot(1, 0.45)
+    return { dx: slip.dx * distance, dy: slip.dy * distance }
+  }
   return {
     dx: offset,
     dy: -offset * 0.45,
@@ -831,8 +917,10 @@ export function misprintCompanionPose(options: {
   angle: number
   offset: number
   opacity: number
+  /** The press's plate slip, when the poster prints on one. */
+  slip?: { dx: number; dy: number }
 }) {
-  const { dx, dy } = copyMachineGhostDelta(options.offset)
+  const { dx, dy } = copyMachineGhostDelta(options.offset, options.slip)
   return {
     left: options.left + dx,
     top: options.top + dy,

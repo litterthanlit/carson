@@ -12,6 +12,7 @@ import { computeSnap } from '../lib/snapping'
 import { constrainMoveDelta, constrainUniformScale, snapRotation } from '../lib/transformConstraints'
 import { applyPathData, simplifyPathData, type PathData } from '../lib/pathEditing'
 import { isLayerSyncSuppressed } from '../lib/layerSync'
+import { drawInkMap, type InkMapOverlay } from '../lib/inkMap'
 import type { EditorTool, LayerKind, TextSelectionRange } from '../types/editor'
 
 type UseCanvasEventsOptions = {
@@ -25,6 +26,8 @@ type UseCanvasEventsOptions = {
   snapToGridRef: MutableRefObject<boolean>
   printDpiRef: MutableRefObject<number>
   bleedMmRef: MutableRefObject<number>
+  /** The press's ink map, drawn under the guides while it is shown. */
+  inkMapRef?: MutableRefObject<InkMapOverlay | null>
   penStrokeColorRef: MutableRefObject<string>
   penStrokeWidthRef: MutableRefObject<number>
   syncSelected: () => void
@@ -54,6 +57,7 @@ export function useCanvasEvents({
   snapToGridRef,
   printDpiRef,
   bleedMmRef,
+  inkMapRef,
   penStrokeColorRef,
   penStrokeWidthRef,
   syncSelected,
@@ -292,6 +296,11 @@ export function useCanvasEvents({
         ctx.save()
         ctx.lineWidth = 1 / displayScaleRef.current
 
+        const inkMap = inkMapRef?.current
+        if (inkMap) {
+          drawInkMap(ctx, inkMap, { width: canvas.getWidth(), height: canvas.getHeight() }, displayScaleRef.current)
+        }
+
         if (showLayoutGridRef.current) {
           const layout = buildLayoutGrid(
             { width: canvas.getWidth(), height: canvas.getHeight() },
@@ -383,6 +392,7 @@ export function useCanvasEvents({
       penStrokeColorRef,
       penStrokeWidthRef,
       printDpiRef,
+      inkMapRef,
       showBaselineGridRef,
       showLayoutGridRef,
       showPrintGuidesRef,

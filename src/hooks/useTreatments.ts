@@ -27,6 +27,7 @@ import { stripMisprintFragments } from '../lib/misprintTreatment'
 import { stripTypeStripFragments } from '../lib/typeStripsTreatment'
 import { stripLetterBreakPieces } from '../lib/letterBreakTreatment'
 import { withLayerSyncSuppressed } from '../lib/layerSync'
+import { stampCompanionPose } from '../lib/companionFollow'
 import type { LayerKind } from '../types/editor'
 import { newSeed } from '../lib/random'
 
@@ -95,40 +96,46 @@ export function useTreatments({
       const target = object ?? activeObject()
       if (!canvas || !target || target.type === 'activeselection') return
       await withLayerSyncSuppressed(async () => {
-        await renderTreatmentStackOnCanvas(
-          canvas,
-          target,
-          {
-            slice: (fragment, index) => {
-              tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+        try {
+          await renderTreatmentStackOnCanvas(
+            canvas,
+            target,
+            {
+              slice: (fragment, index) => {
+                tagObject(fragment, 'fragment', `Cut ${index + 1}`)
+              },
+              crop: (fragment, treatment) => {
+                tagObject(fragment, 'fragment', `${cropModeFromParams(treatment.params)} crop`)
+              },
+              tear: (fragment, index) => {
+                tagObject(fragment, 'fragment', `Torn scrap ${index + 1}`)
+              },
+              badCrop: (fragment, index) => {
+                tagObject(fragment, 'fragment', `Bad crop ${index + 1}`)
+              },
+              glyph: (fragment, _index, glyphText) => {
+                tagObject(fragment, 'text', `Glyph ${glyphText}`)
+              },
+              letterBreak: (fragment, glyphText) => {
+                tagObject(fragment, 'fragment', `Broken ${glyphText}`)
+              },
+              decayMarks: (fragment, mark) => {
+                tagObject(fragment, 'fragment', mark.kind === 'ink-loss' ? 'Ink loss' : 'Fold mark')
+              },
+              misprint: (fragment) => {
+                tagObject(fragment, 'fragment', 'Misprint offset')
+              },
+              typeStrips: (fragment, _strip, part) => {
+                tagObject(fragment, part === 'label' ? 'text' : 'fragment', part === 'label' ? 'Repeated type' : 'Type strip')
+              },
             },
-            crop: (fragment, treatment) => {
-              tagObject(fragment, 'fragment', `${cropModeFromParams(treatment.params)} crop`)
-            },
-            tear: (fragment, index) => {
-              tagObject(fragment, 'fragment', `Torn scrap ${index + 1}`)
-            },
-            badCrop: (fragment, index) => {
-              tagObject(fragment, 'fragment', `Bad crop ${index + 1}`)
-            },
-            glyph: (fragment, _index, glyphText) => {
-              tagObject(fragment, 'text', `Glyph ${glyphText}`)
-            },
-            letterBreak: (fragment, glyphText) => {
-              tagObject(fragment, 'fragment', `Broken ${glyphText}`)
-            },
-            decayMarks: (fragment, mark) => {
-              tagObject(fragment, 'fragment', mark.kind === 'ink-loss' ? 'Ink loss' : 'Fold mark')
-            },
-            misprint: (fragment) => {
-              tagObject(fragment, 'fragment', 'Misprint offset')
-            },
-            typeStrips: (fragment, _strip, part) => {
-              tagObject(fragment, part === 'label' ? 'text' : 'fragment', part === 'label' ? 'Repeated type' : 'Type strip')
-            },
-          },
-          tensionScale(),
-        )
+            tensionScale(),
+          )
+        } finally {
+          // Companions now sit where the source does; a later drag shows as stale.
+          // Stamped even if the render failed, so a bad layer can't retry every frame.
+          stampCompanionPose(target)
+        }
       })
       canvas.requestRenderAll()
       syncLayers()

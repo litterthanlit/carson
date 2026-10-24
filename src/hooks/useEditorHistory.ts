@@ -34,6 +34,8 @@ type UseEditorHistoryOptions = {
   onAfterRestore: () => Promise<void>
   onTreatmentRestore: (objectId: string, treatmentsJson: string) => Promise<void>
   onPosterTreatmentRestore: (artboardId: string, treatmentsJson: string) => Promise<void>
+  /** Put a poster back on a press run (JSON of a PressRun, or "null" for none). */
+  onPressRestore: (artboardId: string, pressJson: string) => Promise<void>
   commitHistoryRef: RefObject<(message: string) => void>
   commitTreatmentHistoryRef: RefObject<
     (objectId: string, label: string, before: string, after: string) => void
@@ -64,6 +66,7 @@ export function useEditorHistory({
   onAfterRestore,
   onTreatmentRestore,
   onPosterTreatmentRestore,
+  onPressRestore,
   commitHistoryRef,
   commitTreatmentHistoryRef,
   commitPosterTreatmentHistoryRef,
@@ -119,9 +122,10 @@ export function useEditorHistory({
         await restoreSnapshot(action.data, action.label)
         return
       }
-      if (action.kind === 'posterTreatment') {
+      if (action.kind === 'posterTreatment' || action.kind === 'press') {
         restoringRef.current = true
-        await onPosterTreatmentRestore(action.artboardId, action.treatmentsJson)
+        if (action.kind === 'press') await onPressRestore(action.artboardId, action.pressJson)
+        else await onPosterTreatmentRestore(action.artboardId, action.treatmentsJson)
         restoringRef.current = false
         const canvas = canvasRef.current
         canvas?.requestRenderAll()
@@ -187,7 +191,7 @@ export function useEditorHistory({
       syncLayers()
       setStatus(action.label)
     },
-    [canvasRef, onPosterTreatmentRestore, onTreatmentRestore, restoreSnapshot, setStatus, syncLayers, syncSelected],
+    [canvasRef, onPosterTreatmentRestore, onPressRestore, onTreatmentRestore, restoreSnapshot, setStatus, syncLayers, syncSelected],
   )
 
   const commitHistory = useCallback(
@@ -253,6 +257,13 @@ export function useEditorHistory({
   const commitPosterTreatmentHistory = useCallback(
     (artboardId: string, label: string, before: string, after: string) => {
       pushIncrementalOp({ type: 'posterTreatment', label, artboardId, before, after }, label)
+    },
+    [pushIncrementalOp],
+  )
+
+  const commitPressHistory = useCallback(
+    (artboardId: string, label: string, before: string, after: string) => {
+      pushIncrementalOp({ type: 'press', label, artboardId, before, after }, label)
     },
     [pushIncrementalOp],
   )
@@ -372,6 +383,7 @@ export function useEditorHistory({
     commitHistory,
     commitTreatmentHistory,
     commitPosterTreatmentHistory,
+    commitPressHistory,
     commitObjectPatchHistory,
     commitObjectPatchesHistory,
     commitLayerOrderHistory,

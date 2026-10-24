@@ -2,6 +2,7 @@ import {
   applyCopyMachineChain,
   type CopyMachineChainStep,
 } from './copyMachine'
+import type { SheetPatch } from './press'
 
 export type CopyMachineJobRequest = {
   id: string
@@ -11,6 +12,8 @@ export type CopyMachineJobRequest = {
   treatments: CopyMachineChainStep[]
   exportScale: number
   tensionScale: number
+  /** The raster's place on the poster's press, when it prints on one. */
+  sheet?: SheetPatch
 }
 
 export type CopyMachineJobResult = {
@@ -30,7 +33,7 @@ export function imageDataFromJobPixels(pixels: ArrayBuffer, width: number, heigh
 
 export function runCopyMachineJob(request: CopyMachineJobRequest): CopyMachineJobResult {
   const source = imageDataFromJobPixels(request.pixels, request.width, request.height)
-  const output = applyCopyMachineChain(source, request.treatments, request.exportScale, request.tensionScale)
+  const output = applyCopyMachineChain(source, request.treatments, request.exportScale, request.tensionScale, request.sheet)
   return {
     id: request.id,
     width: output.width,

@@ -2,7 +2,12 @@
  * Instrument registry — named chaos operators for Horizon 3.2.
  * Palette buttons resolve here; Tension scales intensity keys at render, not in stored params.
  */
-import { COPY_MACHINE_DEFAULTS, copyMachineParamsToRecord } from './copyMachine'
+import {
+  COPY_MACHINE_DEFAULTS,
+  COPY_MACHINE_INK_BLEED,
+  COPY_MACHINE_TENSION_KEYS,
+  copyMachineParamsToRecord,
+} from './copyMachine'
 import { PRESS_CHECK_DEFAULTS, pressCheckParamsToRecord } from './pressCheck'
 import { misprintParamsFromGeneration } from './misprintTreatment'
 import type { TreatmentType } from './treatments'
@@ -17,6 +22,7 @@ export type InstrumentId =
   | 'wear'
   | 'xerox'
   | 'copy-machine'
+  | 'ink-bleed'
   | 'misprint'
   | 'type-strips'
   | 'scatter'
@@ -81,7 +87,15 @@ export const INSTRUMENTS: Instrument[] = [
     treatmentType: 'copy-machine',
     defaultParams: copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS),
     scope: 'layer',
-    tensionKeys: ['contrast', 'grain', 'voids', 'wobble', 'wobbleFreq', 'drag', 'bands', 'streaks', 'edge', 'ghost', 'ghostOffset'],
+    tensionKeys: COPY_MACHINE_TENSION_KEYS,
+  },
+  {
+    id: 'ink-bleed',
+    name: 'Ink bleed',
+    treatmentType: 'copy-machine',
+    defaultParams: copyMachineParamsToRecord(COPY_MACHINE_INK_BLEED),
+    scope: 'layer',
+    tensionKeys: COPY_MACHINE_TENSION_KEYS,
   },
   {
     id: 'misprint',

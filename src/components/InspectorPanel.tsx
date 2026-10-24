@@ -26,6 +26,7 @@ import {
 import type { FabricObject } from 'fabric'
 import type { PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
+import type { PressRun } from '../lib/press'
 import type { StoredAsset } from '../lib/assets'
 import { formatProjectTimestamp } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
@@ -240,6 +241,14 @@ export type InspectorPanelProps = {
   onPrintDpiChange: (dpi: number) => void
   bleedMm: number
   onBleedMmChange: (mm: number) => void
+  /** The active poster's press run, or null when each effect inks on its own. */
+  pressRun: PressRun | null
+  showInkMap: boolean
+  onPressOnChange: (on: boolean) => void
+  onReinkPress: () => void
+  onPreviewPressFeed: (angle: number) => void
+  onCommitPressFeed: () => void
+  onToggleInkMap: () => void
   showPrintGuides: boolean
   onTogglePrintGuides: () => void
   showCmykPreview: boolean
@@ -436,6 +445,13 @@ export function InspectorPanel({
   onPrintDpiChange,
   bleedMm,
   onBleedMmChange,
+  pressRun,
+  showInkMap,
+  onPressOnChange,
+  onReinkPress,
+  onPreviewPressFeed,
+  onCommitPressFeed,
+  onToggleInkMap,
   showPrintGuides,
   onTogglePrintGuides,
   showCmykPreview,
@@ -767,6 +783,33 @@ export function InspectorPanel({
                           min={0}
                           max={100}
                           onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { contrast: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Ink bleed"
+                          value={treatment.params.bleed ?? COPY_MACHINE_DEFAULTS.bleed}
+                          defaultValue={COPY_MACHINE_DEFAULTS.bleed}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { bleed: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Ink starve"
+                          value={treatment.params.starve ?? COPY_MACHINE_DEFAULTS.starve}
+                          defaultValue={COPY_MACHINE_DEFAULTS.starve}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { starve: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Slur"
+                          value={treatment.params.slur ?? COPY_MACHINE_DEFAULTS.slur}
+                          defaultValue={COPY_MACHINE_DEFAULTS.slur}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { slur: value })}
                           onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
                         />
                         <Slider
@@ -2251,6 +2294,48 @@ export function InspectorPanel({
             Export CMYK plates
           </button>
           <PrintGamutReadout hex={typeof selected?.fill === 'string' ? selected.fill : undefined} />
+          <section className="press-card" aria-labelledby="press-heading">
+            <h3 id="press-heading" className="property-kicker">
+              Press
+            </h3>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={Boolean(pressRun)}
+                onChange={(event) => onPressOnChange(event.target.checked)}
+              />
+              One press for the whole poster
+            </label>
+            {pressRun ? (
+              <>
+                <p className="hint">
+                  Copier ink, misprints, type strips and Press Check share this run’s ink map, paper and plate slip. Move
+                  type into a wet train to flood it, a dry one to starve it.
+                </p>
+                <div className="preset-row">
+                  <button type="button" title="Roll a new run: new wet and dry trains, new paper, new slip" onClick={onReinkPress}>
+                    Re-ink <span className="seed-chip">#{pressRun.seed}</span>
+                  </button>
+                  <button type="button" aria-pressed={showInkMap} onClick={onToggleInkMap}>
+                    {showInkMap ? 'Hide ink map' : 'Show ink map'}
+                  </button>
+                </div>
+                <Slider
+                  label="Feed angle"
+                  value={pressRun.feedAngle}
+                  defaultValue={0}
+                  min={0}
+                  max={359}
+                  format={formatDegrees}
+                  onChange={onPreviewPressFeed}
+                  onCommit={onCommitPressFeed}
+                />
+              </>
+            ) : (
+              <p className="hint">Off: each effect inks on its own, the way posters made before the press print.</p>
+            )}
+          </section>
           <label className="toggle-row">
             <input type="checkbox" role="switch" checked={pdfRegistrationMarks} onChange={(event) => onPdfRegistrationMarksChange(event.target.checked)} />
             Printer’s marks in PDF export

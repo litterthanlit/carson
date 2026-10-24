@@ -237,6 +237,48 @@ const FEATURES = {
     await capture(page, outDir, 'treatments')
   },
 
+  async 'ink-bleed'(page, outDir) {
+    await openTab(page, 'Layers')
+    await layerSelect(page, 'Oversized headline').click()
+    await page.getByRole('button', { name: 'Instruments' }).click()
+    const instruments = page.getByRole('complementary', { name: 'Instruments' })
+    await instruments.waitFor()
+    await instruments.getByRole('button', { name: /^Ink bleed/ }).click()
+    await page.getByRole('button', { name: 'Move tool' }).click()
+    await openTab(page, 'Treatments')
+    const body = await page.locator('body').innerText()
+    if (!/Copy·/.test(body)) fail('Ink bleed did not land a Copy chip')
+    for (const label of ['Ink bleed', 'Ink starve', 'Slur']) {
+      if (!body.includes(label)) fail(`Copy Machine controls are missing ${label}`)
+    }
+    // The bake runs in a worker; the trail logs the play once it has landed.
+    await page.getByText(/Applied Ink bleed/).first().waitFor({ timeout: 60000 })
+    await capture(page, outDir, 'treatments')
+    await page.getByRole('region', { name: 'Poster canvas' }).screenshot({ path: join(outDir, 'canvas.png') })
+  },
+
+  async press(page, outDir) {
+    await openTab(page, 'Print')
+    const onPress = page.getByRole('switch', { name: 'One press for the whole poster' })
+    if (!(await onPress.isChecked())) fail('A new poster should start on a press')
+    const seedChip = page.locator('.press-card .seed-chip')
+    const seed = await seedChip.innerText()
+    await page.getByRole('button', { name: 'Show ink map' }).click()
+    await page.getByRole('region', { name: 'Poster canvas' }).screenshot({ path: join(outDir, 'ink-map.png') })
+    await page.getByRole('button', { name: 'Hide ink map' }).click()
+    await page.getByRole('button', { name: /^Re-ink/ }).click()
+    const reinked = await seedChip.innerText()
+    if (reinked === seed) fail('Re-ink kept the same run')
+    await page.getByRole('status').filter({ hasText: /Re-inked the press/ }).first().waitFor()
+    await page.keyboard.press('Control+z')
+    await page.waitForFunction((expected) => document.querySelector('.press-card .seed-chip')?.textContent === expected, seed)
+    await onPress.click()
+    if (await onPress.isChecked()) fail('The press switch did not turn off')
+    await onPress.click()
+    if ((await seedChip.innerText()) !== seed) fail('Switching the press back on should return to the same run')
+    await capture(page, outDir, 'press')
+  },
+
   async 'decay-marks'(page, outDir) {
     await openTab(page, 'Layers')
     await layerSelect(page, 'Oversized headline').click()

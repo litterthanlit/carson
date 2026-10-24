@@ -8,6 +8,7 @@ import {
   upsertSavedInstrument as prependSavedInstrument,
   type SavedInstrument,
 } from './instrumentAssets'
+import { newPressRun, readPressRun, type PressRun } from './press'
 import type { Treatment } from './treatments'
 import type { CharacterStyleDef, ParagraphStyleDef } from './textStyles'
 
@@ -17,6 +18,12 @@ export type Artboard = {
   preset: PosterPreset
   canvas: Record<string, unknown>
   posterTreatments?: Treatment[]
+  /**
+   * The run this poster prints in — every ink effect on it shares one sheet,
+   * one ink map and one plate slip. Missing on posters made before the press
+   * (and when turned off): each effect then inks on its own, as it always did.
+   */
+  press?: PressRun
 }
 
 export type DocumentVariant = {
@@ -77,7 +84,7 @@ export function createDefaultDocument(preset: PosterPreset, canvas: Record<strin
     dpi: preset.dpi ?? 300,
     bleedMm: 3,
     palette: ['#111111', '#e11d48', '#05b6d4', '#f6f1e6'],
-    artboards: [{ id, name: preset.name, preset, canvas }],
+    artboards: [{ id, name: preset.name, preset, canvas, press: newPressRun() }],
     activeArtboardId: id,
     variants: [],
     components: [],
@@ -91,6 +98,7 @@ export function createDefaultDocument(preset: PosterPreset, canvas: Record<strin
 export function normalizeDocumentMeta(doc: DocumentMeta): DocumentMeta {
   return {
     ...doc,
+    artboards: (doc.artboards ?? []).map(normalizeArtboardPress),
     instruments: doc.instruments ?? [],
     gestures: doc.gestures ?? [],
     characterStyles: doc.characterStyles ?? [],
@@ -100,6 +108,28 @@ export function normalizeDocumentMeta(doc: DocumentMeta): DocumentMeta {
       kind: component.kind ?? 'object',
     })),
   }
+}
+
+/** A stored press must be a real run; anything else means the poster has none. */
+function normalizeArtboardPress(board: Artboard): Artboard {
+  if (board.press === undefined) return board
+  const press = readPressRun(board.press)
+  if (press) return { ...board, press }
+  const rest = { ...board }
+  delete rest.press
+  return rest
+}
+
+export function readArtboardPress(board: Artboard | undefined): PressRun | null {
+  return board ? readPressRun(board.press) : null
+}
+
+/** Put the poster on a run (or take it off any, with null). */
+export function writeArtboardPress(board: Artboard, press: PressRun | null): Artboard {
+  if (press) return { ...board, press: newPressRun(press.seed, press.feedAngle) }
+  const rest = { ...board }
+  delete rest.press
+  return rest
 }
 
 export function findComponent(doc: DocumentMeta, componentId: string): SavedComponent | undefined {
@@ -137,6 +167,7 @@ export function addArtboard(doc: DocumentMeta, presetId: PosterPresetId, name?: 
     name: name ?? preset.name,
     preset,
     canvas: { version: '7.0.0', objects: [], background: '#f6f1e6' },
+    press: newPressRun(),
   }
   return {
     ...doc,

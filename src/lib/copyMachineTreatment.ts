@@ -14,7 +14,9 @@ import {
   scaleCopyMachineParams,
   type CopyMachineParams,
 } from './copyMachine'
-import { applyCopyMachineChainAsync } from './copyMachineWorkerClient'
+import { applyCopyMachineChainLatest } from './copyMachineWorkerClient'
+import { inkLoadIsIdle } from './inkBleed'
+import { canvasPress, pressRegistration, pressSignature, type Press, type SheetPatch } from './press'
 import { createSeededRandom } from './random'
 import { readTransformBaseline, readTreatments, type Treatment } from './treatments'
 
@@ -111,6 +113,8 @@ export type CopyMachineBakeCacheEntry = {
 }
 
 const bakeCache = new Map<string, CopyMachineBakeCacheEntry>()
+/** Latest render started per source layer — older bakes that finish late are dropped. */
+const renderGenerations = new Map<string, number>()
 
 function cloneImageData(imageData: ImageData): ImageData {
   return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height)
@@ -233,6 +237,45 @@ export function renderCopyMachineChain(
   return applyCopyMachineChain(sourceToImageData(source, exportScale), treatments, exportScale, tensionScale)
 }
 
+/** True when any enabled pass in the chain lays ink unevenly. */
+export function copyMachineChainInks(chain: Pick<Treatment, 'enabled' | 'params'>[]): boolean {
+  return chain.some((step) => step.enabled && !inkLoadIsIdle(copyMachineParamsFromRecord(step.params)))
+}
+
+/** Where a layer's raster lies on the press: its bounding box, in raster px per poster px. */
+export function copyMachineSheetPatch(
+  press: Press,
+  bounds: { left: number; top: number; width: number },
+  rasterWidth: number,
+): SheetPatch {
+  return {
+    press,
+    originX: bounds.left,
+    originY: bounds.top,
+    unit: bounds.width / Math.max(1, rasterWidth),
+  }
+}
+
+/** Cache text for an inked bake on a press: the run, and the spot on the sheet. */
+export function copyMachinePressSignature(press: Press | null, bounds: { left: number; top: number }): string {
+  if (!press) return ''
+  return `|press:${pressSignature(press)}@${bounds.left.toFixed(1)},${bounds.top.toFixed(1)}`
+}
+
+/**
+ * What the ghost re-tones. The echo comes off the same drum as the copy, so
+ * when the drum was inked unevenly it echoes the inked copy — flooded and
+ * starved the same way — rather than inking the original a second time.
+ */
+export function copyMachineGhostInput(
+  params: CopyMachineParams,
+  sourcePixels: ImageData,
+  bakedPixels: ImageData | undefined,
+): { source: ImageData; params: CopyMachineParams } {
+  if (!bakedPixels || inkLoadIsIdle(params)) return { source: sourcePixels, params }
+  return { source: bakedPixels, params: { ...params, bleed: 0, starve: 0, slur: 0 } }
+}
+
 /** Prefer the last enabled treatment — stacking is generational; ghost is the final drum echo. */
 export function resolveCopyMachineGhostParams(treatments: Treatment[]): {
   params: CopyMachineParams
@@ -298,6 +341,10 @@ export async function renderCopyMachineTreatment(
 ) {
   const sourceId = String(readCopyMachineProp(source, 'id') ?? 'layer')
   const enabled = treatments.some((item) => item.type === 'copy-machine' && item.enabled)
+  const generation = (renderGenerations.get(sourceId) ?? 0) + 1
+  renderGenerations.set(sourceId, generation)
+  // A slider moved again while this bake was in the worker: the newer render owns the layer.
+  const superseded = () => renderGenerations.get(sourceId) !== generation
   removeCopyMachineCompanions(canvas, sourceId)
 
   if (!enabled) {
@@ -306,26 +353,41 @@ export async function renderCopyMachineTreatment(
   }
 
   const chain = treatments.filter((item) => item.type === 'copy-machine')
+  const bounds = source.getBoundingRect()
+  // On a press, uneven ink depends on where the layer sits on the sheet.
+  const press = canvasPress(canvas)
+  const inkPress = press && copyMachineChainInks(chain) ? press : null
   const cacheKey = copyMachineBakeCacheKey(
     sourceId,
     chain,
     exportScale,
     tensionScale,
-    copyMachineSourceSignature(source),
+    copyMachineSourceSignature(source) + copyMachinePressSignature(inkPress, bounds),
   )
   const cached = readCopyMachineBakeCache(cacheKey)
   let sourcePixels = cached?.sourceImageData
   let dataUrl = cached?.dataUrl
+  let bakedPixels = cached?.imageData
 
   if (!cached || !dataUrl) {
     revealSourceForRaster(source)
     sourcePixels = sourceToImageData(source, exportScale)
-    const imageData = await applyCopyMachineChainAsync(sourcePixels, chain, exportScale, tensionScale)
-    dataUrl = imageDataToDataUrl(imageData)
-    writeCopyMachineBakeCache(cacheKey, { imageData, dataUrl, sourceImageData: sourcePixels })
+    const sheet = inkPress ? copyMachineSheetPatch(inkPress, bounds, sourcePixels.width) : undefined
+    const baked = await applyCopyMachineChainLatest(
+      `${sourceId}@${exportScale}`,
+      sourcePixels,
+      chain,
+      exportScale,
+      tensionScale,
+      sheet,
+    )
+    if (!baked) return
+    bakedPixels = baked
+    dataUrl = imageDataToDataUrl(bakedPixels)
+    writeCopyMachineBakeCache(cacheKey, { imageData: bakedPixels, dataUrl, sourceImageData: sourcePixels })
+    if (superseded()) return
   }
 
-  const bounds = source.getBoundingRect()
   const blend = sourcePixels && isOpaqueSource(sourcePixels) ? 'source-over' : 'multiply'
   const sourceIndex = canvas.getObjects().indexOf(source)
 
@@ -337,6 +399,10 @@ export async function renderCopyMachineTreatment(
     sourceId,
     insertIndex: sourceIndex,
   })
+  if (superseded()) {
+    canvas.remove(main)
+    return
+  }
 
   const ghostSpec = resolveCopyMachineGhostParams(chain)
   if (ghostSpec) {
@@ -344,11 +410,15 @@ export async function renderCopyMachineTreatment(
     const ghostOpacity = copyMachineGhostOpacity(ghostParams.ghost)
     if (ghostOpacity > 0.01) {
       const ghostRandom = createSeededRandom((ghostSpec.seed ^ GHOST_SEED_OFFSET) >>> 0)
-      const ghostSource = sourcePixels ?? sourceToImageData(source, exportScale)
-      const ghostPixels = renderCopyMachineGhostPass(ghostSource, ghostParams, ghostRandom)
-      const { dx, dy } = copyMachineGhostDelta(ghostParams.ghostOffset)
+      const { source: ghostSource, params: ghostTonal } = copyMachineGhostInput(
+        ghostParams,
+        sourcePixels ?? sourceToImageData(source, exportScale),
+        bakedPixels,
+      )
+      const ghostPixels = renderCopyMachineGhostPass(ghostSource, ghostTonal, ghostRandom)
+      const { dx, dy } = copyMachineGhostDelta(ghostParams.ghostOffset, press ? pressRegistration(press) : undefined)
       const mainIndex = canvas.getObjects().indexOf(main)
-      await placeCompanionImage(canvas, imageDataToDataUrl(ghostPixels), 'multiply', bounds, {
+      const ghost = await placeCompanionImage(canvas, imageDataToDataUrl(ghostPixels), 'multiply', bounds, {
         left: bounds.left + dx,
         top: bounds.top + dy,
         opacity: ghostOpacity,
@@ -356,6 +426,11 @@ export async function renderCopyMachineTreatment(
         sourceId,
         insertIndex: mainIndex >= 0 ? mainIndex : sourceIndex,
       })
+      if (superseded()) {
+        canvas.remove(main)
+        canvas.remove(ghost)
+        return
+      }
     }
   }
 
