@@ -14,6 +14,8 @@ Open the local URL Vite prints.
 ## Features
 
 - Manual canvas editor with text, image, shape, and fragment layers
+- Treatment browser: every treatment as a picture of what it does, searchable; click to try it on the poster, then Keep, Re-roll or Cancel
+- Keyboard shortcuts from one registry — press ? for the full list
 - Move, resize, rotate, duplicate, delete, and reorder layers
 - Slice selected layers into strips or columns
 - Scatter selected layers for controlled layout accidents
@@ -35,6 +37,17 @@ Open the local URL Vite prints.
 - Undo/redo
 
 See [docs/CARSON-METHOD.md](docs/CARSON-METHOD.md) for how David Carson works and how the tools map to it.
+
+## Treatment samples
+
+The browser's tiles are pictures of each treatment on the seed poster, kept in `public/treatment-samples/`. After adding or changing a treatment, re-render them with the dev server running:
+
+```bash
+npm run render-samples                       # every treatment
+npm run render-samples -- scatter ink-loss   # just these
+```
+
+Set `CHROMIUM_PATH` if Playwright's own browser isn't installed. A test fails when a treatment has no sample.
 
 ## Checks
 

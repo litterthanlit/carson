@@ -238,7 +238,16 @@ import { useAsk } from './hooks/useAsk'
 import { AskDialog } from './components/AskDialog'
 import { EditorCanvas } from './components/EditorCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
-import { InstrumentsPalette } from './components/InstrumentsPalette'
+import { TreatmentBrowser, type TreatmentSettings } from './components/TreatmentBrowser'
+import { TrialBar } from './components/TrialBar'
+import {
+  TREATMENT_CATALOG,
+  catalogAvailability,
+  getCatalogEntry,
+  type CatalogEntry,
+  type CatalogId,
+  type CatalogSetting,
+} from './lib/treatmentCatalog'
 import { LiveSelectionHud } from './components/LiveSelectionHud'
 import { ToolRail } from './components/ToolRail'
 import { hasUnsavedWork, type ReplaceReason } from './lib/newPoster'
@@ -363,6 +372,31 @@ type EditorIntent =
 
 type EditorScreen = 'home' | 'editor'
 
+/** The photo the treatment samples use for image-only treatments. */
+const SAMPLE_PHOTO_URL = 'textures/thumbs/print-16.jpg'
+
+const TREATMENT_SETTING_STATUS: Record<CatalogSetting, string> = {
+  typeLegibility: 'Updated type legibility',
+  typeIntensity: 'Updated type intensity',
+  xeroxGeneration: 'Updated xerox generation',
+  decayAmount: 'Updated layer decay amount',
+  accidentIntensity: 'Updated accident intensity',
+}
+
+/** A treatment tried from the browser, on the poster until it is kept or cancelled. */
+type TreatmentTrial = {
+  id: CatalogId
+  /** History head before the treatment ran; Cancel jumps back here. */
+  beforeOpId: string
+  /** History head after it ran; any other edit since then settles the trial as kept. */
+  afterOpId: string
+  /** The layers it ran on, reselected when re-rolling or swapping in another treatment. */
+  targetIds: string[]
+  /** Recorded performance plays before the trial, so Cancel also drops the plays it added. */
+  playsBefore: number
+  label: string
+}
+
 /** Point the canvas at the active poster's press (or none); returns the run's signature. */
 function bindPressForDocument(
   canvas: Canvas,
@@ -456,6 +490,11 @@ function App() {
   const [panelsHidden, setPanelsHidden] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [shortcutSheetOpen, setShortcutSheetOpen] = useState(false)
+  const [trial, setTrial] = useState<TreatmentTrial | null>(null)
+  const trialRef = useRef<TreatmentTrial | null>(null)
+  const trialBusyRef = useRef(false)
+  const [runningTreatment, setRunningTreatment] = useState<CatalogId | null>(null)
+  const [filterGalleryPreset, setFilterGalleryPreset] = useState<string | null>(null)
   const ask = useAsk()
   const [performance, setPerformance] = useState(idlePerformance)
   const [filterGalleryOpen, setFilterGalleryOpen] = useState(false)
@@ -819,8 +858,8 @@ function App() {
   }
 
   // Keep latest values reachable from stable event listeners.
-  const liveRef = useRef({ poster, projectName, projectId, displayScale, fitScale, zoom })
-  liveRef.current = { poster, projectName, projectId, displayScale, fitScale, zoom }
+  const liveRef = useRef({ poster, projectName, projectId, displayScale, fitScale, zoom, performancePlays: performance.plays.length })
+  liveRef.current = { poster, projectName, projectId, displayScale, fitScale, zoom, performancePlays: performance.plays.length }
 
   useEffect(() => {
     markLibraryLoaded()
@@ -1056,6 +1095,241 @@ function App() {
     }
   }
 
+  // Treatment browser: every catalog entry bound to the function that runs it.
+  const catalogActionsRef = useRef<Record<CatalogId, () => unknown>>(null!)
+  catalogActionsRef.current = {
+    scramble: () => scrambleCanvas(),
+    scatter: () => scatterSelected(),
+    strips: () => sliceSelected('horizontal'),
+    columns: () => sliceSelected('vertical'),
+    'type-strip': () => addTypeStrip(),
+    'break-letters': () => breakSelectedType(),
+    'letter-break': () => letterBreakSelected(),
+    'bury-type': () => cloneTypeAsTexture(),
+    'red-echo': () => addRedEchoType(),
+    'copy-machine': () => applyCopyMachineToSelected(),
+    'ink-bleed': () => applyInkBleedToSelected(),
+    xerox: () => applyXeroxToSelected(),
+    misprint: () => addMisprintDuplicate(),
+    'copy-scatter-copy': () => applyCopyScatterCopyGesture(),
+    'run-through-copier': () => applyCopyMachineToPoster(),
+    'surface-wear': () => addPrintScanSurface(),
+    'photocopy-noise': () => addPhotocopyNoise(),
+    'crop-marks': () => addCropMarks(),
+    age: () => applyLayerDecayToSelected(),
+    distress: () => distressSelected(),
+    'ink-loss': () => addLayerDecayMarks('ink-loss'),
+    'fold-marks': () => addLayerDecayMarks('fold'),
+    'wear-overlay': () => addLayerDecayMarks('all'),
+    'decay-offset': () => addLayerDecayOffset(),
+    'duplicate-drift': () => duplicateDriftAccident(),
+    'bad-crop': () => badCropAccident(),
+    'flip-mistake': () => flipMistakeAccident(),
+    collide: () => collideSelectionAccident(),
+    'nudge-layout': () => nudgeLayoutAccident(),
+    'tear-collage': () => tearCollageSelected(),
+    'close-crop': () => aggressiveCropSelected('close'),
+    'off-center-crop': () => aggressiveCropSelected('off-center'),
+    'edge-crop': () => aggressiveCropSelected('edge'),
+    'throw-to-edge': () => cropToPosterEdge(),
+    'cold-wash': () => applyColdWashImage(),
+    'diagonal-texture': () => addDiagonalTexture(),
+    'white-scrapes': () => addWhiteScrapes(),
+    'press-check': () => togglePressCheck(),
+    'magazine-chaos': () => applyPosterStyle('magazine'),
+    'oversized-type': () => applyPosterStyle('type'),
+    'image-fracture': () => applyPosterStyle('image'),
+    'bw-red': () => applyPosterStyle('minimal'),
+    'filter-gallery': () => openFilterGallery(),
+    'texture-gallery': () => openTextureGallery(),
+  }
+
+  function changeTreatmentSetting<K extends keyof TreatmentSettings>(setting: K, value: TreatmentSettings[K]) {
+    if (setting === 'typeLegibility') setTypeLegibility(value as ExpressiveLegibility)
+    else if (setting === 'typeIntensity') setTypeIntensity(value as number)
+    else if (setting === 'xeroxGeneration') setXeroxGeneration(value as number)
+    else if (setting === 'decayAmount') setDecayAmount(value as number)
+    else setAccidentIntensity(value as number)
+  }
+
+  function historyHeadId() {
+    const state = historyLogRef.current
+    return state.ops[state.cursor]?.id ?? null
+  }
+
+  /** Wait for a treatment's history commit, then for the head to stop moving (gestures commit in steps). */
+  async function waitForHistorySettled(beforeOpId: string | null) {
+    const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+    const started = Date.now()
+    while (historyHeadId() === beforeOpId && Date.now() - started < 1500) await wait(40)
+    if (historyHeadId() === beforeOpId) return false
+    let head = historyHeadId()
+    for (let quiet = 0; quiet < 3 && Date.now() - started < 8000; ) {
+      await wait(60)
+      const next = historyHeadId()
+      quiet = next === head ? quiet + 1 : 0
+      head = next
+    }
+    return true
+  }
+
+  function reselectLayers(ids: string[]) {
+    const canvas = canvasRef.current
+    if (!canvas || ids.length === 0) return
+    const objects = canvas.getObjects().filter((object) => ids.includes(String(readObjectProp(object, 'id') ?? '')))
+    if (objects.length === 0) return
+    if (objects.length === 1) canvas.setActiveObject(objects[0])
+    else canvas.setActiveObject(new ActiveSelection(objects, { canvas }))
+    canvas.requestRenderAll()
+    syncSelected()
+  }
+
+  function setTrialState(next: TreatmentTrial | null) {
+    trialRef.current = next
+    setTrial(next)
+  }
+
+  async function revertTrial(pending: TreatmentTrial) {
+    await jumpToOpId(pending.beforeOpId)
+    setPerformance((current) =>
+      current.plays.length > pending.playsBefore ? { ...current, plays: current.plays.slice(0, pending.playsBefore) } : current,
+    )
+    reselectLayers(pending.targetIds)
+  }
+
+  /**
+   * Try a treatment on the poster. Trying another one while a trial is open swaps it in, so
+   * clicking through tiles compares them on the real poster; Keep or any other edit settles it.
+   */
+  async function tryTreatment(id: CatalogId) {
+    if (trialBusyRef.current) return
+    const entry = getCatalogEntry(id)
+    if (entry.kind === 'gallery') {
+      keepTrial({ quiet: true })
+      catalogActionsRef.current[id]()
+      return
+    }
+    trialBusyRef.current = true
+    setRunningTreatment(id)
+    try {
+      const pending = trialRef.current
+      const targetIds = pending ? pending.targetIds : selectedTargetIds()
+      if (pending) {
+        setTrialState(null)
+        await revertTrial(pending)
+      }
+      const beforeOpId = historyHeadId()
+      const playsBefore = liveRef.current.performancePlays
+      await catalogActionsRef.current[id]()
+      if (!beforeOpId || !(await waitForHistorySettled(beforeOpId))) return
+      const head = historyLogRef.current.ops[historyLogRef.current.cursor]
+      if (!head?.id) return
+      setTrialState({ id, beforeOpId, afterOpId: head.id, targetIds, playsBefore, label: head.label })
+    } finally {
+      trialBusyRef.current = false
+      setRunningTreatment(null)
+    }
+  }
+
+  function keepTrial({ quiet = false } = {}) {
+    const pending = trialRef.current
+    if (!pending) return false
+    setTrialState(null)
+    if (!quiet) setStatus(`Kept ${getCatalogEntry(pending.id).name}`)
+    return true
+  }
+
+  async function cancelTrial() {
+    const pending = trialRef.current
+    if (!pending || trialBusyRef.current) return
+    trialBusyRef.current = true
+    try {
+      setTrialState(null)
+      await revertTrial(pending)
+      setStatus(`Cancelled ${getCatalogEntry(pending.id).name}`)
+    } finally {
+      trialBusyRef.current = false
+    }
+  }
+
+  async function rerollTrial() {
+    const pending = trialRef.current
+    if (!pending) return
+    await tryTreatment(pending.id)
+    noteWalkthrough('reroll')
+  }
+
+  /** R and the stage's re-roll: a new variation of the treatment on trial, or of the last accident. */
+  function rerollAction() {
+    return trialRef.current ? rerollTrial() : rerollLast()
+  }
+
+  // Dev only: scripts/render-treatment-samples.mjs drives this to photograph every catalog entry on the
+  // seed poster, so the browser's tiles show what each treatment does before anyone clicks one.
+  const sampleRendererRef = useRef<(id: CatalogId, size: number) => Promise<string>>(null!)
+  if (import.meta.env.DEV) {
+    sampleRendererRef.current = async (id, size) => {
+      const canvas = canvasRef.current
+      if (!canvas) throw new Error('The editor is not open')
+      const entry = getCatalogEntry(id)
+      const byName = (name: string) => canvas.getObjects().find((object) => readObjectProp(object, 'name') === name)
+      canvas.discardActiveObject()
+      let focus: FabricObject[] = []
+      if (entry.sample === 'headline' || entry.sample === 'cluster') {
+        const names = entry.sample === 'cluster' ? ['Oversized headline', 'Mess', 'Graphic'] : ['Oversized headline']
+        focus = names.map(byName).filter((object): object is FabricObject => Boolean(object))
+      } else if (entry.sample === 'image') {
+        const image = await FabricImage.fromURL(SAMPLE_PHOTO_URL, { crossOrigin: 'anonymous' })
+        image.scaleToWidth(poster.width * 0.62)
+        image.set({ left: poster.width * 0.19, top: poster.height * 0.3 })
+        tagObject(image, 'image', 'Sample photo')
+        canvas.add(image)
+        canvas.bringObjectToFront(image)
+        commitHistory('Placed sample photo')
+        focus = [image]
+      }
+      if (focus.length === 1) canvas.setActiveObject(focus[0])
+      else if (focus.length > 1) canvas.setActiveObject(new ActiveSelection(focus, { canvas }))
+      syncSelected()
+      const box = focus.length > 0 ? canvas.getActiveObject()?.getBoundingRect() : undefined
+      const before = historyHeadId()
+      await catalogActionsRef.current[id]()
+      await waitForHistorySettled(before)
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      if (!box) return canvas.toDataURL({ format: 'webp', quality: 0.78, multiplier: size / poster.width })
+      // A square around where the layer started, so moves and crops read against the same frame;
+      // texture treatments get a close-up of the first letters, where grit and ink actually show.
+      const detail = entry.sampleFrame === 'detail'
+      const side = detail
+        ? Math.min(box.width, box.height) * 0.42
+        : Math.min(Math.max(box.width, box.height) * 1.1, poster.width, poster.height)
+      const centerX = detail ? box.left + box.width * 0.3 : box.left + box.width / 2
+      const centerY = detail ? box.top + box.height * 0.3 : box.top + box.height / 2
+      const left = Math.min(Math.max(centerX - side / 2, 0), poster.width - side)
+      const top = Math.min(Math.max(centerY - side / 2, 0), poster.height - side)
+      return canvas.toDataURL({ format: 'webp', quality: 0.78, left, top, width: side, height: side, multiplier: size / side })
+    }
+  }
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      const samples = {
+        ids: (TREATMENT_CATALOG as readonly CatalogEntry[]).filter((entry) => entry.sample !== 'none').map((entry) => entry.id),
+        loadSeed: () => {
+          localStorage.setItem(ONBOARDING_KEY, 'done')
+          setCommandOpen(false)
+          applyEditorIntent({ kind: 'seed' })
+        },
+        ready: () => screenRef.current === 'editor' && (canvasRef.current?.getObjects().length ?? 0) > 5,
+        render: (id: CatalogId, size: number) => sampleRendererRef.current(id, size),
+      }
+      ;(window as unknown as { __carsonSamples?: typeof samples }).__carsonSamples = samples
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Results land in their tab without taking the person away from the one they're using: the tab gets a dot.
   function flagInspectorTab(tab: InspectorTab) {
     if (tab === inspectorTab) return
@@ -1149,14 +1423,18 @@ function App() {
     cancel: () => {
       if (warpEditRef.current) return finishWarpEdit(false)
       if (bezierPenActionsRef.current.cancel()) return
+      if (trialRef.current) return void cancelTrial()
       if (pixelSelectionRef.current) return setPixelSelection(null)
       canvasRef.current?.discardActiveObject()
       canvasRef.current?.requestRenderAll()
       syncSelected()
     },
-    confirm: () => {
+    confirm: (event) => {
+      // Enter on a focused button presses that button.
+      if (event?.target instanceof Element && event.target.closest('button, a, [role="button"]')) return false
       if (warpEditRef.current) return finishWarpEdit(true)
-      return bezierPenActionsRef.current.finish()
+      if (bezierPenActionsRef.current.finish()) return true
+      return keepTrial()
     },
     nudge: (event) => (event ? nudgeFromKey(event, 1) : false),
     nudgeFar: (event) => (event ? nudgeFromKey(event, 10) : false),
@@ -1203,7 +1481,7 @@ function App() {
     brushSmaller: () => resizeBrushFromKey(-1),
     brushLarger: () => resizeBrushFromKey(1),
     // Play
-    reroll: () => void rerollLast(),
+    reroll: () => void rerollAction(),
     scramble: () => void scrambleCanvas(),
     forkVariant: () => void forkVariation(),
     openCompsGallery: () => setCompsGalleryOpen(true),
@@ -1274,6 +1552,14 @@ function App() {
       window.removeEventListener('keyup', onKeyUp)
     }
   }, [])
+
+  // Any edit after a trial (or an undo past it) settles the trial: it is no longer the last thing done.
+  useEffect(() => {
+    const pending = trialRef.current
+    if (!pending || trialBusyRef.current) return
+    const state = historyLogRef.current
+    if (state.ops[state.cursor]?.id !== pending.afterOpId) setTrialState(null)
+  }, [trailCursor, trailOpIds, historyLogRef])
 
   // Cmd/Ctrl + wheel zoom (needs a non-passive native listener).
   useEffect(() => {
@@ -4125,12 +4411,12 @@ function App() {
   }
 
   async function applyLayerDecayToSelected(seed = newSeed()) {
-    void playLayerInstrument('age', seed)
+    await playLayerInstrument('age', seed)
   }
 
   function addLayerDecayMarks(kind: 'ink-loss' | 'fold' | 'all', seed = newSeed()) {
     const id: InstrumentId = kind === 'fold' ? 'fold' : kind === 'all' ? 'wear' : 'ink-loss'
-    void playLayerInstrument(id, seed)
+    return playLayerInstrument(id, seed)
   }
 
   async function addLayerDecayOffset() {
@@ -4163,7 +4449,8 @@ function App() {
     )
   }
 
-  function openFilterGallery() {
+  function openFilterGallery(presetId?: string) {
+    setFilterGalleryPreset(presetId ?? null)
     setFilterGalleryOpen(true)
   }
 
@@ -4225,7 +4512,7 @@ function App() {
   function applyColdWashImage() {
     const object = activeObject()
     if (!object || object.type !== 'image') return
-    void applyTreatmentToSelection('cold-wash', {}, 'cold wash')
+    return applyTreatmentToSelection('cold-wash', {}, 'cold wash')
   }
 
   async function applyXeroxToSelected(seed = newSeed()) {
@@ -4236,7 +4523,7 @@ function App() {
   }
 
   async function applyCopyMachineToSelected(seed = newSeed()) {
-    void applyTreatmentToSelection(
+    await applyTreatmentToSelection(
       'copy-machine',
       copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS),
       'copy machine',
@@ -4276,7 +4563,7 @@ function App() {
   }
 
   async function addMisprintDuplicate(seed = newSeed()) {
-    void playLayerInstrument('misprint', seed)
+    await playLayerInstrument('misprint', seed)
   }
 
   function accidentTargets() {
@@ -4516,7 +4803,7 @@ function App() {
   }
 
   function addTypeStrip(seed = newSeed()) {
-    void playLayerInstrument('type-strips', seed)
+    return playLayerInstrument('type-strips', seed)
   }
 
   function breakSelectedType(seed = newSeed()) {
@@ -4532,7 +4819,7 @@ function App() {
       { intensity: typeIntensity, legibility: legibilityToParam(typeLegibility) },
       seed,
     )
-    void refreshTreatmentStack(object).then(() => {
+    return refreshTreatmentStack(object).then(() => {
       flagInspectorTab('treatments')
       trackChaos('Break letters', seed, targetIds, (next) => breakSelectedType(next))
       commitHistory(`Broke type into expressive glyphs #${seed}`)
@@ -4551,7 +4838,7 @@ function App() {
     if (!readTransformBaseline(object)) captureTransformBaseline(object)
     if (existing) updateTreatment(object, existing.id, { seed })
     else addTreatment(object, 'letter-break', { ...LETTER_BREAK_DEFAULTS }, seed)
-    void refreshTreatmentStack(object).then(() => {
+    return refreshTreatmentStack(object).then(() => {
       flagInspectorTab('treatments')
       commitHistory(`Broke letters #${seed}`)
       setStatus('Broke the letters into their strokes — break again for a new cut')
@@ -4582,7 +4869,7 @@ function App() {
   }
 
   async function distressSelected(seed = newSeed()) {
-    void applyTreatmentToSelection('distress', { intensity: 70 }, 'distress', seed)
+    await applyTreatmentToSelection('distress', { intensity: 70 }, 'distress', seed)
   }
 
   function addPhotocopyNoise(seed = newSeed()) {
@@ -5567,47 +5854,6 @@ function App() {
     })),
     { id: 'distort', label: 'Distort / perspective', keywords: ['perspective', 'distort', 'transform', 'corner', 'skew', 'free transform'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('distort') },
     { id: 'warp', label: 'Warp', keywords: ['warp', 'mesh', 'bend', 'transform', 'puppet'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('mesh') },
-    { id: 'filter-gallery', shortcut: 'filterGallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
-    { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
-    { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
-    {
-      id: 'copy-machine',
-      label: 'Copy machine',
-      keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier'],
-      scope: 'selection',
-      disabled: !selected,
-      run: () => void applyCopyMachineToSelected(),
-    },
-    {
-      id: 'ink-bleed',
-      label: 'Ink bleed',
-      keywords: ['ink bleed', 'ink spread', 'flood', 'starve', 'blot', 'slur', 'smear', 'over-inked', 'stamp', 'copier'],
-      scope: 'selection',
-      disabled: !selected,
-      run: () => void applyInkBleedToSelected(),
-    },
-    {
-      id: 'copy-machine-poster',
-      label: 'Run through the copier',
-      keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier', 'poster', 'all layers'],
-      scope: 'canvas',
-      run: () => void applyCopyMachineToPoster(),
-    },
-    {
-      id: 'press-check',
-      label: isPressCheckOn(posterTreatments) ? 'Turn off Press Check' : 'Press Check',
-      keywords: ['press check', 'print', 'ink spread', 'misregistration', 'paper tooth', 'press'],
-      scope: 'canvas',
-      run: () => void togglePressCheck(),
-    },
-    {
-      id: 'gesture-copy-scatter-copy',
-      label: 'Copy → Scatter → Copy',
-      keywords: ['gesture', 'copy machine', 'scatter', 'macro', 'chain'],
-      scope: 'selection',
-      disabled: !selected,
-      run: () => void applyCopyScatterCopyGesture(),
-    },
     {
       id: 'gesture-record',
       label: performance.recording ? 'Stop recording gesture' : 'Record gesture',
@@ -5639,21 +5885,6 @@ function App() {
       disabled: !selected,
       run: () => void applyGestureToSelection(gesture),
     })),
-    { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
-    {
-      id: 'scramble', shortcut: 'scramble',
-      label: 'Scramble layout',
-      keywords: ['scramble', 'shuffle', 'rearrange', 'structure', 'layout', 'riff'],
-      scope: 'canvas',
-      disabled: scrambleSourceObjects().length === 0,
-      run: () => void scrambleCanvas(),
-    },
-    { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => void applyLayerDecayToSelected() },
-    { id: 'ink-loss', label: 'Ink loss', keywords: ['decay', 'ink', 'chip', 'wear'], scope: 'selection', disabled: !selected, run: () => addLayerDecayMarks('ink-loss') },
-    { id: 'fold-marks', label: 'Fold marks', keywords: ['decay', 'fold', 'crease', 'wear'], scope: 'selection', disabled: !selected, run: () => addLayerDecayMarks('fold') },
-    { id: 'misprint', label: 'Misprint offset', keywords: ['misprint', 'offset', 'ghost', 'print', 'echo'], scope: 'selection', disabled: !selected, run: () => void addMisprintDuplicate() },
-    { id: 'type-strips', label: 'Type strip', keywords: ['type', 'strip', 'repeat', 'print'], scope: 'selection', disabled: !selectedIsText, run: () => addTypeStrip() },
-    { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
     { id: 'export', shortcut: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
     { id: 'export-plates', label: 'Export CMYK plates', keywords: ['cmyk', 'plates', 'print', 'separation', 'cyan', 'magenta'], scope: 'canvas', run: () => void exportCmykPlates() },
@@ -5686,14 +5917,6 @@ function App() {
       disabled: !selected,
       run: () => void weaveSelection(),
     },
-    {
-      id: 'letter-break',
-      label: 'Letter break',
-      keywords: ['break', 'letters', 'strokes', 'cut', 'split', 'type', 'fragment', 'scalpel'],
-      scope: 'selection',
-      disabled: !selected,
-      run: () => letterBreakSelected(),
-    },
     { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => void unweaveSelected() },
     {
       id: 'crumple-sheet',
@@ -5701,13 +5924,6 @@ function App() {
       keywords: ['crumple', 'crease', 'fold', 'wrinkle', 'paper', 'texture', 'real', 'material'],
       scope: 'canvas',
       run: () => void crumpleSheet(),
-    },
-    {
-      id: 'crop-marks',
-      label: 'Add crop marks',
-      keywords: ['crop', 'trim', 'registration', 'marks', 'print', 'proof'],
-      scope: 'canvas',
-      run: () => addCropMarks(),
     },
     {
       id: 'frame-tool', shortcut: 'frameTool',
@@ -5833,6 +6049,25 @@ function App() {
       disabled: !activePressRun,
       run: () => setPressOn(false),
     },
+    ...(TREATMENT_CATALOG as readonly CatalogEntry[]).map((entry) => {
+      const id = entry.id as CatalogId
+      const { enabled } = catalogAvailability(entry, {
+        hasSelection: Boolean(selected),
+        selectionIsText: selectedIsText,
+        selectionIsImage: selectedIsImage,
+        layerCount: layers.length,
+      })
+      const on = entry.kind === 'toggle' && isPressCheckOn(posterTreatments)
+      return {
+        id: `treatment-${entry.id}`,
+        shortcut: entry.shortcut,
+        label: on ? `Turn off ${entry.name}` : entry.kind === 'gallery' ? `Open ${entry.name.toLowerCase()}` : entry.name,
+        keywords: ['treatment', 'instrument', ...entry.keywords, entry.description],
+        scope: entry.scope === 'poster' ? ('canvas' as const) : ('selection' as const),
+        disabled: !enabled,
+        run: () => void tryTreatment(id),
+      }
+    }),
   ]
 
   return (
@@ -5929,6 +6164,7 @@ function App() {
         {filterGalleryOpen ? (
           <FilterGalleryModal
             open
+            initialPresetId={filterGalleryPreset ?? undefined}
             source={selectedObject}
             selectedIsImage={selectedIsImage}
             onApply={applyFilterFromGallery}
@@ -5991,7 +6227,15 @@ function App() {
         onTogglePanels={() => setPanelsHidden((hidden) => !hidden)}
       />
 
-      <section className={panelsHidden ? 'workspace panels-hidden' : 'workspace'}>
+      <section
+        className={[
+          'workspace',
+          panelsHidden ? 'panels-hidden' : null,
+          editorTool === 'instruments' && !panelsHidden ? 'has-browser' : null,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         <ToolRail
           tool={editorTool}
           penMode={penMode}
@@ -6016,10 +6260,23 @@ function App() {
           onBrushModeChange={(erase) => setBrush((current) => ({ ...current, erase }))}
         />
         {editorTool === 'instruments' && !panelsHidden ? (
-          <InstrumentsPalette
-            selected={Boolean(selected)}
-            selectedIsImage={selectedIsImage}
-            selectedIsText={selectedIsText}
+          <TreatmentBrowser
+            context={{
+              hasSelection: Boolean(selected),
+              selectionIsText: selectedIsText,
+              selectionIsImage: selectedIsImage,
+              layerCount: layers.length,
+            }}
+            settings={{ typeLegibility, typeIntensity, xeroxGeneration, decayAmount, accidentIntensity }}
+            onSettingChange={changeTreatmentSetting}
+            onSettingCommit={(setting) => setStatus(TREATMENT_SETTING_STATUS[setting])}
+            pressCheckActive={isPressCheckOn(posterTreatments)}
+            trialId={trial?.id ?? null}
+            runningId={runningTreatment}
+            onTry={(id) => void tryTreatment(id)}
+            onOpenFilter={(presetId) => openFilterGallery(presetId)}
+            appliedCount={selectedTreatments.length}
+            onShowApplied={() => changeInspectorTab('treatments')}
             recording={performance.recording}
             performanceLabel={
               performance.plays.length > 0
@@ -6029,67 +6286,13 @@ function App() {
                   : 'Record a chain of plays'
             }
             canSavePerformance={performance.plays.length > 0}
-            savedInstruments={documentMeta?.instruments ?? []}
-            savedGestures={documentMeta?.gestures ?? []}
             onToggleRecording={toggleGestureRecording}
             onSavePerformance={saveRecordedPerformance}
             onClearPerformance={clearRecordedPerformance}
+            savedInstruments={documentMeta?.instruments ?? []}
+            savedGestures={documentMeta?.gestures ?? []}
             onApplySavedInstrument={(asset) => void playSavedInstrument(asset)}
             onApplySavedGesture={(gesture) => void applyGestureToSelection(gesture)}
-            typeLegibility={typeLegibility}
-            typeIntensity={typeIntensity}
-            xeroxGeneration={xeroxGeneration}
-            accidentIntensity={accidentIntensity}
-            decayAmount={decayAmount}
-            layerCount={layers.length}
-            onSliceHorizontal={() => void sliceSelected('horizontal')}
-            onSliceVertical={() => void sliceSelected('vertical')}
-            onScatter={() => scatterSelected()}
-            onScramble={() => void scrambleCanvas()}
-            scrambleDisabled={scrambleSourceObjects().length === 0}
-            onApplyPosterStyle={applyPosterStyle}
-            onTypeLegibilityChange={setTypeLegibility}
-            onTypeIntensityChange={setTypeIntensity}
-            onTypeIntensityCommit={() => setStatus('Updated type intensity')}
-            onXeroxGenerationChange={setXeroxGeneration}
-            onXeroxGenerationCommit={() => setStatus('Updated xerox generation')}
-            onAccidentIntensityChange={setAccidentIntensity}
-            onAccidentIntensityCommit={() => setStatus('Updated accident intensity')}
-            onDecayAmountChange={setDecayAmount}
-            onDecayAmountCommit={() => setStatus('Updated layer decay amount')}
-            onAddTypeStrip={() => addTypeStrip()}
-            onDistressSelected={() => void distressSelected()}
-            onAddPhotocopyNoise={() => addPhotocopyNoise()}
-            onTearCollage={() => void tearCollageSelected()}
-            onAddCropMarks={addCropMarks}
-            onBreakSelectedType={() => breakSelectedType()}
-            onLetterBreak={() => letterBreakSelected()}
-            onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
-            onApplyXerox={() => void applyXeroxToSelected()}
-            onApplyCopyMachine={() => void applyCopyMachineToSelected()}
-            onApplyInkBleed={() => void applyInkBleedToSelected()}
-            onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
-            onApplyCopyScatterCopyGesture={() => void applyCopyScatterCopyGesture()}
-            onAddMisprintDuplicate={() => void addMisprintDuplicate()}
-            onAddPrintScanSurface={() => addPrintScanSurface()}
-            onApplyLayerDecay={() => void applyLayerDecayToSelected()}
-            onAddLayerDecayMarks={(kind) => addLayerDecayMarks(kind)}
-            onAddLayerDecayOffset={() => void addLayerDecayOffset()}
-            onDuplicateDriftAccident={() => void duplicateDriftAccident()}
-            onBadCropAccident={() => void badCropAccident()}
-            onFlipMistakeAccident={() => void flipMistakeAccident()}
-            onCollideSelectionAccident={collideSelectionAccident}
-            onNudgeLayoutAccident={() => nudgeLayoutAccident()}
-            onApplyColdWashImage={applyColdWashImage}
-            onAddDiagonalTexture={addDiagonalTexture}
-            onAddWhiteScrapes={() => addWhiteScrapes()}
-            pressCheckActive={isPressCheckOn(posterTreatments)}
-            onTogglePressCheck={() => void togglePressCheck()}
-            onAddRedEchoType={addRedEchoType}
-            onAggressiveCrop={(mode) => void aggressiveCropSelected(mode)}
-            onCropToPosterEdge={() => void cropToPosterEdge()}
-            onOpenFilterGallery={openFilterGallery}
-            onOpenTextureGallery={openTextureGallery}
           />
         ) : null}
 
@@ -6100,7 +6303,18 @@ function App() {
           status={status}
           isPanMode={isPanMode}
           documentMeta={documentMeta}
-          lastChaos={lastChaos}
+          lastChaos={trial ? null : lastChaos}
+          trialBar={
+            trial ? (
+              <TrialBar
+                name={getCatalogEntry(trial.id).name}
+                detail={trial.label.match(/#\d+/)?.[0]}
+                onKeep={() => keepTrial()}
+                onReroll={() => void rerollTrial()}
+                onCancel={() => void cancelTrial()}
+              />
+            ) : null
+          }
           presetId={presetId}
           customSize={customSize}
           canvasEl={canvasEl}
@@ -6238,7 +6452,7 @@ function App() {
           onStepZoom={stepZoom}
           onZoom100={() => zoomAround(1)}
           onZoomFit={() => setZoom(null)}
-          onReroll={() => void rerollLast()}
+          onReroll={() => void rerollAction()}
           onPanMouseDown={handlePanMouseDown}
           onPanMouseMove={handlePanMouseMove}
           onPanMouseUp={handlePanMouseUp}

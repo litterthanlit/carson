@@ -5,11 +5,3 @@ export function ScopeSel() {
     </span>
   )
 }
-
-export function ScopeAll() {
-  return (
-    <span className="scope-badge scope-all" aria-hidden="true">
-      ALL
-    </span>
-  )
-}

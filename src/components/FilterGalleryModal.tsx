@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import type { FabricObject } from 'fabric'
 import {
   FILTER_CATEGORIES,
+  FILTER_PRESETS,
   formatFilterParam,
   isPresetApplicable,
   mergePresetParams,
@@ -34,6 +35,8 @@ export type FilterGalleryModalProps = {
   selectedIsImage: boolean
   onApply: (preset: FilterPreset, params: Record<string, number>) => void
   onClose: () => void
+  /** Open on this filter (picked from the treatment browser) instead of the last one used. */
+  initialPresetId?: string
 }
 
 export function FilterGalleryModal({
@@ -42,9 +45,16 @@ export function FilterGalleryModal({
   selectedIsImage,
   onApply,
   onClose,
+  initialPresetId,
 }: FilterGalleryModalProps) {
-  // Reopen on the last filter and settings, as long as that filter still fits this layer.
-  const [initial] = useState(() => loadFilterGalleryState(selectedIsImage))
+  // Reopen on the requested filter, or the last filter and settings as long as that filter still fits this layer.
+  const [initial] = useState(() => {
+    const requested = initialPresetId ? FILTER_PRESETS.find((preset) => preset.id === initialPresetId) : undefined
+    if (requested && isPresetApplicable(requested, selectedIsImage)) {
+      return { category: requested.category, presetId: requested.id, params: { ...requested.defaultParams } }
+    }
+    return loadFilterGalleryState(selectedIsImage)
+  })
   const [category, setCategory] = useState<FilterCategory>(initial.category)
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(initial.presetId)
   const [params, setParams] = useState<Record<string, number>>(initial.params)

@@ -70,8 +70,8 @@ export const SHORTCUTS = [
   { id: 'delete', label: 'Delete layer', group: 'Edit', keys: ['Delete', 'Backspace'], hint: 'masks out a pixel selection instead' },
   { id: 'group', label: 'Group layers', group: 'Edit', keys: ['Mod+G'] },
   { id: 'ungroup', label: 'Ungroup', group: 'Edit', keys: ['Mod+Shift+G'] },
-  { id: 'cancel', label: 'Cancel or deselect', group: 'Edit', keys: ['Escape'], preventDefault: false },
-  { id: 'confirm', label: 'Finish pen path or warp', group: 'Edit', keys: ['Enter'] },
+  { id: 'cancel', label: 'Cancel a treatment, or deselect', group: 'Edit', keys: ['Escape'], preventDefault: false },
+  { id: 'confirm', label: 'Keep a treatment, or finish a pen path or warp', group: 'Edit', keys: ['Enter'] },
   { id: 'nudge', label: 'Nudge 1 px', group: 'Edit', keys: ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'], display: ['Arrows'] },
   {
     id: 'nudgeFar',
@@ -137,7 +137,7 @@ export const SHORTCUTS = [
   { id: 'maskReveal', label: 'Reveal instead of conceal', group: 'Tools', keys: ['Alt+Drag'], hint: 'mask tool', gesture: true },
 
   // Play
-  { id: 'reroll', label: 'Re-roll the last accident', group: 'Play', keys: ['R'] },
+  { id: 'reroll', label: 'Re-roll the treatment or last accident', group: 'Play', keys: ['R'] },
   { id: 'scramble', label: 'Scramble the layout', group: 'Play', keys: ['Shift+R'] },
   { id: 'forkVariant', label: 'Fork a variant', group: 'Play', keys: ['Mod+B'] },
   { id: 'openCompsGallery', label: 'Comps gallery', group: 'Play', keys: ['Mod+Shift+B'] },
