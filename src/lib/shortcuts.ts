@@ -117,6 +117,7 @@ export const SHORTCUTS = [
   { id: 'zoomIn', label: 'Zoom in', group: 'View', keys: ['Mod+=', 'Mod++'], whileTyping: 'allow' },
   { id: 'zoomOut', label: 'Zoom out', group: 'View', keys: ['Mod+-'], whileTyping: 'allow' },
   { id: 'toggleLayoutGrid', label: 'Layout grid', group: 'View', keys: ['G'] },
+  { id: 'togglePanels', label: 'Show or hide panels', group: 'View', keys: ['Mod+\\'], whileTyping: 'allow' },
   { id: 'pan', label: 'Pan', group: 'View', keys: ['Space+Drag'], gesture: true },
   { id: 'zoomWheel', label: 'Zoom at the pointer', group: 'View', keys: ['Mod+Scroll'], gesture: true },
 

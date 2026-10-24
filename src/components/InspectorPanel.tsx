@@ -1,4 +1,4 @@
-import { useCallback, useState, type RefObject } from 'react'
+import { useCallback, useState, type KeyboardEvent, type RefObject } from 'react'
 import {
   AlignLeft,
   Blend,
@@ -14,7 +14,7 @@ import {
   EyeOff,
   Grid3x3,
   Image as ImageIcon,
-  Layers,
+  PanelRightClose,
   Pipette,
   Printer,
   SendToBack,
@@ -69,10 +69,14 @@ import { FrameControls } from './FrameControls'
 import { FRAME_COLOR, type FrameSpec } from '../lib/frameHandles'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
 import { ariaKeyShortcuts, shortcutKeys, withShortcut } from '../lib/shortcuts'
+import { LayersDock } from './LayersDock'
 
 export type InspectorPanelProps = {
   inspectorTab: InspectorTab
   onInspectorTabChange: (tab: InspectorTab) => void
+  /** Tabs whose content changed while another tab was open. */
+  tabBadges?: ReadonlySet<InspectorTab>
+  onHidePanels?: () => void
   projectName: string
   onProjectNameChange: (name: string) => void
   exportFormat: ExportFormat
@@ -275,9 +279,19 @@ function PrintGamutReadout({ hex }: { hex: string | undefined }) {
   )
 }
 
+const INSPECTOR_TABS = [
+  ['inspect', 'Inspect', SlidersHorizontal],
+  ['treatments', 'Treatments', Blend],
+  ['assets', 'Assets', ImageIcon],
+  ['layout', 'Layout', Grid3x3],
+  ['print', 'Print', Printer],
+] as const
+
 export function InspectorPanel({
   inspectorTab,
   onInspectorTabChange,
+  tabBadges,
+  onHidePanels,
   projectName,
   onProjectNameChange,
   exportFormat,
@@ -465,6 +479,23 @@ export function InspectorPanel({
   onNewArtboardPresetChange,
   onExportAllArtboards,
 }: InspectorPanelProps) {
+  // Arrow keys move between tabs (WAI-ARIA tabs pattern); only the active tab is in the Tab order.
+  const onTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const index = INSPECTOR_TABS.findIndex(([id]) => id === inspectorTab)
+    const last = INSPECTOR_TABS.length - 1
+    const next =
+      event.key === 'ArrowRight' ? (index + 1) % INSPECTOR_TABS.length
+      : event.key === 'ArrowLeft' ? (index - 1 + INSPECTOR_TABS.length) % INSPECTOR_TABS.length
+      : event.key === 'Home' ? 0
+      : event.key === 'End' ? last
+      : null
+    if (next === null || !(event.target as HTMLElement).matches('[role="tab"]')) return
+    event.preventDefault()
+    const id = INSPECTOR_TABS[next][0]
+    onInspectorTabChange(id)
+    document.getElementById(`inspector-tab-${id}`)?.focus()
+  }
+
   // Collapsed layer groups live here so they survive switching inspector tabs.
   const [collapsedLayerIds, setCollapsedLayerIds] = useState<ReadonlySet<string>>(() => new Set())
   const toggleLayerCollapsed = useCallback((id: string) => {
@@ -575,31 +606,42 @@ export function InspectorPanel({
 
   return (
     <aside className="rail inspector glass-panel" aria-label="Inspector">
-      <div className="inspector-tabs" role="tablist" aria-label="Inspector panels">
-        {(
-          [
-            ['inspect', 'Inspect', SlidersHorizontal],
-            ['treatments', 'Treatments', Blend],
-            ['layers', 'Layers', Layers],
-            ['assets', 'Assets', ImageIcon],
-            ['layout', 'Layout', Grid3x3],
-            ['print', 'Print', Printer],
-          ] as const
-        ).map(([id, label, Icon]) => (
+      <div className="inspector-tabs" role="tablist" aria-label="Inspector panels" onKeyDown={onTabKeyDown}>
+        {INSPECTOR_TABS.map(([id, label, Icon]) => {
+          const flagged = tabBadges?.has(id) && inspectorTab !== id
+          return (
+            <button
+              key={id}
+              id={`inspector-tab-${id}`}
+              type="button"
+              role="tab"
+              title={flagged ? `${label} — updated` : label}
+              aria-label={flagged ? `${label}, updated` : label}
+              aria-selected={inspectorTab === id}
+              aria-controls="inspector-tabpanel"
+              tabIndex={inspectorTab === id ? 0 : -1}
+              className={inspectorTab === id ? 'active' : undefined}
+              onClick={() => onInspectorTabChange(id)}
+            >
+              <Icon size={14} />
+              {flagged ? <span className="tab-badge" aria-hidden="true" /> : null}
+            </button>
+          )
+        })}
+        {onHidePanels ? (
           <button
-            key={id}
             type="button"
-            role="tab"
-            title={label}
-            aria-label={label}
-            aria-selected={inspectorTab === id}
-            className={inspectorTab === id ? 'active' : undefined}
-            onClick={() => onInspectorTabChange(id)}
+            className="inspector-hide"
+            title={withShortcut('Hide panels', 'togglePanels')}
+            aria-label="Hide panels"
+            aria-keyshortcuts={ariaKeyShortcuts('togglePanels')}
+            onClick={onHidePanels}
           >
-            <Icon size={14} />
+            <PanelRightClose size={14} />
           </button>
-        ))}
+        ) : null}
       </div>
+      <div className="inspector-body" id="inspector-tabpanel" role="tabpanel" aria-labelledby={`inspector-tab-${inspectorTab}`}>
 
       {inspectorTab === 'treatments' ? (
         <div className="panel-section">
@@ -1076,133 +1118,6 @@ export function InspectorPanel({
               </div>
             </>
           ) : null}
-        </div>
-      ) : null}
-
-      {inspectorTab === 'layers' ? (
-        <div className="panel-section layers-section">
-          <div className="layers-header">
-            <h2>Layers</h2>
-            <span className="layers-count" aria-label={`${layers.length} layers`}>
-              {layers.length}
-            </span>
-          </div>
-          <div className={selected ? 'layers-props' : 'layers-props is-disabled'}>
-            <div className="layers-blend" title="Blend mode">
-              {selected ? (
-                <BlendModePicker
-                  value={selected.blendMode ?? 'source-over'}
-                  onPreview={onPreviewBlendMode}
-                  onChange={onApplyBlendMode}
-                />
-              ) : (
-                <button type="button" className="layers-blend-placeholder" disabled>
-                  Normal
-                </button>
-              )}
-            </div>
-            <Slider
-              variant="field"
-              label="Opacity"
-              defaultValue={100}
-              disabled={!selected}
-              value={selected ? Math.round(selected.opacity * 100) : 100}
-              min={5}
-              max={100}
-              format={formatPercent}
-              onChange={(value) => onUpdateActive({ opacity: value / 100 })}
-              onCommit={() => onFinalizeActive('Changed opacity')}
-            />
-          </div>
-          <LayersPanel
-            layers={layers}
-            selectedIds={selectedLayerIds}
-            renamingLayerId={renamingLayerId}
-            dragLayerId={dragLayerId}
-            onSelect={onSelectLayer}
-            onToggleVisibility={onToggleLayerVisibility}
-            onToggleLock={onToggleLayerLock}
-            onRenameStart={onRenameLayerStart}
-            onRenameEnd={onRenameLayerEnd}
-            onDragStart={onDragLayerStart}
-            onDragOver={onDragLayerOver}
-            onDragEnd={onDragLayerEnd}
-            onZoomToLayer={onZoomToLayer}
-            collapsedIds={collapsedLayerIds}
-            onToggleCollapsed={toggleLayerCollapsed}
-          />
-          <div className="layers-footer" role="toolbar" aria-label="Layer actions">
-            {onAddAdjustment ? (
-              <label className="layers-footer-button layers-adjustment" title="New adjustment layer">
-                <Contrast size={15} aria-hidden="true" />
-                <select
-                  aria-label="Add adjustment layer"
-                  value=""
-                  onChange={(event) => {
-                    const type = event.target.value as AdjustmentType
-                    if (type) onAddAdjustment(type)
-                  }}
-                >
-                  <option value="" disabled>
-                    Adjustment layer
-                  </option>
-                  {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
-                    <option key={type} value={type}>
-                      {ADJUSTMENT_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <button
-              type="button"
-              className="layers-footer-button"
-              title={withShortcut('Group layers', 'group')}
-              aria-keyshortcuts={ariaKeyShortcuts('group')}
-              aria-label="Group layers"
-              disabled={!canGroupLayers}
-              onClick={onGroupLayers}
-            >
-              <Group size={15} />
-            </button>
-            <button
-              type="button"
-              className="layers-footer-button"
-              title={withShortcut('Ungroup', 'ungroup')}
-              aria-keyshortcuts={ariaKeyShortcuts('ungroup')}
-              aria-label="Ungroup"
-              disabled={!canUngroupLayers}
-              onClick={onUngroupLayers}
-            >
-              <Ungroup size={15} />
-            </button>
-            <span className="layers-footer-spacer" />
-            {onDuplicateLayer ? (
-              <button
-                type="button"
-                className="layers-footer-button"
-                title={withShortcut('Duplicate layer', 'duplicate')}
-                aria-keyshortcuts={ariaKeyShortcuts('duplicate')}
-                aria-label="Duplicate layer"
-                disabled={!selected}
-                onClick={onDuplicateLayer}
-              >
-                <Copy size={15} />
-              </button>
-            ) : null}
-            {onDeleteLayer ? (
-              <button
-                type="button"
-                className="layers-footer-button"
-                title="Delete layer (⌫)"
-                aria-label="Delete layer"
-                disabled={!selected}
-                onClick={onDeleteLayer}
-              >
-                <Trash2 size={15} />
-              </button>
-            ) : null}
-          </div>
         </div>
       ) : null}
 
@@ -2319,6 +2234,128 @@ export function InspectorPanel({
           <p className="hint">Bleed, trim, and safe are document chrome — they never bake into artwork. PDF marks sit in the slug; SVG keeps type and vectors editable.</p>
         </div>
       ) : null}
+      </div>
+      <LayersDock count={layers.length}>
+        <div className="layers-section">
+            <div className={selected ? 'layers-props' : 'layers-props is-disabled'}>
+              <div className="layers-blend" title="Blend mode">
+                {selected ? (
+                  <BlendModePicker
+                    value={selected.blendMode ?? 'source-over'}
+                    onPreview={onPreviewBlendMode}
+                    onChange={onApplyBlendMode}
+                  />
+                ) : (
+                  <button type="button" className="layers-blend-placeholder" disabled>
+                    Normal
+                  </button>
+                )}
+              </div>
+              <Slider
+                variant="field"
+                label="Opacity"
+                defaultValue={100}
+                disabled={!selected}
+                value={selected ? Math.round(selected.opacity * 100) : 100}
+                min={5}
+                max={100}
+                format={formatPercent}
+                onChange={(value) => onUpdateActive({ opacity: value / 100 })}
+                onCommit={() => onFinalizeActive('Changed opacity')}
+              />
+            </div>
+            <LayersPanel
+              layers={layers}
+              selectedIds={selectedLayerIds}
+              renamingLayerId={renamingLayerId}
+              dragLayerId={dragLayerId}
+              onSelect={onSelectLayer}
+              onToggleVisibility={onToggleLayerVisibility}
+              onToggleLock={onToggleLayerLock}
+              onRenameStart={onRenameLayerStart}
+              onRenameEnd={onRenameLayerEnd}
+              onDragStart={onDragLayerStart}
+              onDragOver={onDragLayerOver}
+              onDragEnd={onDragLayerEnd}
+              onZoomToLayer={onZoomToLayer}
+              collapsedIds={collapsedLayerIds}
+              onToggleCollapsed={toggleLayerCollapsed}
+            />
+            <div className="layers-footer" role="toolbar" aria-label="Layer actions">
+              {onAddAdjustment ? (
+                <label className="layers-footer-button layers-adjustment" title="New adjustment layer">
+                  <Contrast size={15} aria-hidden="true" />
+                  <select
+                    aria-label="Add adjustment layer"
+                    value=""
+                    onChange={(event) => {
+                      const type = event.target.value as AdjustmentType
+                      if (type) onAddAdjustment(type)
+                    }}
+                  >
+                    <option value="" disabled>
+                      Adjustment layer
+                    </option>
+                    {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
+                      <option key={type} value={type}>
+                        {ADJUSTMENT_LABELS[type]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <button
+                type="button"
+                className="layers-footer-button"
+                title={withShortcut('Group layers', 'group')}
+                aria-keyshortcuts={ariaKeyShortcuts('group')}
+                aria-label="Group layers"
+                disabled={!canGroupLayers}
+                onClick={onGroupLayers}
+              >
+                <Group size={15} />
+              </button>
+              <button
+                type="button"
+                className="layers-footer-button"
+                title={withShortcut('Ungroup', 'ungroup')}
+                aria-keyshortcuts={ariaKeyShortcuts('ungroup')}
+                aria-label="Ungroup"
+                disabled={!canUngroupLayers}
+                onClick={onUngroupLayers}
+              >
+                <Ungroup size={15} />
+              </button>
+              <span className="layers-footer-spacer" />
+              {onDuplicateLayer ? (
+                <button
+                  type="button"
+                  className="layers-footer-button"
+                  title={withShortcut('Duplicate layer', 'duplicate')}
+                  aria-keyshortcuts={ariaKeyShortcuts('duplicate')}
+                  aria-label="Duplicate layer"
+                  disabled={!selected}
+                  onClick={onDuplicateLayer}
+                >
+                  <Copy size={15} />
+                </button>
+              ) : null}
+              {onDeleteLayer ? (
+                <button
+                  type="button"
+                  className="layers-footer-button"
+                  title={withShortcut('Delete layer', 'delete')}
+                  aria-keyshortcuts={ariaKeyShortcuts('delete')}
+                  aria-label="Delete layer"
+                  disabled={!selected}
+                  onClick={onDeleteLayer}
+                >
+                  <Trash2 size={15} />
+                </button>
+              ) : null}
+            </div>
+        </div>
+      </LayersDock>
     </aside>
   )
 }

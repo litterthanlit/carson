@@ -452,6 +452,8 @@ function App() {
   const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null)
   const [dragLayerId, setDragLayerId] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
+  const [tabBadges, setTabBadges] = useState<ReadonlySet<InspectorTab>>(() => new Set())
+  const [panelsHidden, setPanelsHidden] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [shortcutSheetOpen, setShortcutSheetOpen] = useState(false)
   const ask = useAsk()
@@ -1054,6 +1056,22 @@ function App() {
     }
   }
 
+  // Results land in their tab without taking the person away from the one they're using: the tab gets a dot.
+  function flagInspectorTab(tab: InspectorTab) {
+    if (tab === inspectorTab) return
+    setTabBadges((current) => (current.has(tab) ? current : new Set(current).add(tab)))
+  }
+
+  function changeInspectorTab(tab: InspectorTab) {
+    setInspectorTab(tab)
+    setTabBadges((current) => {
+      if (!current.has(tab)) return current
+      const next = new Set(current)
+      next.delete(tab)
+      return next
+    })
+  }
+
   // Keyboard layer. Every shortcut is declared once in lib/shortcuts; these are the handlers it dispatches to.
   // A handler returns false when there is nothing to act on, which leaves the key to the browser.
   function nudgeSelection(dx: number, dy: number) {
@@ -1157,10 +1175,11 @@ function App() {
     toggleLayoutGrid: () => {
       setShowLayoutGrid((value) => {
         const next = !value
-        if (next) setInspectorTab('layout')
+        if (next) flagInspectorTab('layout')
         return next
       })
     },
+    togglePanels: () => setPanelsHidden((hidden) => !hidden),
     // Tools
     moveTool: () => selectEditorTool('move'),
     textTool: () => setEditorTool('text'),
@@ -2922,7 +2941,7 @@ function App() {
     const preview = canvas.toDataURL({ format: 'jpeg', quality: 0.75, multiplier: 0.12 })
     const thumbnail = await createThumbnail(preview, 120)
     setDocumentMeta(forkVariant(documentMeta, snapshot, name, thumbnail))
-    setInspectorTab('layout')
+    flagInspectorTab('layout')
     setStatus(`Forked ${name} — open Comps to compare`)
     commitHistory(`Forked ${name}`)
   }
@@ -3369,7 +3388,7 @@ function App() {
       const base = current ?? createDefaultDocument(poster, {})
       return upsertDocumentInstrument(base, asset)
     })
-    setInspectorTab('assets')
+    flagInspectorTab('assets')
     commitHistory(`Saved instrument “${asset.name}”`)
   }
 
@@ -3419,7 +3438,7 @@ function App() {
     applyGestureToObject(object, gesture, seed)
     object.set({ objectCaching: true } as Partial<FabricObject>)
     await refreshTreatmentStack(object)
-    setInspectorTab('treatments')
+    flagInspectorTab('treatments')
     trackChaos(label, seed, targetIds, (next) => applyGestureToSelection(gesture, next))
     commitHistory(`Played ${label} #${seed}`)
   }
@@ -4250,7 +4269,7 @@ function App() {
       await refreshTreatmentStack(object)
     }
 
-    setInspectorTab('treatments')
+    flagInspectorTab('treatments')
     trackChaos('Run through the copier', seed, targetIds, (next) => applyCopyMachineToPoster(next))
     commitHistory(`Ran poster through the copier #${seed}`)
     setStatus(`Ran ${targets.length} layer${targets.length === 1 ? '' : 's'} through the copier`)
@@ -4396,7 +4415,7 @@ function App() {
     )
     object.set({ objectCaching: true } as Partial<FabricObject>)
     await refreshTreatmentStack(object)
-    setInspectorTab('treatments')
+    flagInspectorTab('treatments')
     trackChaos('Bad crop', seed, targetIds, (next) => badCropAccident(next))
     commitHistory(`Applied bad crop accident #${seed}`)
   }
@@ -4472,7 +4491,7 @@ function App() {
     addTreatment(object, 'crop', { mode: cropModeToParam(mode) }, seed)
     object.set({ objectCaching: true } as Partial<FabricObject>)
     await refreshTreatmentStack(object)
-    setInspectorTab('treatments')
+    flagInspectorTab('treatments')
     trackChaos(`${mode} crop`, seed, targetIds, (next) => aggressiveCropSelected(mode, next))
     commitHistory(`Applied ${mode} crop #${seed}`)
   }
@@ -4514,7 +4533,7 @@ function App() {
       seed,
     )
     void refreshTreatmentStack(object).then(() => {
-      setInspectorTab('treatments')
+      flagInspectorTab('treatments')
       trackChaos('Break letters', seed, targetIds, (next) => breakSelectedType(next))
       commitHistory(`Broke type into expressive glyphs #${seed}`)
     })
@@ -4533,7 +4552,7 @@ function App() {
     if (existing) updateTreatment(object, existing.id, { seed })
     else addTreatment(object, 'letter-break', { ...LETTER_BREAK_DEFAULTS }, seed)
     void refreshTreatmentStack(object).then(() => {
-      setInspectorTab('treatments')
+      flagInspectorTab('treatments')
       commitHistory(`Broke letters #${seed}`)
       setStatus('Broke the letters into their strokes — break again for a new cut')
     })
@@ -4661,7 +4680,7 @@ function App() {
       artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
     })
     await refreshPosterTreatments(readPosterTreatments(nextBoard))
-    setInspectorTab('treatments')
+    flagInspectorTab('treatments')
     trackChaos('White scrapes', seed, [], (next) => addWhiteScrapes(next))
     commitPosterTreatmentHistoryRef.current(board.id, `Added scrape mask treatment #${seed}`, before, after)
   }
@@ -4683,7 +4702,7 @@ function App() {
       artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
     })
     await refreshPosterTreatments(readPosterTreatments(nextBoard))
-    setInspectorTab('treatments')
+    flagInspectorTab('treatments')
     trackChaos('Press Check', seed, [], (next) => applyPressCheck(next))
     commitPosterTreatmentHistoryRef.current(board.id, `Turned on Press Check #${seed}`, before, after)
   }
@@ -4756,7 +4775,7 @@ function App() {
         artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
       })
       await refreshPosterTreatments(readPosterTreatments(nextBoard))
-      setInspectorTab('treatments')
+      flagInspectorTab('treatments')
       commitPosterTreatmentHistoryRef.current(board.id, 'Enabled poster treatment', before, after)
       return
     }
@@ -4768,7 +4787,7 @@ function App() {
       artboards: documentMeta.artboards.map((item) => (item.id === board.id ? nextBoard : item)),
     })
     await refreshPosterTreatments(readPosterTreatments(nextBoard))
-    setInspectorTab('treatments')
+    flagInspectorTab('treatments')
     commitPosterTreatmentHistoryRef.current(board.id, 'Turned off Press Check', before, after)
   }
 
@@ -4812,7 +4831,7 @@ function App() {
     addTreatment(object, 'tear', { pieces: 7, gap: 32 }, seed)
     object.set({ objectCaching: true } as Partial<FabricObject>)
     await refreshTreatmentStack(object)
-    setInspectorTab('treatments')
+    flagInspectorTab('treatments')
     trackChaos('Tear collage', seed, targetIds, (next) => tearCollageSelected(next))
     commitHistory(`Made tear collage #${seed}`)
   }
@@ -5968,9 +5987,11 @@ function App() {
         onScramble={() => void scrambleCanvas()}
         scrambleDisabled={scrambleSourceObjects().length === 0}
         onExport={() => void exportPoster()}
+        panelsHidden={panelsHidden}
+        onTogglePanels={() => setPanelsHidden((hidden) => !hidden)}
       />
 
-      <section className="workspace">
+      <section className={panelsHidden ? 'workspace panels-hidden' : 'workspace'}>
         <ToolRail
           tool={editorTool}
           penMode={penMode}
@@ -5994,7 +6015,7 @@ function App() {
           brushErase={brush.erase}
           onBrushModeChange={(erase) => setBrush((current) => ({ ...current, erase }))}
         />
-        {editorTool === 'instruments' ? (
+        {editorTool === 'instruments' && !panelsHidden ? (
           <InstrumentsPalette
             selected={Boolean(selected)}
             selectedIsImage={selectedIsImage}
@@ -6240,7 +6261,7 @@ function App() {
           onToggleLayoutGrid={() => {
             setShowLayoutGrid((value) => {
               const next = !value
-              if (next) setInspectorTab('layout')
+              if (next) flagInspectorTab('layout')
               return next
             })
           }}
@@ -6270,7 +6291,9 @@ function App() {
           />
         <InspectorPanel
           inspectorTab={inspectorTab}
-          onInspectorTabChange={setInspectorTab}
+          onInspectorTabChange={changeInspectorTab}
+          tabBadges={tabBadges}
+          onHidePanels={() => setPanelsHidden(true)}
           projectName={projectName}
           onProjectNameChange={setProjectName}
           exportFormat={exportFormat}

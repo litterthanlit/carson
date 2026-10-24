@@ -8,6 +8,7 @@ import {
   Files,
   FolderOpen,
   House,
+  PanelRight,
   Redo2,
   Save,
   Shuffle,
@@ -37,6 +38,8 @@ type TopBarProps = {
   onScramble: () => void
   scrambleDisabled?: boolean
   onExport: () => void
+  panelsHidden?: boolean
+  onTogglePanels?: () => void
 }
 
 type FileItem = {
@@ -139,6 +142,8 @@ export const TopBar = memo(function TopBar({
   onScramble,
   scrambleDisabled,
   onExport,
+  panelsHidden = false,
+  onTogglePanels,
 }: TopBarProps) {
   const fileItems: FileItem[] = [
     { label: 'New poster', shortcut: 'newPoster', icon: FilePlus2, run: onNewPoster },
@@ -190,6 +195,19 @@ export const TopBar = memo(function TopBar({
           </button>
         </div>
         <ThemeToggle />
+        {onTogglePanels ? (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Panels"
+            aria-pressed={!panelsHidden}
+            title={withShortcut(panelsHidden ? 'Show panels' : 'Hide panels', 'togglePanels')}
+            aria-keyshortcuts={ariaKeyShortcuts('togglePanels')}
+            onClick={onTogglePanels}
+          >
+            <PanelRight size={15} />
+          </button>
+        ) : null}
         <button
           type="button"
           className="command-button"

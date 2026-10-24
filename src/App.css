@@ -674,8 +674,103 @@ textarea:focus-visible {
   flex: 1;
   min-height: 0;
   max-height: none;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 0;
+}
+
+/* The active tab scrolls on its own; the layers dock stays put under it. */
+.inspector-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.layers-dock {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.layers-dock.is-collapsed {
+  height: auto;
+}
+
+.layers-dock-handle {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  z-index: 2;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.layers-dock-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 2px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.layers-dock-handle:hover::after,
+.layers-dock-handle:focus-visible::after {
+  background: var(--accent);
+}
+
+.layers-dock-handle:focus-visible {
+  outline: none;
+}
+
+.layers-dock-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.layers-dock-body[hidden] {
+  display: none;
+}
+
+.layers-dock .layers-dock-heading {
+  margin: 0;
+}
+
+.layers-dock .layers-dock-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+
+.layers-dock .layers-dock-toggle:hover {
+  color: var(--text);
+  background: transparent;
+}
+
+.workspace.panels-hidden {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.workspace.panels-hidden .inspector-column {
+  display: none;
 }
 
 .inspector {
@@ -1785,8 +1880,8 @@ input[type='color'] {
 }
 
 .inspector-tabs {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  flex: none;
+  display: flex;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -1795,6 +1890,9 @@ input[type='color'] {
 }
 
 .inspector-tabs button {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
   padding: 0;
   height: 32px;
   min-height: 32px;
@@ -1811,6 +1909,21 @@ input[type='color'] {
   background: var(--panel);
   border-bottom-color: var(--accent);
   color: var(--text);
+}
+
+.inspector-tabs .inspector-hide {
+  flex: 0 0 32px;
+  border-left: 1px solid var(--border);
+}
+
+.tab-badge {
+  position: absolute;
+  top: 7px;
+  right: calc(50% - 12px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .treatment-stack {
@@ -4020,9 +4133,10 @@ label:has(> input[type='radio']) {
    single-line list (eye · thumb · name · lock), and an icon footer pinned
    to the bottom of the panel. */
 .layers-section {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 40px - 34px);
   padding: 0;
   border-bottom: 0;
 }
@@ -4091,6 +4205,7 @@ label:has(> input[type='radio']) {
 
 .layer-list {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 4px 0;
