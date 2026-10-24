@@ -1,11 +1,14 @@
 /**
  * Non-destructive misprint offset — a faint misregistered echo lives on the stack.
  * Source stays editable; the companion is re-rendered from seed + Tension.
+ * On the poster's press the echo slips the way the whole run slips, and prints
+ * as dark as the ink was where it landed.
  */
 import type { Canvas, FabricObject } from 'fabric'
 import { round } from './canvasUtils'
 import { misprintCompanionPose } from './copyMachine'
 import { getPrintScanProfile } from './editorModel'
+import { canvasPress, pressInkDensityAt, pressRegistration, type Press } from './press'
 import { scaleInstrumentParams } from './instrumentTension'
 import { createSeededRandom } from './random'
 import { readSliceProp } from './sliceTreatment'
@@ -76,10 +79,15 @@ export function misprintPoseForTreatment(
   source: { left: number; top: number; angle: number },
   treatment: Treatment,
   tensionScale = 1,
+  /** The poster's press, and where on it the layer's centre sits. */
+  onPress?: { press: Press; centerX: number; centerY: number },
 ) {
   const params = scaleInstrumentParams(treatment.params, TENSION_KEYS, tensionScale)
   const offset = params.offset ?? 10
-  const opacity = params.opacity ?? 0.27
+  const baseOpacity = params.opacity ?? 0.27
+  const opacity = onPress
+    ? Math.min(1, baseOpacity * pressInkDensityAt(onPress.press, onPress.centerX, onPress.centerY) * 1.15)
+    : baseOpacity
   const random = createSeededRandom(treatment.seed)
   const pose = misprintCompanionPose({
     left: source.left,
@@ -87,6 +95,7 @@ export function misprintPoseForTreatment(
     angle: source.angle,
     offset,
     opacity,
+    slip: onPress ? pressRegistration(onPress.press) : undefined,
   })
   return {
     ...pose,
@@ -108,6 +117,8 @@ export async function renderMisprintTreatment(
   if (!treatment.enabled) return
 
   const sourceId = String(readSliceProp(source, 'id') ?? 'layer')
+  const press = canvasPress(canvas)
+  const center = source.getCenterPoint()
   const pose = misprintPoseForTreatment(
     {
       left: source.left ?? 0,
@@ -116,6 +127,7 @@ export async function renderMisprintTreatment(
     },
     treatment,
     tensionScale,
+    press ? { press, centerX: center.x, centerY: center.y } : undefined,
   )
   const clone = await source.clone()
   clone.set({

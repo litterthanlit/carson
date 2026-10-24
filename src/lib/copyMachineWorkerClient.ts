@@ -5,6 +5,7 @@ import {
   type CopyMachineJobRequest,
   type CopyMachineJobResult,
 } from './copyMachineJob'
+import type { SheetPatch } from './press'
 
 type PendingJob = {
   resolve: (imageData: ImageData) => void
@@ -62,10 +63,11 @@ export async function applyCopyMachineChainAsync(
   treatments: CopyMachineChainStep[],
   exportScale = 1,
   tensionScale = 1,
+  sheet?: SheetPatch,
 ): Promise<ImageData> {
   const host = acquireWorker()
   if (!host) {
-    return applyCopyMachineChain(sourceImageData, treatments, exportScale, tensionScale)
+    return applyCopyMachineChain(sourceImageData, treatments, exportScale, tensionScale, sheet)
   }
 
   const request: CopyMachineJobRequest = {
@@ -80,6 +82,7 @@ export async function applyCopyMachineChainAsync(
     })),
     exportScale,
     tensionScale,
+    sheet,
   }
 
   return new Promise((resolve, reject) => {
@@ -128,6 +131,9 @@ export function applyCopyMachineChainLatest(
   treatments: CopyMachineChainStep[],
   exportScale = 1,
   tensionScale = 1,
+  sheet?: SheetPatch,
 ): Promise<ImageData | null> {
-  return latestBake(key, () => applyCopyMachineChainAsync(sourceImageData, treatments, exportScale, tensionScale))
+  return latestBake(key, () =>
+    applyCopyMachineChainAsync(sourceImageData, treatments, exportScale, tensionScale, sheet),
+  )
 }

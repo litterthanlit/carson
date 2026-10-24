@@ -54,7 +54,22 @@ Carson met the copier at the Rapperswil workshop with Hans-Rudolf Lutz: "using c
 
 An opaque source (a photo, a scrap) copies as a white sheet laid over what's below; a transparent layer (type) copies as toner only and overprints.
 
-**Ink bleed** (Instruments → Print, or ⌘K) is the Copy Machine with the drum inked unevenly along a horizontal feed: Ink bleed 75, Ink starve 60, Slur 35, no scan drift or bands. Re-roll for a different run of the ink; raise Ink bleed (or Tension) for the fused "SUBS" blobs. Spread scales with each stroke's own weight, so it reads the same at 12 pt and 300 pt.
+**Ink bleed** (Instruments → Print, or ⌘K) is the Copy Machine with the drum inked unevenly: Ink bleed 75, Ink starve 60, Slur 35, no scan drift or bands. Raise Ink bleed (or Tension) for the fused "SUBS" blobs. Spread scales with each stroke's own weight, so it reads the same at 12 pt and 300 pt. On a press (below), where it floods is the press's business: move the type into a wet train, or re-ink the press.
+
+### The press — one run for the whole poster
+
+A real poster comes off one machine in one run: one sheet of paper, one roller's ink, one feed, one plate slip. So every new poster prints on a **press** (`src/lib/press.ts`), and the ink effects sample it instead of each rolling its own dice:
+
+| Shared by the run | Who reads it |
+|---|---|
+| **Ink map**: wet and dry trains laid along the feed, sized by the sheet, not by any layer | Copy Machine ink load (where it floods, starves and slurs), Press Check ink spread (further in wet trains), misprint echoes and type strips (as dark as the ink where they land) |
+| **Paper**: one sheet's tooth and fibres, the grain running with the feed | Copy Machine ink edges and dropouts, Press Check tooth |
+| **Plate slip**: one direction for the run | Misprint echoes, the copier's ghost, Press Check plates |
+| **Feed** | Ink trains, paper grain and slur |
+
+Values come from a hashed lattice in poster coordinates, so any patch of the sheet (a layer's raster, a worker, a 4× export) samples the same ink and paper as every other, and two layers side by side flood together across the gap. A layer's place on the sheet is part of its look: drag a copied headline and its copy rides along, then re-inks where it settles.
+
+Print tab → **Press**: Re-ink (a new run; undoable, and the top-bar Re-roll re-inks again), **Show ink map** (wet in blue, dry in amber, with a feed arrow), **Feed angle**, and the switch. Off, each effect inks on its own: that's how posters saved before the press print, and they open with it off so they keep their look.
 
 Gaps, in order of value:
 1. **Printer-error generator** — skipped lines, misfeed shift, a band of repeated scanlines (the "printer messed up" accident he scans in).

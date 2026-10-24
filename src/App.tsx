@@ -92,8 +92,20 @@ import {
   findComponent,
   upsertComponent,
   upsertDocumentInstrument,
+  readArtboardPress,
+  writeArtboardPress,
   type DocumentMeta,
 } from './lib/document'
+import {
+  bindCanvasPress,
+  bindPress,
+  newPressRun,
+  pressSignature,
+  readPressRun,
+  type PressRun,
+} from './lib/press'
+import { renderInkMap, type InkMapOverlay } from './lib/inkMap'
+import { followSourceLive, isCompanionPoseStale, POSE_FOLLOWING_TREATMENTS } from './lib/companionFollow'
 import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
 import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
 import { alignObjects, buildLayoutGrid, clampGridOverlay, distributeObjects, gridTensionScale, layoutSnapLines, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
@@ -345,6 +357,18 @@ type EditorIntent =
 
 type EditorScreen = 'home' | 'editor'
 
+/** Point the canvas at the active poster's press (or none); returns the run's signature. */
+function bindPressForDocument(
+  canvas: Canvas,
+  doc: DocumentMeta | null,
+  preset: Pick<PosterPreset, 'width' | 'height'>,
+): string {
+  const run = doc ? readArtboardPress(getActiveArtboard(doc)) : null
+  const press = run ? bindPress(run, preset) : null
+  bindCanvasPress(canvas, press)
+  return pressSignature(press)
+}
+
 function App() {
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const canvasRef = useRef<Canvas | null>(null)
@@ -439,6 +463,7 @@ function App() {
   const [snapToGrid, setSnapToGrid] = useState(true)
   const [layoutGuides, setLayoutGuides] = useState<LayoutGuide[]>([])
   const [showPrintGuides, setShowPrintGuides] = useState(false)
+  const [showInkMap, setShowInkMap] = useState(false)
   const [showCmykPreview, setShowCmykPreview] = useState(false)
   const [editorTool, setEditorTool] = useState<EditorTool>('move')
   const [penMode, setPenMode] = useState(false)
@@ -514,6 +539,14 @@ function App() {
   const refreshTreatmentStackRef = useRef<(object?: FabricObject | null) => Promise<void>>(async () => {})
   const reconcileArtifactTreatmentsRef = useRef<() => Promise<void>>(async () => {})
   const refreshPosterTreatmentsRef = useRef<(treatmentsOverride?: Treatment[]) => Promise<void>>(async () => {})
+  /** Signature of the press last bound to the canvas; null until the canvas first binds one. */
+  const pressBindingRef = useRef<string | null>(null)
+  const pressReprintTimerRef = useRef<number | null>(null)
+  const reprintPressLayersRef = useRef<() => Promise<void>>(async () => {})
+  const inkMapRef = useRef<InkMapOverlay | null>(null)
+  const pressFeedBeforeRef = useRef<string | null>(null)
+  /** The run a poster was on before it was taken off, so switching back returns to it. */
+  const lastPressRunRef = useRef<{ artboardId: string; run: PressRun } | null>(null)
   const activeObjectRef = useRef<() => FabricObject | null>(() => null)
   const restoreCanvasSelectionRef = useRef<() => void>(() => {})
   const pathEditActionsRef = useRef<PathEditActions>({
@@ -570,6 +603,35 @@ function App() {
   reconcileArtifactTreatmentsRef.current = reconcileArtifactTreatments
   refreshPosterTreatmentsRef.current = refreshPosterTreatments
 
+  /** Re-render everything printed on the press: layers that ink on it, then the final run. */
+  async function reprintPressLayers() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const layers = canvas
+      .getObjects()
+      .filter((object) => readTreatments(object).some((item) => POSE_FOLLOWING_TREATMENTS.has(item.type)))
+    for (const object of layers) await refreshTreatmentStack(object)
+    await refreshPosterTreatments()
+  }
+  reprintPressLayersRef.current = reprintPressLayers
+
+  // The canvas always prints on the active poster's press; when the run changes
+  // (re-inked, turned, switched off, another artboard) everything on it reprints.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const signature = bindPressForDocument(canvas, documentMeta, poster)
+    if (pressBindingRef.current === signature) return
+    const first = pressBindingRef.current === null
+    pressBindingRef.current = signature
+    if (first) return
+    if (pressReprintTimerRef.current) window.clearTimeout(pressReprintTimerRef.current)
+    pressReprintTimerRef.current = window.setTimeout(() => {
+      pressReprintTimerRef.current = null
+      void reprintPressLayersRef.current()
+    }, 180)
+  }, [documentMeta, poster])
+
   const fillTrailThumbnail = useCallback(async (opId: string) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -582,7 +644,7 @@ function App() {
     }
   }, [])
 
-  const { commitHistory, commitObjectPatchesHistory, commitPixelsHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId, historyLogRef } = useEditorHistory({
+  const { commitHistory, commitObjectPatchesHistory, commitPixelsHistory, commitPressHistory, undoAsync, redo, restoringRef, resetHistory, jumpToOpId, historyLogRef } = useEditorHistory({
     canvasRef,
     setStatus,
     syncSelected: () => syncSelected(),
@@ -642,6 +704,17 @@ function App() {
       })
       await refreshPosterTreatmentsRef.current(treatments)
     },
+    onPressRestore: async (artboardId, pressJson) => {
+      const run = readPressRun(JSON.parse(pressJson))
+      // The binding effect sees the new run and reprints everything on it.
+      setDocumentMeta((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          artboards: prev.artboards.map((item) => (item.id === artboardId ? writeArtboardPress(item, run) : item)),
+        }
+      })
+    },
   })
 
   const penStrokeColorRef = useRef(penStrokeColor)
@@ -660,6 +733,7 @@ function App() {
     snapToGridRef,
     printDpiRef,
     bleedMmRef,
+    inkMapRef,
     penStrokeColorRef,
     penStrokeWidthRef,
     syncSelected,
@@ -763,11 +837,18 @@ function App() {
     // Dev-only handle for debugging and browser-driven verification.
     if (import.meta.env.DEV) (window as unknown as { __carsonCanvas?: Canvas }).__carsonCanvas = canvas
 
-    // A broken word re-cuts itself after a drag, an edit or an undo moves its source.
+    // A copy, a misprint echo or type strips ride along while their source is dragged…
+    canvas.on('object:moving', (event) => {
+      const target = event.target
+      if (target && target.type !== 'activeselection') followSourceLive(canvas, target)
+    })
+
+    // A broken word re-cuts itself after a drag, an edit or an undo moves its source;
+    // a layer with companions re-renders them where it settled (on a press, re-inked there).
     let recutting = false
     canvas.on('after:render', () => {
       if (recutting || (canvas as unknown as { _currentTransform?: unknown })._currentTransform) return
-      const stale = canvas.getObjects().find(isLetterBreakStale)
+      const stale = canvas.getObjects().find((object) => isLetterBreakStale(object) || isCompanionPoseStale(object))
       if (!stale) return
       // The user moved it: that pose is the new resting place, unless Scatter owns the pose.
       if (!readTreatments(stale).some((item) => item.type === 'scatter' && item.enabled)) {
@@ -4736,6 +4817,56 @@ function App() {
     commitPosterTreatmentHistoryRef.current(board.id, `Turned on Press Check #${seed}`, before, after)
   }
 
+  /** Put the active poster on a run (or none), recording it unless a slider is mid-drag. */
+  function writePressRun(next: PressRun | null, label: string, options: { history?: boolean; before?: string } = {}) {
+    if (!documentMeta) return
+    const board = getActiveArtboard(documentMeta)
+    if (!board) return
+    const before = options.before ?? JSON.stringify(readArtboardPress(board))
+    // Functional: Re-roll replays this from an older render, and must not undo later edits.
+    setDocumentMeta((prev) =>
+      prev
+        ? {
+            ...prev,
+            artboards: prev.artboards.map((item) => (item.id === board.id ? writeArtboardPress(item, next) : item)),
+          }
+        : prev,
+    )
+    if (options.history !== false) commitPressHistory(board.id, label, before, JSON.stringify(next))
+    setStatus(label)
+  }
+
+  function setPressOn(on: boolean) {
+    const boardId = activeBoard?.id ?? ''
+    if (on) {
+      const last = lastPressRunRef.current
+      writePressRun(activePressRun ?? (last?.artboardId === boardId ? last.run : newPressRun()), 'Put the poster on one press')
+      return
+    }
+    if (activePressRun) lastPressRunRef.current = { artboardId: boardId, run: activePressRun }
+    writePressRun(null, 'Took the poster off the press — each effect inks on its own')
+    setShowInkMap(false)
+  }
+
+  function reinkPress(seed = newSeed()) {
+    const run = activePressRun ?? newPressRun()
+    writePressRun(newPressRun(seed, run.feedAngle), `Re-inked the press #${seed}`)
+    trackChaos('Re-ink the press', seed, [], (next) => reinkPress(next))
+  }
+
+  function previewPressFeed(angle: number) {
+    if (!activePressRun) return
+    if (pressFeedBeforeRef.current === null) pressFeedBeforeRef.current = JSON.stringify(activePressRun)
+    writePressRun(newPressRun(activePressRun.seed, angle), 'Turning the feed', { history: false })
+  }
+
+  function commitPressFeed() {
+    const before = pressFeedBeforeRef.current
+    pressFeedBeforeRef.current = null
+    if (before === null || !activePressRun) return
+    writePressRun(activePressRun, `Fed the sheet at ${activePressRun.feedAngle}°`, { before })
+  }
+
   async function togglePressCheck() {
     if (!documentMeta) return
     const board = getActiveArtboard(documentMeta)
@@ -5174,8 +5305,11 @@ function App() {
     setPresetId(project.preset.id)
     setProjectName(project.name)
     if (options.keepId) setProjectId(project.id)
+    const loadedDocument = project.document ? normalizeDocumentMeta(project.document) : null
+    // Bind the poster's press now, so its layers print on it the first time they render.
+    pressBindingRef.current = bindPressForDocument(canvas, loadedDocument, project.preset)
     if (project.document) {
-      setDocumentMeta(normalizeDocumentMeta(project.document))
+      setDocumentMeta(loadedDocument)
       setDocumentPalette(project.document.palette)
       setPrintDpi(project.document.dpi)
       setBleedMm(project.document.bleedMm)
@@ -5436,6 +5570,16 @@ function App() {
   const selectedTreatments = readTreatments(selectedObject)
   const selectedLayerMask = readLayerMask(selectedObject)
   const activeBoard = documentMeta ? getActiveArtboard(documentMeta) : undefined
+  const activePressRun = readArtboardPress(activeBoard)
+  const activePressSignature = activePressRun ? pressSignature(bindPress(activePressRun, poster)) : ''
+
+  // The ink map follows the run: re-drawn when it is re-inked or turned.
+  useEffect(() => {
+    const run = showInkMap ? activePressRun : null
+    inkMapRef.current = run ? renderInkMap(bindPress(run, poster)) : null
+    canvasRef.current?.requestRenderAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showInkMap, activePressSignature])
   const posterTreatments = readPosterTreatments(activeBoard)
   const selectedIsPath = selectedObject?.type === 'path' || selectedObject?.type === 'line'
   const booleanSelection =
@@ -5757,6 +5901,29 @@ function App() {
     { id: 'guide-v', label: 'Add vertical guide', keywords: ['guide', 'ruler'], scope: 'canvas', run: () => addLayoutGuide('v') },
     { id: 'guide-h', label: 'Add horizontal guide', keywords: ['guide', 'ruler'], scope: 'canvas', run: () => addLayoutGuide('h') },
     { id: 'print-guides', label: 'Toggle print guides', keywords: ['bleed', 'trim', 'print'], scope: 'canvas', run: () => setShowPrintGuides((value) => !value) },
+    {
+      id: 'press-reink',
+      label: activePressRun ? 'Re-ink the press' : 'Put the poster on one press',
+      keywords: ['press', 're-ink', 'reink', 'ink', 'ink map', 'wet', 'dry', 'run', 'roller'],
+      scope: 'canvas',
+      run: () => (activePressRun ? reinkPress() : setPressOn(true)),
+    },
+    {
+      id: 'press-ink-map',
+      label: showInkMap ? 'Hide ink map' : 'Show ink map',
+      keywords: ['press', 'ink map', 'wet', 'dry', 'trains', 'feed'],
+      scope: 'canvas',
+      disabled: !activePressRun,
+      run: () => setShowInkMap((value) => !value),
+    },
+    {
+      id: 'press-off',
+      label: 'Take the poster off the press',
+      keywords: ['press', 'off', 'independent', 'own ink'],
+      scope: 'canvas',
+      disabled: !activePressRun,
+      run: () => setPressOn(false),
+    },
   ]
 
   return (
@@ -6394,6 +6561,13 @@ function App() {
           onPrintDpiChange={(dpi) => patchPrintSettings({ dpi })}
           bleedMm={bleedMm}
           onBleedMmChange={(mm) => patchPrintSettings({ bleedMm: mm })}
+          pressRun={activePressRun}
+          showInkMap={showInkMap}
+          onPressOnChange={setPressOn}
+          onReinkPress={() => reinkPress()}
+          onPreviewPressFeed={previewPressFeed}
+          onCommitPressFeed={commitPressFeed}
+          onToggleInkMap={() => setShowInkMap((value) => !value)}
           showPrintGuides={showPrintGuides}
           onTogglePrintGuides={() => setShowPrintGuides((value) => !value)}
           showCmykPreview={showCmykPreview}

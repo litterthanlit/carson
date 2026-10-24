@@ -17,6 +17,16 @@
  * same on 12 pt and 300 pt. Pure, seeded and headless-testable.
  */
 
+import {
+  pressInkPlane,
+  SHEET_SALT,
+  sheetFractal,
+  sheetGrain,
+  sheetLine,
+  sheetNoise,
+  type SheetPatch,
+} from './press'
+
 export type InkLoadParams = {
   /** How far ink floods past the edge where the sheet is wettest, 0–100. */
   bleed: number
@@ -516,8 +526,15 @@ export function inkLoadField(
     3,
     random,
   )
-  // Only bleed asked for → most of the sheet floods; only starve → most of it
-  // starves; both → the sheet splits between them with clean ink in between.
+  return shapeInkLoad(field, bleed, starve)
+}
+
+/**
+ * Raw ink trains (-1..1) to load. Only bleed asked for → most of the sheet
+ * floods; only starve → most of it starves; both → the sheet splits between
+ * them with clean ink in between. Shapes in place.
+ */
+function shapeInkLoad(field: Float32Array, bleed: number, starve: number): Float32Array {
   const wet = bleed + starve > 0 ? bleed / (bleed + starve) : 0.5
   const bias = (wet - 0.5) * 1.5
   for (let i = 0; i < field.length; i++) {
@@ -527,6 +544,16 @@ export function inkLoadField(
     field[i] = n > 0 ? smoothstep(0.05, 0.9, n) ** 2 : -(smoothstep(0.05, 0.85, -n) ** 1.2)
   }
   return field
+}
+
+/** Ink load over a raster's patch of the press sheet: the same trains under every layer. */
+export function sheetInkLoadField(
+  patch: SheetPatch,
+  width: number,
+  height: number,
+  params: Pick<InkLoadParams, 'bleed' | 'starve'>,
+): Float32Array {
+  return shapeInkLoad(pressInkPlane(patch, width, height), unit(params.bleed), unit(params.starve))
 }
 
 export type InkLoadResult = {
@@ -539,6 +566,11 @@ export type InkLoadResult = {
 /**
  * Re-ink a coverage plane (0 paper … 1 solid ink) the way an uneven press or
  * drum would lay it down. Returns new planes; the input is untouched.
+ *
+ * With a `sheet`, the ink trains, paper and slur come from the poster's press
+ * at this raster's place on it, and the feed is the press's — so layers on one
+ * poster flood, starve and drag together. Without one, the raster is its own
+ * sheet, drawn from `random` (posters made before the press).
  */
 export function applyInkLoad(
   ink: Float32Array,
@@ -547,6 +579,7 @@ export function applyInkLoad(
   params: Partial<InkLoadParams>,
   random: () => number,
   pixelScale = 1,
+  sheet?: SheetPatch,
 ): InkLoadResult {
   const bleed = unit(params.bleed)
   const starve = unit(params.starve)
@@ -554,7 +587,7 @@ export function applyInkLoad(
   const out = new Float32Array(ink)
   const wetMask = new Float32Array(ink.length)
   if (width < 2 || height < 2 || inkLoadIsIdle(params)) return { ink: out, wet: wetMask }
-  const dragAngle = params.dragAngle ?? INK_LOAD_DEFAULTS.dragAngle
+  const dragAngle = sheet ? sheet.press.feedAngle : (params.dragAngle ?? INK_LOAD_DEFAULTS.dragAngle)
 
   const px = Math.max(0.5, pixelScale)
   const field = inkDistanceField(ink, width, height)
@@ -564,9 +597,12 @@ export function applyInkLoad(
   const stroke = strokeHalfWidth(signed, width, height)
   const { stroke: local, gap } = localInkWidths(field, width, height, stroke)
 
+  const inkParams = { bleed: params.bleed ?? 0, starve: params.starve ?? 0 }
   const load =
     bleed > 0 || starve > 0
-      ? inkLoadField(width, height, { bleed: params.bleed ?? 0, starve: params.starve ?? 0, dragAngle }, stroke, random)
+      ? sheet
+        ? sheetInkLoadField(sheet, width, height, inkParams)
+        : inkLoadField(width, height, { ...inkParams, dragAngle }, stroke, random)
       : new Float32Array(ink.length)
 
   // How far ink travels at full load: past half a stroke into open paper, and
@@ -577,12 +613,9 @@ export function applyInkLoad(
   const erodeAt = (i: number) => Math.min(1, starve) * local[i] * 0.7
 
   // Paper the ink meets: lumps a stroke wide, fibres a pixel or two long, tooth per grain.
-  const lumps = valueNoise(width, height, stroke * 1.6, stroke * 1.6, random)
-  const fibres = fractalNoise(width, height, 2.6 * px, 1.3 * px, 2, random)
-  const chunks = fractalNoise(width, height, stroke * 2.2, stroke * 1.8, 2, random)
-  const tooth = new Float32Array(ink.length)
-  const toothField = valueNoise(width, height, 1.1 * px, 1.1 * px, random)
-  for (let i = 0; i < tooth.length; i++) tooth[i] = toothField[i] * 0.7 + (random() * 2 - 1) * 0.3
+  const { lumps, fibres, chunks, tooth } = sheet
+    ? sheetPaper(sheet, width, height, stroke)
+    : localPaper(width, height, stroke, px, random)
 
   // Coverage of a pixel whose centre sits `inside` px inside an edge: a one
   // pixel ramp, so with no load the antialiased edge comes back unchanged.
@@ -634,8 +667,41 @@ export function applyInkLoad(
     }
   }
 
-  if (slur > 0.01) applySlur(out, load, width, height, slur, feedAxes(dragAngle), stroke, px, random)
+  if (slur > 0.01) {
+    if (sheet) applySheetSlur(out, load, width, height, slur, sheet, stroke, px)
+    else applySlur(out, load, width, height, slur, feedAxes(dragAngle), stroke, px, random)
+  }
   return { ink: out, wet: wetMask }
+}
+
+type Paper = { lumps: Float32Array; fibres: Float32Array; chunks: Float32Array; tooth: Float32Array }
+
+/** The raster as its own sheet of paper. Draw order is fixed: older copies depend on it. */
+function localPaper(width: number, height: number, stroke: number, px: number, random: () => number): Paper {
+  const lumps = valueNoise(width, height, stroke * 1.6, stroke * 1.6, random)
+  const fibres = fractalNoise(width, height, 2.6 * px, 1.3 * px, 2, random)
+  const chunks = fractalNoise(width, height, stroke * 2.2, stroke * 1.8, 2, random)
+  const tooth = new Float32Array(width * height)
+  const toothField = valueNoise(width, height, 1.1 * px, 1.1 * px, random)
+  for (let i = 0; i < tooth.length; i++) tooth[i] = toothField[i] * 0.7 + (random() * 2 - 1) * 0.3
+  return { lumps, fibres, chunks, tooth }
+}
+
+/**
+ * The press's sheet under this raster: fibres lie along the feed (the paper's
+ * grain), and every layer reads the same tooth where they overlap. Lumps and
+ * chunks keep the scale of this layer's strokes.
+ */
+function sheetPaper(sheet: SheetPatch, width: number, height: number, stroke: number): Paper {
+  const strokePx = stroke * sheet.unit
+  const lumps = sheetNoise(sheet, width, height, strokePx * 1.6, strokePx * 1.6, SHEET_SALT.lumps)
+  const fibres = sheetFractal(sheet, width, height, 2.6, 1.3, 2, SHEET_SALT.fibres)
+  const chunks = sheetFractal(sheet, width, height, strokePx * 2.2, strokePx * 1.8, 2, SHEET_SALT.chunks)
+  const toothField = sheetNoise(sheet, width, height, 1.1, 1.1, SHEET_SALT.tooth)
+  const grain = sheetGrain(sheet, width, height, Math.max(0.75, sheet.unit), SHEET_SALT.grain)
+  const tooth = new Float32Array(width * height)
+  for (let i = 0; i < tooth.length; i++) tooth[i] = toothField[i] * 0.7 + grain[i] * 0.3
+  return { lumps, fibres, chunks, tooth }
 }
 
 /**
@@ -670,20 +736,71 @@ function applySlur(
       tail = reach * (0.04 + 0.3 * roll ** 3 + (roll > 0.88 ? 0.4 + 1.2 * random() : 0))
       offset = Math.floor(random() * length)
     }
-    const decay = Math.exp(-1 / Math.max(0.5, tail))
-    let carried = 0
-    for (let step = 0; step < length; step++) {
-      const s = axes.sign > 0 ? step : length - 1 - step
-      const i = axes.alongX ? line * width + s : s * width + line
-      const value = plane[i]
-      if (carried > value) {
-        const dashes = smoothstep(-0.45, 0.05, flicker[step + offset])
-        plane[i] = Math.max(value, carried * dashes)
-      }
-      // Wet ink travels; starved ink stays where it landed.
-      const l = load[i]
-      const wet = l >= 0 ? 0.6 + 0.4 * l : 0.6 * (1 + l)
-      carried = Math.max(value * wet, carried * decay)
+    dragLine(plane, load, width, axes, line, length, tail, (step) => flicker[step + offset])
+  }
+}
+
+/**
+ * Slur on the press: a slip belongs to a line across the feed of the whole
+ * sheet, so it marks every layer that crosses that line, and its dashes fall
+ * at the same places along it.
+ */
+function applySheetSlur(
+  plane: Float32Array,
+  load: Float32Array,
+  width: number,
+  height: number,
+  slur: number,
+  sheet: SheetPatch,
+  stroke: number,
+  px: number,
+) {
+  const axes = feedAxes(sheet.press.feedAngle)
+  const lines = axes.alongX ? height : width
+  const length = axes.alongX ? width : height
+  const reach = slur * (stroke * 6 + 12 * px)
+  // Runs two poster px wide, numbered from the sheet's edge, not the layer's.
+  const origin = axes.alongX ? sheet.originY : sheet.originX
+  const runPx = 2
+  const dashes = sheetNoise(sheet, width, height, 7, runPx, SHEET_SALT.dashes)
+  let lastRun = Number.NaN
+  let tail = 0
+  for (let line = 0; line < lines; line++) {
+    const runIndex = Math.floor((origin + (line + 0.5) * sheet.unit) / runPx)
+    if (runIndex !== lastRun) {
+      lastRun = runIndex
+      const roll = sheetLine(sheet.press, SHEET_SALT.slur, runIndex)
+      const pull = sheetLine(sheet.press, SHEET_SALT.slur + 32, runIndex)
+      tail = reach * (0.04 + 0.3 * roll ** 3 + (roll > 0.88 ? 0.4 + 1.2 * pull : 0))
     }
+    dragLine(plane, load, width, axes, line, length, tail, (_step, i) => dashes[i])
+  }
+}
+
+/** Drag wet ink down one feed line, carrying a decaying tail past each stroke. */
+function dragLine(
+  plane: Float32Array,
+  load: Float32Array,
+  width: number,
+  axes: FeedAxes,
+  line: number,
+  length: number,
+  tail: number,
+  dash: (step: number, i: number) => number,
+) {
+  const decay = Math.exp(-1 / Math.max(0.5, tail))
+  let carried = 0
+  for (let step = 0; step < length; step++) {
+    const s = axes.sign > 0 ? step : length - 1 - step
+    const i = axes.alongX ? line * width + s : s * width + line
+    const value = plane[i]
+    if (carried > value) {
+      const dashes = smoothstep(-0.45, 0.05, dash(step, i))
+      plane[i] = Math.max(value, carried * dashes)
+    }
+    // Wet ink travels; starved ink stays where it landed.
+    const l = load[i]
+    const wet = l >= 0 ? 0.6 + 0.4 * l : 0.6 * (1 + l)
+    carried = Math.max(value * wet, carried * decay)
   }
 }

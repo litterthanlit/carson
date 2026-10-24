@@ -257,6 +257,28 @@ const FEATURES = {
     await page.getByRole('region', { name: 'Poster canvas' }).screenshot({ path: join(outDir, 'canvas.png') })
   },
 
+  async press(page, outDir) {
+    await openTab(page, 'Print')
+    const onPress = page.getByRole('switch', { name: 'One press for the whole poster' })
+    if (!(await onPress.isChecked())) fail('A new poster should start on a press')
+    const seedChip = page.locator('.press-card .seed-chip')
+    const seed = await seedChip.innerText()
+    await page.getByRole('button', { name: 'Show ink map' }).click()
+    await page.getByRole('region', { name: 'Poster canvas' }).screenshot({ path: join(outDir, 'ink-map.png') })
+    await page.getByRole('button', { name: 'Hide ink map' }).click()
+    await page.getByRole('button', { name: /^Re-ink/ }).click()
+    const reinked = await seedChip.innerText()
+    if (reinked === seed) fail('Re-ink kept the same run')
+    await page.getByRole('status').filter({ hasText: /Re-inked the press/ }).first().waitFor()
+    await page.keyboard.press('Control+z')
+    await page.waitForFunction((expected) => document.querySelector('.press-card .seed-chip')?.textContent === expected, seed)
+    await onPress.click()
+    if (await onPress.isChecked()) fail('The press switch did not turn off')
+    await onPress.click()
+    if ((await seedChip.innerText()) !== seed) fail('Switching the press back on should return to the same run')
+    await capture(page, outDir, 'press')
+  },
+
   async 'decay-marks'(page, outDir) {
     await openTab(page, 'Layers')
     await layerSelect(page, 'Oversized headline').click()

@@ -29,4 +29,5 @@ Preconditions:
 
 - `Ink bleed` is disabled with no selection.
 - The bake runs in a worker and takes seconds on a print-size headline. Wait for `Applied Ink bleed` in the trail before taking the canvas proof.
-- Ink trains and slur follow `Scan angle`. The instrument sets it to 0° (a horizontal feed).
+- On a press (every new poster), the ink trains and slur come from the press: its ink map and feed angle, shared by every layer. Off the press they follow `Scan angle`, which the instrument sets to 0° (a horizontal feed).
+- Moving the layer re-inks it for its new spot on the press.

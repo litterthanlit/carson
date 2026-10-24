@@ -17,6 +17,7 @@
  * Pure, seeded and headless-testable; the worker and export run the same code.
  */
 import { applyInkLoad, inkLoadIsIdle } from './inkBleed'
+import type { SheetPatch } from './press'
 import { createSeededRandom } from './random'
 
 export type CopyMachineParams = {
@@ -623,6 +624,8 @@ export function applyTonalPasses(
   params: TonalParams,
   random: () => number,
   exportScale = 1,
+  /** Where this raster lies on the poster's press — its ink load then comes from there. */
+  sheet?: SheetPatch,
 ): ImageData {
   const { width, height } = imageData
   const out = cloneImageData(imageData)
@@ -644,7 +647,7 @@ export function applyTonalPasses(
     slur: params.slur ?? 0,
     dragAngle: params.dragAngle ?? COPY_MACHINE_DEFAULTS.dragAngle,
   }
-  if (!inkLoadIsIdle(inkLoad)) ({ ink, wet } = applyInkLoad(ink, width, height, inkLoad, random, pixelScale))
+  if (!inkLoadIsIdle(inkLoad)) ({ ink, wet } = applyInkLoad(ink, width, height, inkLoad, random, pixelScale, sheet))
   const density = tonerDensity(ink, width, height, params, random, pixelScale, wet)
 
   // Mottle: solids never lie down evenly.
@@ -832,8 +835,9 @@ export function renderCopyMachinePass(
   params: CopyMachineParams,
   random: () => number,
   exportScale = 1,
+  sheet?: SheetPatch,
 ): ImageData {
-  let output = applyTonalPasses(applySpatialPasses(imageData, params, random, exportScale), params, random, exportScale)
+  let output = applyTonalPasses(applySpatialPasses(imageData, params, random, exportScale), params, random, exportScale, sheet)
   const generations = Math.max(1, Math.min(MAX_COPY_GENERATIONS, Math.round(params.generations ?? 1)))
   for (let generation = 1; generation < generations; generation++) {
     output = resampleGeneration(output, params.copyScale ?? 100, exportScale)
@@ -845,7 +849,7 @@ export function renderCopyMachinePass(
       random,
       exportScale,
     )
-    output = applyTonalPasses(applyDisplacement(output, field), params, random, exportScale)
+    output = applyTonalPasses(applyDisplacement(output, field), params, random, exportScale, sheet)
   }
   return output
 }
@@ -861,13 +865,14 @@ export function applyCopyMachineChain(
   treatments: CopyMachineChainStep[],
   exportScale = 1,
   tensionScale = 1,
+  sheet?: SheetPatch,
 ): ImageData {
   let imageData = sourceImageData
   for (const treatment of treatments) {
     if (!treatment.enabled) continue
     const params = scaleCopyMachineParams(copyMachineParamsFromRecord(treatment.params), tensionScale)
     const random = createSeededRandom(treatment.seed)
-    imageData = renderCopyMachinePass(imageData, params, random, exportScale)
+    imageData = renderCopyMachinePass(imageData, params, random, exportScale, sheet)
   }
   return imageData
 }
@@ -888,8 +893,17 @@ export function copyMachineGhostOpacity(ghost: number): number {
 }
 
 /** Pixel offset for the misregistration echo (right + slightly up). */
-export function copyMachineGhostDelta(ghostOffset: number): { dx: number; dy: number } {
+export function copyMachineGhostDelta(
+  ghostOffset: number,
+  /** The press's plate slip (unit vector): every echo on the poster then shifts the same way. */
+  slip?: { dx: number; dy: number },
+): { dx: number; dy: number } {
   const offset = Math.max(0, ghostOffset)
+  if (slip) {
+    // As far as the default echo travels (right and up), along the run's slip.
+    const distance = offset * Math.hypot(1, 0.45)
+    return { dx: slip.dx * distance, dy: slip.dy * distance }
+  }
   return {
     dx: offset,
     dy: -offset * 0.45,
@@ -903,8 +917,10 @@ export function misprintCompanionPose(options: {
   angle: number
   offset: number
   opacity: number
+  /** The press's plate slip, when the poster prints on one. */
+  slip?: { dx: number; dy: number }
 }) {
-  const { dx, dy } = copyMachineGhostDelta(options.offset)
+  const { dx, dy } = copyMachineGhostDelta(options.offset, options.slip)
   return {
     left: options.left + dx,
     top: options.top + dy,

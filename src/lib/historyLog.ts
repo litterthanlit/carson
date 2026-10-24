@@ -5,6 +5,8 @@ export type HistoryOp =
   | { id?: string; type: 'snapshot'; label: string; data: string }
   | { id?: string; type: 'treatment'; label: string; objectId: string; before: string; after: string }
   | { id?: string; type: 'posterTreatment'; label: string; artboardId: string; before: string; after: string }
+  /** The poster's press run (JSON of a PressRun, or null when off). */
+  | { id?: string; type: 'press'; label: string; artboardId: string; before: string; after: string }
   | { id?: string; type: 'objectPatch'; label: string; objectId: string; before: string; after: string }
   | {
       id?: string
@@ -35,6 +37,7 @@ export type HistoryRestoreAction =
   | { kind: 'snapshot'; data: string; label: string }
   | { kind: 'treatment'; objectId: string; treatmentsJson: string; label: string }
   | { kind: 'posterTreatment'; artboardId: string; treatmentsJson: string; label: string }
+  | { kind: 'press'; artboardId: string; pressJson: string; label: string }
   | { kind: 'objectPatch'; objectId: string; patchJson: string; label: string }
   | {
       kind: 'objectPatches'
@@ -170,6 +173,9 @@ export function restoreActionForUndo(state: HistoryState): HistoryRestoreAction 
       label: `Undo: ${op.label}`,
     }
   }
+  if (op.type === 'press') {
+    return { kind: 'press', artboardId: op.artboardId, pressJson: op.before, label: `Undo: ${op.label}` }
+  }
   if (op.type === 'objectPatch') {
     return {
       kind: 'objectPatch',
@@ -236,6 +242,9 @@ export function restoreActionForRedo(state: HistoryState): HistoryRestoreAction 
       treatmentsJson: op.after,
       label: `Redo: ${op.label}`,
     }
+  }
+  if (op.type === 'press') {
+    return { kind: 'press', artboardId: op.artboardId, pressJson: op.after, label: `Redo: ${op.label}` }
   }
   if (op.type === 'objectPatch') {
     return {

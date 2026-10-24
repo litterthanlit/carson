@@ -26,6 +26,7 @@ Open the local URL Vite prints.
 - Frame tool (F): design-tool chrome as a graphic — drag out a frame, or click a layer to frame it exactly; square handles on any corner or edge, construction lines run to the poster edge; weights hold however it's resized. "Frame the images" frames every photo and scrap at once (R for another layout)
 - Copy Machine: a physical toner copier — dot gain, halftone, scan drift, streaks, lid edge, copy-of-a-copy generations
 - Ink bleed: the copier's drum inked unevenly — lines flood into fused blobs, starve to broken fragments, and wet ink slurs along the feed; spread follows each stroke's weight and the gap it faces
+- The press: each poster prints on one run — copier ink, misprints, type strips and Press Check share its ink map, paper and plate slip. Re-ink it, turn the feed, show the ink map, and drag type into a wet train to flood it
 - Typography controls for font, size, spacing, line height, skew, stretch, color, opacity, and blend mode
 - Local image upload with grayscale, contrast, threshold, blur, and noise effects
 - Poster presets plus custom size
