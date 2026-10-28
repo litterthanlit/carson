@@ -646,7 +646,7 @@ export function InspectorPanel({
       {inspectorTab === 'treatments' ? (
         <div className="panel-section">
           <h2>Treatment stack</h2>
-          <p className="hint">Non-destructive — text stays editable; remove artifact treatments to restore the source layer.</p>
+          <p className="hint">Non-destructive — text stays editable; remove artifact treatments to restore the source layer. Image filters (Copy selected, Age, Distress, Filter gallery) turn text into an image; undo brings it back.</p>
           {posterTreatments.length > 0 ? (
             <>
               <h3 className="property-kicker">Poster treatments</h3>

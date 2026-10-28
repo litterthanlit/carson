@@ -1199,8 +1199,8 @@ function App() {
   }
 
   /**
-   * Try a treatment on the poster. Trying another one while a trial is open swaps it in, so
-   * clicking through tiles compares them on the real poster; Keep or any other edit settles it.
+   * Try a treatment on the poster. Trying the one on trial again swaps in a new variation of it;
+   * trying a different one keeps the first and stacks on top, the way plays chain into a gesture.
    */
   async function tryTreatment(id: CatalogId) {
     if (trialBusyRef.current) return
@@ -1214,11 +1214,10 @@ function App() {
     setRunningTreatment(id)
     try {
       const pending = trialRef.current
-      const targetIds = pending ? pending.targetIds : selectedTargetIds()
-      if (pending) {
-        setTrialState(null)
-        await revertTrial(pending)
-      }
+      const rerolling = pending?.id === id
+      const targetIds = pending && rerolling ? pending.targetIds : selectedTargetIds()
+      setTrialState(null)
+      if (pending && rerolling) await revertTrial(pending)
       const beforeOpId = historyHeadId()
       const playsBefore = liveRef.current.performancePlays
       await catalogActionsRef.current[id]()
