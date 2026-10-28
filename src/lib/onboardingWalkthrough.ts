@@ -24,7 +24,7 @@ const COPY: Record<WalkthroughStep, Omit<WalkthroughCopy, 'index' | 'total'>> = 
   },
   xerox: {
     title: 'Xerox it',
-    body: 'Copy selected. The photocopy warps the look. The type underneath stays type.',
+    body: 'Copy selected. The photocopy turns the type into a print. Undo brings the live type back.',
     hint: 'Copy selected in Print',
     status: 'Xerox the selection — Copy selected',
   },

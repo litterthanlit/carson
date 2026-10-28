@@ -21,7 +21,7 @@ export function OnboardingModal({
       </p>
       <ol className="onboarding-steps">
         <li>Scatter the headline — watch the seed number</li>
-        <li>Hit Xerox on the selection — text stays editable underneath</li>
+        <li>Hit Xerox on the selection — the type becomes a print, undo brings it back</li>
         <li>Press <kbd>{shortcutKeys('reroll')}</kbd> to re-roll, <kbd>{shortcutKeys('undo')}</kbd> to walk it back</li>
       </ol>
       <div className="button-row">

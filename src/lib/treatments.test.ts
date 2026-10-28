@@ -3,13 +3,46 @@ import {
   addTreatment,
   buildTreatmentFilters,
   captureTransformBaseline,
+  isPixelTreatment,
   patchTransformBaseline,
   readTransformBaseline,
   readTreatments,
   treatmentLabel,
+  type TreatmentType,
 } from './treatments'
 
+const ALL_TREATMENT_TYPES = Object.keys({
+  xerox: true,
+  decay: true,
+  'decay-marks': true,
+  distress: true,
+  scatter: true,
+  'cold-wash': true,
+  slice: true,
+  crop: true,
+  tear: true,
+  'bad-crop': true,
+  'glyph-break': true,
+  'letter-break': true,
+  scrape: true,
+  'press-check': true,
+  'copy-machine': true,
+  misprint: true,
+  'type-strips': true,
+  fx: true,
+} satisfies Record<TreatmentType, true>) as TreatmentType[]
+
 describe('treatments', () => {
+  it('builds filters for exactly the treatments that rasterize non-image layers', () => {
+    const disagreements = ALL_TREATMENT_TYPES.filter((type) => {
+      const built = buildTreatmentFilters([
+        { id: '1', type, seed: 1, enabled: true, params: {}, ...(type === 'fx' ? { fxKind: 'motion-blur' as const } : {}) },
+      ])
+      return built.length > 0 !== isPixelTreatment(type)
+    })
+    expect(disagreements).toEqual([])
+  })
+
   it('stores treatments on a plain object bag', () => {
     const object = { set: (values: Record<string, unknown>) => Object.assign(object, values) } as never
     addTreatment(object, 'xerox', { generation: 5 }, 4719)

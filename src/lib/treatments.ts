@@ -148,6 +148,12 @@ const ARTIFACT_TYPES = new Set<TreatmentType>([
   'type-strips',
 ])
 const ONE_PER_LAYER = new Set<TreatmentType>(['slice', 'crop', 'tear', 'bad-crop', 'glyph-break', 'letter-break', 'type-strips'])
+// Built as Fabric image filters, which only take effect on a FabricImage.
+const PIXEL_TREATMENT_TYPES: ReadonlySet<TreatmentType> = new Set<TreatmentType>(['xerox', 'decay', 'distress', 'cold-wash', 'fx'])
+
+export function isPixelTreatment(type: TreatmentType) {
+  return PIXEL_TREATMENT_TYPES.has(type)
+}
 
 const ARTIFACT_SOURCE_KEYS: Partial<Record<TreatmentType, string>> = {
   slice: SLICE_SOURCE_ID_KEY,

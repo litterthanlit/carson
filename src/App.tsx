@@ -64,6 +64,7 @@ import {
 import {
   addTreatment,
   captureTransformBaseline,
+  isPixelTreatment,
   patchTransformBaseline,
   readTransformBaseline,
   readTreatments,
@@ -4351,7 +4352,9 @@ function App() {
     const canvas = canvasRef.current
     let object = activeObject()
     if (!canvas || !object || object.type === 'activeselection') return
-    if (type === 'fx' && object.type !== 'image') {
+    const targetIds = selectedTargetIds()
+    const rasterize = isPixelTreatment(type) && object.type !== 'image'
+    if (rasterize) {
       const snapshot = await snapshotObjectToImage(object)
       const name = String(readObjectProp(object, 'name') ?? 'Layer')
       tagObject(snapshot, 'image', name)
@@ -4362,7 +4365,6 @@ function App() {
       syncLayers()
       syncSelected()
     }
-    const targetIds = selectedTargetIds()
     captureTransformBaseline(object)
     const objectId = String(readObjectProp(object, 'id') ?? '')
     const before = JSON.stringify(readTreatments(object))
@@ -4377,12 +4379,10 @@ function App() {
       }),
     )
     trackChaos(label, seed, targetIds, (next) => void applyTreatmentToSelection(type, params, label, next, extras))
-    commitTreatmentHistoryRef.current(
-      objectId,
-      extras?.historyLabel ?? `Applied ${label} #${seed}`,
-      before,
-      JSON.stringify(readTreatments(object)),
-    )
+    const historyLabel = extras?.historyLabel ?? `Applied ${label} #${seed}`
+    // Undoing a treatment op only rewinds the image's treatments; a snapshot brings the swapped-out layer back.
+    if (rasterize) commitHistory(historyLabel)
+    else commitTreatmentHistoryRef.current(objectId, historyLabel, before, JSON.stringify(readTreatments(object)))
   }
 
   async function playLayerInstrument(id: InstrumentId, seed = newSeed()) {
