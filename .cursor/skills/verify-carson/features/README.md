@@ -58,6 +58,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Gesture performances](./gesture-performance.md) covers recording instrument plays, saving the chain, and replaying from Instruments and Commands.
 - [Press Check](./press-check.md) covers the live print look as a keepable poster treatment.
 - [Instrument and Gesture assets](./instrument-assets.md) covers saving a tuned Instrument in the document and replaying it.
+- [Agent bridge](./agent-bridge.md) covers connecting an MCP agent from Commands, its moves on the trail, the designer's undo, and disconnecting.
 - [Export PNG](./export-png.md) covers the header Export control and a downloaded PNG.
 - [Bezier pen](./bezier-pen.md) covers click-to-place bezier from Shape → Pen.
 - [CMYK plates](./cmyk-plates.md) covers Print → Export CMYK plates.

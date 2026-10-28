@@ -13,6 +13,7 @@ import {
   Shuffle,
   Undo2,
 } from 'lucide-react'
+import type { AgentBridgeStatus } from '../lib/agentBridge'
 import { BrandMark } from './BrandMark'
 import { TensionDial } from './TensionDial'
 import { ThemeToggle } from './ThemeToggle'
@@ -36,6 +37,55 @@ type TopBarProps = {
   onScramble: () => void
   scrambleDisabled?: boolean
   onExport: () => void
+  agentStatus?: AgentBridgeStatus
+  onAgentConnect?: () => void
+  onAgentDisconnect?: () => void
+}
+
+const AGENT_COPY: Record<Exclude<AgentBridgeStatus, 'off'>, { detail: string; title: string }> = {
+  connecting: {
+    detail: 'waiting',
+    title: 'Waiting for the Carson MCP server. Start it from your agent. Click to stop waiting.',
+  },
+  connected: {
+    detail: 'live',
+    title: 'An agent is playing this poster. Every move lands on the trail and ⌘Z undoes it. Click to disconnect.',
+  },
+  replaced: {
+    detail: 'in another window',
+    title: 'Another Carson window has the agent. Click to bring it here.',
+  },
+  incompatible: {
+    detail: 'needs update',
+    title: 'The Carson MCP server speaks a different protocol version. Update Carson or the server. Click to dismiss.',
+  },
+}
+
+function AgentChip({
+  status,
+  onConnect,
+  onDisconnect,
+}: {
+  status: Exclude<AgentBridgeStatus, 'off'>
+  onConnect?: () => void
+  onDisconnect?: () => void
+}) {
+  const copy = AGENT_COPY[status]
+  return (
+    <button
+      type="button"
+      className={`agent-chip ${status}`}
+      aria-label={`Agent ${copy.detail}`}
+      title={copy.title}
+      onClick={status === 'replaced' ? onConnect : onDisconnect}
+    >
+      <span className="agent-dot" aria-hidden />
+      <span>Agent</span>
+      <span className="agent-chip-detail" aria-live="polite">
+        {copy.detail}
+      </span>
+    </button>
+  )
 }
 
 type FileItem = {
@@ -140,6 +190,9 @@ export const TopBar = memo(function TopBar({
   onScramble,
   scrambleDisabled,
   onExport,
+  agentStatus = 'off',
+  onAgentConnect,
+  onAgentDisconnect,
 }: TopBarProps) {
   const fileItems: FileItem[] = [
     { label: 'New poster', shortcut: '⌘N', keys: 'Meta+N', icon: FilePlus2, run: onNewPoster },
@@ -189,6 +242,9 @@ export const TopBar = memo(function TopBar({
             <Redo2 size={15} />
           </button>
         </div>
+        {agentStatus !== 'off' ? (
+          <AgentChip status={agentStatus} onConnect={onAgentConnect} onDisconnect={onAgentDisconnect} />
+        ) : null}
         <ThemeToggle />
         <button type="button" className="command-button" title="Search every action (⌘K)" aria-label="Commands" onClick={onOpenCommands}>
           <Command size={13} aria-hidden />

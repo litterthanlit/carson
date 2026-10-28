@@ -475,6 +475,58 @@ const FEATURES = {
     await capture(page, outDir, 'commands')
   },
 
+  async 'agent-bridge'(page, outDir) {
+    const trail = page.getByRole('region', { name: 'Exploration trail' })
+    const runCommand = async (label) => {
+      await page.getByRole('button', { name: 'Commands' }).click()
+      const palette = page.getByRole('dialog', { name: 'Command palette' })
+      await palette.waitFor()
+      await palette.getByPlaceholder(/Search actions/).fill(label)
+      await palette.getByRole('button', { name: label, exact: true }).click()
+    }
+    await runCommand('Connect agent')
+    await page.getByRole('button', { name: 'Agent waiting' }).waitFor()
+    await capture(page, outDir, 'waiting')
+
+    // The real Carson MCP server, driven over stdio the way an agent host would.
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { StdioClientTransport, getDefaultEnvironment } = await import('@modelcontextprotocol/client/stdio')
+    const root = resolve(skillDir, '../../..')
+    const client = new Client({ name: 'verify-carson', version: '1.0.0' })
+    await client.connect(new StdioClientTransport({ command: process.execPath, args: [join(root, 'mcp/server.ts')], env: getDefaultEnvironment() }))
+    const call = async (name, args = {}) => {
+      const result = await client.callTool({ name, arguments: args })
+      const text = result.content.map((item) => item.text ?? '').join('\n')
+      if (result.isError) fail(`${name} failed: ${text}`)
+      return { result, text }
+    }
+    try {
+      await page.getByRole('button', { name: 'Agent live' }).waitFor({ timeout: 20000 })
+      const { result } = await call('carson_list_layers', { response_format: 'json' })
+      const headline = result.structuredContent.layers.find((layer) => layer.name === 'Oversized headline')
+      if (!headline) fail('Agent could not see the seed headline')
+      await call('carson_run_command', { command_id: 'scatter', layer_ids: [headline.id] })
+      await trail.getByRole('button', { name: /Scatter/ }).first().waitFor()
+      await openTab(page, 'Treatments')
+      await page.getByRole('complementary', { name: 'Inspector' }).getByText(/Scatter·#/).waitFor()
+      await capture(page, outDir, 'agent-move')
+
+      await page.getByRole('button', { name: 'Undo' }).click()
+      await page.getByRole('complementary', { name: 'Inspector' }).getByText(/Scatter·#/).waitFor({ state: 'hidden' })
+      const { text } = await call('carson_status')
+      if (!/can redo/.test(text)) fail("The designer's undo did not reach the agent's view")
+      await capture(page, outDir, 'designer-undo')
+
+      await runCommand('Disconnect agent')
+      await page.getByRole('button', { name: /^Agent / }).waitFor({ state: 'hidden' })
+      const after = await call('carson_status')
+      if (!/No Carson editor is connected/.test(after.text)) fail('Disconnect left the agent attached')
+      await capture(page, outDir, 'disconnected')
+    } finally {
+      await client.close()
+    }
+  },
+
   async 'instrument-assets'(page, outDir) {
     const trail = page.getByRole('region', { name: 'Exploration trail' })
     await openTab(page, 'Layers')

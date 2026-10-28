@@ -2879,6 +2879,82 @@ input[type='color'] {
   border-color: var(--border-strong);
 }
 
+/* An agent on the bridge: quiet while waiting, a pulsing accent dot while it plays. */
+.agent-chip {
+  min-height: 22px;
+  padding: 0 9px 0 8px;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border-strong);
+  border-radius: 999px;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.agent-chip .agent-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.agent-chip-detail {
+  color: var(--text-faint);
+}
+
+.agent-chip.connected {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+
+.agent-chip.connected .agent-chip-detail {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.agent-chip.connected .agent-dot {
+  background: var(--accent);
+  animation: agent-pulse 1.8s ease-out infinite;
+}
+
+.agent-chip.connecting .agent-dot {
+  animation: agent-wait 1.2s ease-in-out infinite alternate;
+}
+
+.agent-chip.incompatible .agent-dot {
+  background: #e5484d;
+}
+
+@keyframes agent-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(20 115 230 / 0.55);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px rgb(20 115 230 / 0);
+  }
+}
+
+@keyframes agent-wait {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-chip .agent-dot {
+    animation: none !important;
+  }
+}
+
 .top-cluster {
   display: flex;
   align-items: center;

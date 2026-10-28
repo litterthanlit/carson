@@ -259,6 +259,8 @@ import { usePathEditing } from './hooks/usePathEditing'
 import { useBezierPen, type BezierPenActions } from './hooks/useBezierPen'
 import { useTreatments } from './hooks/useTreatments'
 import { useEditorHistory } from './hooks/useEditorHistory'
+import { useAgentBridge } from './hooks/useAgentBridge'
+import type { AgentTextSpec } from './lib/agentProtocol'
 import { createLayerThumbnail, invalidateLayerThumbnail } from './lib/layerThumbnail'
 import { isLayerSyncSuppressed } from './lib/layerSync'
 import { applySelectionChrome } from './lib/selectionChrome'
@@ -2037,10 +2039,11 @@ function App() {
     return objects.map((object) => String(readObjectProp(object, 'id') ?? ''))
   }
 
-  function addText(position?: { left: number; top: number }) {
+  function addText(position?: { left: number; top: number }, spec: Partial<AgentTextSpec> = {}) {
     const canvas = canvasRef.current
     if (!canvas) return
-    const text = new Textbox('NEW TYPE', {
+    const { text: content = 'NEW TYPE', name = 'Text layer', ...style } = spec
+    const text = new Textbox(content, {
       left: position?.left ?? poster.width * 0.18,
       top: position?.top ?? poster.height * 0.18,
       width: poster.width * 0.52,
@@ -2050,8 +2053,9 @@ function App() {
       lineHeight: 0.86,
       charSpacing: 20,
       fill: '#111111',
+      ...style,
     })
-    tagObject(text, 'text', 'Text layer')
+    tagObject(text, 'text', name)
     canvas.add(text)
     canvas.setActiveObject(text)
     commitHistory('Added text')
@@ -4081,18 +4085,18 @@ function App() {
     if (presetId === 'custom') setPoster(applyPosterPreset('custom', nextSize))
   }
 
-  function commitTension() {
+  async function commitTension() {
     setShowLayoutGrid(true)
     const canvas = canvasRef.current
     if (!canvas) return
-    for (const object of canvas.getObjects()) {
-      if (readTreatments(object).some((item) => instrumentUsesTension(item.type))) {
-        void refreshTreatmentStack(object)
-      }
-    }
+    const refreshes = canvas
+      .getObjects()
+      .filter((object) => readTreatments(object).some((item) => instrumentUsesTension(item.type)))
+      .map((object) => refreshTreatmentStack(object))
     if (documentMeta && isPressCheckOn(readPosterTreatments(getActiveArtboard(documentMeta)))) {
-      void refreshPosterTreatments()
+      refreshes.push(refreshPosterTreatments())
     }
+    await Promise.all(refreshes)
   }
 
   async function handleImageFile(file: File, options: { fill?: boolean } = {}) {
@@ -4234,13 +4238,13 @@ function App() {
     )
   }
 
-  async function applyLayerDecayToSelected(seed = newSeed()) {
-    void playLayerInstrument('age', seed)
+  function applyLayerDecayToSelected(seed = newSeed()) {
+    return playLayerInstrument('age', seed)
   }
 
   function addLayerDecayMarks(kind: 'ink-loss' | 'fold' | 'all', seed = newSeed()) {
     const id: InstrumentId = kind === 'fold' ? 'fold' : kind === 'all' ? 'wear' : 'ink-loss'
-    void playLayerInstrument(id, seed)
+    return playLayerInstrument(id, seed)
   }
 
   async function addLayerDecayOffset() {
@@ -4626,7 +4630,7 @@ function App() {
   }
 
   function addTypeStrip(seed = newSeed()) {
-    void playLayerInstrument('type-strips', seed)
+    return playLayerInstrument('type-strips', seed)
   }
 
   function breakSelectedType(seed = newSeed()) {
@@ -4661,7 +4665,7 @@ function App() {
     if (!readTransformBaseline(object)) captureTransformBaseline(object)
     if (existing) updateTreatment(object, existing.id, { seed })
     else addTreatment(object, 'letter-break', { ...LETTER_BREAK_DEFAULTS }, seed)
-    void refreshTreatmentStack(object).then(() => {
+    return refreshTreatmentStack(object).then(() => {
       setInspectorTab('treatments')
       commitHistory(`Broke letters #${seed}`)
       setStatus('Broke the letters into their strokes — break again for a new cut')
@@ -5392,38 +5396,27 @@ function App() {
     setStatus(enabled ? 'CMYK soft-proof preview on' : 'CMYK soft-proof preview off')
   }
 
-  async function exportPoster() {
+  /**
+   * Draw the poster for output: selection off, `background` behind it, and (when `bakeScale` is
+   * set) copier and Press Check rebaked at that scale. Everything is restored afterwards.
+   */
+  async function renderForExport<T>(
+    background: Canvas['backgroundColor'],
+    bakeScale: number | null,
+    draw: (canvas: Canvas) => T | Promise<T>,
+  ): Promise<T> {
     const canvas = canvasRef.current
-    if (!canvas) return
-    const format = exportFormat
-    const baseName = safeFileName(projectName)
+    if (!canvas) throw new Error('No poster is open')
     const previousBackground = canvas.backgroundColor
     const previousActive = canvas.getActiveObject()
     const previousRenderOnAddRemove = canvas.renderOnAddRemove
-    const rasterFormat = format === 'jpeg' ? 'jpeg' : 'png'
-    const background =
-      exportBackground === 'white' || (rasterFormat === 'jpeg' && exportBackground === 'transparent')
-        ? '#ffffff'
-        : exportBackground === 'transparent'
-          ? ''
-          : '#f6f1e6'
-    const needsExportBake = format !== 'svg' && exportScale !== 1
     const tensionScale = gridTensionScale(gridOverlay.tension)
-
     try {
       canvas.renderOnAddRemove = false
       canvas.discardActiveObject()
       canvas.backgroundColor = background
-
-      if (format === 'svg') {
-        const svg = canvasToSvgMarkup(canvas)
-        downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${baseName}.svg`)
-        setStatus(`Exported SVG ${poster.width} x ${poster.height}`)
-        return
-      }
-
-      if (needsExportBake) {
-        await rebakeCopyMachineTreatments(canvas, exportScale, tensionScale)
+      if (bakeScale !== null) {
+        await rebakeCopyMachineTreatments(canvas, bakeScale, tensionScale)
         await rebakePressCheckTreatments(
           canvas,
           posterTreatments,
@@ -5437,10 +5430,49 @@ function App() {
             } as Partial<FabricObject>)
           },
           tensionScale,
-          exportScale,
+          bakeScale,
         )
       }
-      const raster = await rasterizeCanvasTiled(canvas, exportScale)
+      return await draw(canvas)
+    } finally {
+      if (bakeScale !== null) {
+        await rebakeCopyMachineTreatments(canvas, 1, tensionScale)
+        await refreshPosterTreatments()
+      }
+      canvas.backgroundColor = previousBackground
+      canvas.renderOnAddRemove = previousRenderOnAddRemove
+      if (previousActive && canvas.getObjects().includes(previousActive)) {
+        canvas.setActiveObject(previousActive)
+      }
+      canvas.requestRenderAll()
+      syncSelected()
+    }
+  }
+
+  async function exportPoster() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const format = exportFormat
+    const baseName = safeFileName(projectName)
+    const rasterFormat = format === 'jpeg' ? 'jpeg' : 'png'
+    const background =
+      exportBackground === 'white' || (rasterFormat === 'jpeg' && exportBackground === 'transparent')
+        ? '#ffffff'
+        : exportBackground === 'transparent'
+          ? ''
+          : '#f6f1e6'
+
+    try {
+      if (format === 'svg') {
+        const svg = await renderForExport(background, null, canvasToSvgMarkup)
+        downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${baseName}.svg`)
+        setStatus(`Exported SVG ${poster.width} x ${poster.height}`)
+        return
+      }
+
+      const raster = await renderForExport(background, exportScale !== 1 ? exportScale : null, (target) =>
+        rasterizeCanvasTiled(target, exportScale),
+      )
       const width = raster.width
       const height = raster.height
 
@@ -5462,18 +5494,6 @@ function App() {
       setStatus(`Exported ${format.toUpperCase()} ${width} x ${height}`)
     } catch {
       setStatus('Export failed — try a smaller export size')
-    } finally {
-      if (needsExportBake) {
-        await rebakeCopyMachineTreatments(canvas, 1, tensionScale)
-        await refreshPosterTreatments()
-      }
-      canvas.backgroundColor = previousBackground
-      canvas.renderOnAddRemove = previousRenderOnAddRemove
-      if (previousActive && canvas.getObjects().includes(previousActive)) {
-        canvas.setActiveObject(previousActive)
-      }
-      canvas.requestRenderAll()
-      syncSelected()
     }
   }
 
@@ -5633,6 +5653,60 @@ function App() {
   function handleTogglePencilMode() {
     togglePenKind('freehand')
   }
+  const commandsRef = useRef<CommandAction[]>([])
+  const agentBridge = useAgentBridge({
+    canvasRef,
+    screen,
+    projectId,
+    projectName,
+    dirty: isDirty,
+    poster,
+    status,
+    tension: gridOverlay.tension,
+    posterTreatments,
+    trailFrames,
+    trailOpIds,
+    trailCursor,
+    history: () => historyLogRef.current,
+    lastChaos,
+    recordingGesture: performance.recording,
+    savedProjects,
+    commands: () => commandsRef.current,
+    describeLayer: toSelectedState,
+    syncSelected,
+    addText: (spec) => addText(undefined, spec),
+    updateActive,
+    finalizeActive,
+    renameLayer,
+    toggleLayerVisibility,
+    toggleLayerLock,
+    layerTreatments: {
+      reroll: rerollTreatment,
+      toggle: toggleTreatment,
+      remove: (treatmentId, object) => removeLayerTreatment(object, treatmentId),
+      setParams: updateLayerTreatmentParams,
+    },
+    posterTreatmentActions: {
+      reroll: rerollPosterTreatment,
+      toggle: togglePosterTreatment,
+      remove: removePosterTreatmentAction,
+      setParams: updatePosterTreatmentParams,
+    },
+    setTension: handleTensionChange,
+    commitTension,
+    undo: handleUserUndo,
+    redo: () => keyActionsRef.current.redo(),
+    jumpToOpId,
+    rasterize: (scale) =>
+      renderForExport(canvasRef.current?.backgroundColor ?? '#f6f1e6', scale > 1 ? scale : null, (target) =>
+        rasterizeCanvasTiled(target, scale),
+      ),
+    confirmIfDirty,
+    startEditor: applyEditorIntent,
+    save: saveProjectAction,
+    saveAs: saveAsPosterAction,
+    placeImage: handleImageFile,
+  })
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
   const commands: CommandAction[] = [
     { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
@@ -5660,14 +5734,14 @@ function App() {
     { id: 'warp', label: 'Warp', keywords: ['warp', 'mesh', 'bend', 'transform', 'puppet'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('mesh') },
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
-    { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => void applyXeroxToSelected() },
+    { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => applyXeroxToSelected() },
     {
       id: 'copy-machine',
       label: 'Copy machine',
       keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier'],
       scope: 'selection',
       disabled: !selected,
-      run: () => void applyCopyMachineToSelected(),
+      run: () => applyCopyMachineToSelected(),
     },
     {
       id: 'ink-bleed',
@@ -5675,21 +5749,21 @@ function App() {
       keywords: ['ink bleed', 'ink spread', 'flood', 'starve', 'blot', 'slur', 'smear', 'over-inked', 'stamp', 'copier'],
       scope: 'selection',
       disabled: !selected,
-      run: () => void applyInkBleedToSelected(),
+      run: () => applyInkBleedToSelected(),
     },
     {
       id: 'copy-machine-poster',
       label: 'Run through the copier',
       keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier', 'poster', 'all layers'],
       scope: 'canvas',
-      run: () => void applyCopyMachineToPoster(),
+      run: () => applyCopyMachineToPoster(),
     },
     {
       id: 'press-check',
       label: isPressCheckOn(posterTreatments) ? 'Turn off Press Check' : 'Press Check',
       keywords: ['press check', 'print', 'ink spread', 'misregistration', 'paper tooth', 'press'],
       scope: 'canvas',
-      run: () => void togglePressCheck(),
+      run: () => togglePressCheck(),
     },
     {
       id: 'gesture-copy-scatter-copy',
@@ -5697,7 +5771,7 @@ function App() {
       keywords: ['gesture', 'copy machine', 'scatter', 'macro', 'chain'],
       scope: 'selection',
       disabled: !selected,
-      run: () => void applyCopyScatterCopyGesture(),
+      run: () => applyCopyScatterCopyGesture(),
     },
     {
       id: 'gesture-record',
@@ -5720,7 +5794,7 @@ function App() {
       keywords: ['instrument', 'play', 'asset', asset.name, asset.treatmentType],
       scope: 'selection' as const,
       disabled: !selected,
-      run: () => void playSavedInstrument(asset),
+      run: () => playSavedInstrument(asset),
     })),
     ...(documentMeta?.gestures ?? []).map((gesture) => ({
       id: `gesture-${gesture.id}`,
@@ -5728,7 +5802,7 @@ function App() {
       keywords: ['gesture', 'play', 'performance', gesture.name, ...gesture.steps.map((step) => step.type)],
       scope: 'selection' as const,
       disabled: !selected,
-      run: () => void applyGestureToSelection(gesture),
+      run: () => applyGestureToSelection(gesture),
     })),
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
     {
@@ -5737,19 +5811,19 @@ function App() {
       keywords: ['scramble', 'shuffle', 'rearrange', 'structure', 'layout', 'riff'],
       scope: 'canvas',
       disabled: scrambleSourceObjects().length === 0,
-      run: () => void scrambleCanvas(),
+      run: () => scrambleCanvas(),
     },
-    { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => void applyLayerDecayToSelected() },
+    { id: 'decay', label: 'Age selected', keywords: ['decay', 'age', 'wear'], scope: 'selection', disabled: !selected, run: () => applyLayerDecayToSelected() },
     { id: 'ink-loss', label: 'Ink loss', keywords: ['decay', 'ink', 'chip', 'wear'], scope: 'selection', disabled: !selected, run: () => addLayerDecayMarks('ink-loss') },
     { id: 'fold-marks', label: 'Fold marks', keywords: ['decay', 'fold', 'crease', 'wear'], scope: 'selection', disabled: !selected, run: () => addLayerDecayMarks('fold') },
-    { id: 'misprint', label: 'Misprint offset', keywords: ['misprint', 'offset', 'ghost', 'print', 'echo'], scope: 'selection', disabled: !selected, run: () => void addMisprintDuplicate() },
+    { id: 'misprint', label: 'Misprint offset', keywords: ['misprint', 'offset', 'ghost', 'print', 'echo'], scope: 'selection', disabled: !selected, run: () => addMisprintDuplicate() },
     { id: 'type-strips', label: 'Type strip', keywords: ['type', 'strip', 'repeat', 'print'], scope: 'selection', disabled: !selectedIsText, run: () => addTypeStrip() },
-    { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => void distressSelected() },
+    { id: 'distress', label: 'Distress', keywords: ['distress', 'grunge'], scope: 'selection', disabled: !selected, run: () => distressSelected() },
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
-    { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => void exportPoster() },
-    { id: 'export-plates', label: 'Export CMYK plates', keywords: ['cmyk', 'plates', 'print', 'separation', 'cyan', 'magenta'], scope: 'canvas', run: () => void exportCmykPlates() },
+    { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => exportPoster() },
+    { id: 'export-plates', label: 'Export CMYK plates', keywords: ['cmyk', 'plates', 'print', 'separation', 'cyan', 'magenta'], scope: 'canvas', run: () => exportCmykPlates() },
     { id: 'pen-tool', label: 'Pen tool', keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
-    { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => void saveProjectAction() },
+    { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => saveProjectAction() },
     {
       id: 'save-as',
       label: 'Save as',
@@ -5764,18 +5838,18 @@ function App() {
       keywords: ['duplicate', 'copy', 'save as', 'file'],
       scope: 'canvas',
       disabled: screen !== 'editor',
-      run: () => void duplicatePosterAction(),
+      run: () => duplicatePosterAction(),
     },
-    { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => void forkVariation() },
+    { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => forkVariation() },
     { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
-    { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => void clipSelectionToShape() },
+    { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => clipSelectionToShape() },
     {
       id: 'weave',
       label: 'Weave type through scraps',
       keywords: ['weave', 'over', 'under', 'collage', 'interleave', 'behind', 'mask'],
       scope: 'selection',
       disabled: !selected,
-      run: () => void weaveSelection(),
+      run: () => weaveSelection(),
     },
     {
       id: 'letter-break',
@@ -5785,13 +5859,13 @@ function App() {
       disabled: !selected,
       run: () => letterBreakSelected(),
     },
-    { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => void unweaveSelected() },
+    { id: 'unweave', label: 'Remove weave', keywords: ['weave', 'unweave', 'mask'], scope: 'selection', disabled: !selected, run: () => unweaveSelected() },
     {
       id: 'crumple-sheet',
       label: 'Crumple the sheet',
       keywords: ['crumple', 'crease', 'fold', 'wrinkle', 'paper', 'texture', 'real', 'material'],
       scope: 'canvas',
-      run: () => void crumpleSheet(),
+      run: () => crumpleSheet(),
     },
     {
       id: 'crop-marks',
@@ -5834,7 +5908,7 @@ function App() {
       label: `Paste ${paper.label.toLowerCase()}`,
       keywords: ['found paper', 'scrap', 'collage', 'paper', 'torn', paper.kind],
       scope: 'canvas' as const,
-      run: () => void insertFoundPaper(paper.kind),
+      run: () => insertFoundPaper(paper.kind),
     })),
     {
       id: 'tear-edges',
@@ -5842,18 +5916,18 @@ function App() {
       keywords: ['tear', 'torn', 'rip', 'paper', 'scrap', 'collage', 'mask'],
       scope: 'selection',
       disabled: !selected,
-      run: () => void tearSelectedEdges(),
+      run: () => tearSelectedEdges(),
     },
     { id: 'paint-mask', label: 'Paint layer mask', keywords: ['mask', 'brush', 'eraser', 'alpha'], scope: 'selection', disabled: !selected, run: () => paintBrushMask() },
-    { id: 'invert-mask', label: 'Invert layer mask', keywords: ['mask', 'invert'], scope: 'selection', disabled: !selected, run: () => void invertSelectedMask() },
-    { id: 'clear-mask', label: 'Remove layer mask', keywords: ['mask', 'clear', 'remove'], scope: 'selection', disabled: !selected, run: () => void clearSelectedMask() },
+    { id: 'invert-mask', label: 'Invert layer mask', keywords: ['mask', 'invert'], scope: 'selection', disabled: !selected, run: () => invertSelectedMask() },
+    { id: 'clear-mask', label: 'Remove layer mask', keywords: ['mask', 'clear', 'remove'], scope: 'selection', disabled: !selected, run: () => clearSelectedMask() },
     {
       id: 'boolean-union',
       label: 'Combine shapes (union)',
       keywords: ['boolean', 'union', 'combine', 'merge', 'path'],
       scope: 'selection',
       disabled: !selected,
-      run: () => void combineSelectedBoolean('union'),
+      run: () => combineSelectedBoolean('union'),
     },
     {
       id: 'boolean-subtract',
@@ -5861,7 +5935,7 @@ function App() {
       keywords: ['boolean', 'subtract', 'punch', 'path'],
       scope: 'selection',
       disabled: !selected,
-      run: () => void combineSelectedBoolean('subtract'),
+      run: () => combineSelectedBoolean('subtract'),
     },
     { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns', 'layout'], scope: 'canvas', run: () => keyActionsRef.current.toggleLayoutGrid() },
     {
@@ -5870,7 +5944,7 @@ function App() {
       keywords: ['group', 'folder', 'nest'],
       scope: 'selection',
       disabled: !canGroupLayers,
-      run: () => void groupSelection(),
+      run: () => groupSelection(),
     },
     {
       id: 'ungroup-layers',
@@ -5878,7 +5952,7 @@ function App() {
       keywords: ['ungroup', 'split'],
       scope: 'selection',
       disabled: !canUngroupLayers,
-      run: () => void ungroupSelection(),
+      run: () => ungroupSelection(),
     },
     {
       id: 'save-component',
@@ -5886,7 +5960,7 @@ function App() {
       keywords: ['component', 'symbol', 'instance', 'asset'],
       scope: 'selection',
       disabled: !selected,
-      run: () => void saveSelectionAsComponent(),
+      run: () => saveSelectionAsComponent(),
     },
     {
       id: 'detach-instance',
@@ -5924,7 +5998,23 @@ function App() {
       disabled: !activePressRun,
       run: () => setPressOn(false),
     },
+    agentBridge.status === 'off' || agentBridge.status === 'replaced'
+      ? {
+          id: 'agent-connect',
+          label: agentBridge.status === 'replaced' ? 'Bring the agent to this window' : 'Connect agent',
+          keywords: ['agent', 'mcp', 'ai', 'assistant', 'claude', 'cursor', 'connect', 'bridge'],
+          scope: 'any' as const,
+          run: agentBridge.connect,
+        }
+      : {
+          id: 'agent-disconnect',
+          label: 'Disconnect agent',
+          keywords: ['agent', 'mcp', 'ai', 'assistant', 'claude', 'cursor', 'disconnect', 'bridge'],
+          scope: 'any' as const,
+          run: agentBridge.disconnect,
+        },
   ]
+  commandsRef.current = commands
 
   return (
     <main className={screen === 'home' ? 'home-root' : 'editor-shell'} data-tour={walkthroughStep ?? undefined}>
@@ -6076,6 +6166,9 @@ function App() {
         onScramble={() => void scrambleCanvas()}
         scrambleDisabled={scrambleSourceObjects().length === 0}
         onExport={() => void exportPoster()}
+        agentStatus={agentBridge.status}
+        onAgentConnect={agentBridge.connect}
+        onAgentDisconnect={agentBridge.disconnect}
       />
 
       <section className="workspace">

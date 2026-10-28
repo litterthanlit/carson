@@ -8,7 +8,8 @@ export type CommandAction = {
   keywords: string[]
   scope?: 'selection' | 'canvas' | 'any'
   disabled?: boolean
-  run: () => void
+  /** Resolves when the action has landed, so an agent can wait for it; the palette doesn't. */
+  run: () => void | Promise<unknown>
 }
 
 export function filterCommands(commands: CommandAction[], query: string): CommandAction[] {
