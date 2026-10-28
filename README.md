@@ -33,6 +33,11 @@ Open the local URL Vite prints.
 - Local save/load
 - PNG export
 - Undo/redo
+- Agent bridge: an MCP server lets Claude Code, Cursor or any MCP agent play the open poster as a studio assistant — every move on the trail, undoable
+
+## Agents (MCP)
+
+`mcp/server.ts` is an MCP server for agents. The repo's `.mcp.json` (Claude Code) and `.cursor/mcp.json` (Cursor) register it. In Carson, open Commands (⌘K) and run **Connect agent**; the top bar shows **Agent live** once the agent's server is up. Setup, tools and settings: [mcp/README.md](mcp/README.md).
 
 See [docs/CARSON-METHOD.md](docs/CARSON-METHOD.md) for how David Carson works and how the tools map to it.
 

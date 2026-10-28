@@ -80,6 +80,7 @@ Stable handles:
 - Layers tab combobox `Add adjustment layer` (Levels, Hue/Saturation, Brightness/Contrast, Gradient map, Threshold, Posterize, Invert); adjustment layers are not canvas-clickable — select them in Layers
 - `Brush tool` (B; E = eraser) with menuitemradios `Brush` / `Eraser`; toolbar `Brush options` with sliders `Size`, `Hardness`, `Opacity`, `Flow`, `Smoothing`, radios `Brush`/`Eraser`, pressure toggles `Size`/`Opacity`. First stroke creates layer `Paint`; the eraser masks non-paint layers
 - Inspect card `Transform` with `Distort`, `Warp`, `Remove warp`; while editing, toolbar `Warp options` (radios `Distort`/`Warp`, `Reset`, `Cancel`, `Done`) and handles `Top-left corner`… or `Warp point N`
+- Commands `Connect agent` / `Disconnect agent`; banner button `Agent waiting` / `Agent live` / `Agent in another window` (the agent bridge, `mcp/server.ts`)
 - Dev builds expose `window.__carsonCanvas` (the Fabric canvas) for assertions
 
 `window.prompt` during Save selection is accepted as `Mark` by the driver.
@@ -112,4 +113,4 @@ Kills only the pid recorded in `run.json`. Removes the Playwright profile under 
 | `scripts/drive.mjs --feature <id>` | Plays one mapped feature |
 | `scripts/cleanup.sh` | Stops this run's Vite pid |
 
-Feature ids: `home-recents`, `new-open`, `file-identity`, `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `bezier-pen`, `cmyk-plates`, `variations-trail`.
+Feature ids: `home-recents`, `new-open`, `file-identity`, `editor-baseline`, `wreck-this-poster`, `layer-groups`, `component-instances`, `xerox-treatment`, `copy-machine`, `decay-marks`, `misprint-type-strips`, `gesture-performance`, `press-check`, `instrument-assets`, `export-png`, `bezier-pen`, `cmyk-plates`, `variations-trail`, `agent-bridge`.

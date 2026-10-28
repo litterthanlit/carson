@@ -9,11 +9,14 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
+    "mcp": "node mcp/server.ts",
+    "mcp:smoke": "node mcp/smoke.ts",
     "import-textures": "python3 scripts/import-textures.py",
     "import-fonts": "python3 scripts/import-fonts.py"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
+    "@modelcontextprotocol/server": "^2.4.0",
     "clsx": "^2.1.1",
     "fabric": "^7.3.1",
     "jspdf": "^4.2.1",
@@ -21,16 +24,20 @@
     "martinez-polygon-clipping": "^0.8.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/client": "^2.4.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
