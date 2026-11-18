@@ -288,6 +288,7 @@ import {
   writeComponentOverrides,
 } from './lib/components'
 import { reviveSerializedObject } from './lib/fabricRevive'
+import { setTextEditOnSingleClick } from './lib/textClickBehavior'
 import { buildCarsonPoster, CARSON_PAPER, CARSON_POSTER_FONTS } from './lib/carsonPoster'
 import {
   applyCharacterStyleToText,
@@ -980,6 +981,7 @@ function App() {
   }, [penMode, penKind, penStrokeColor, penStrokeWidth])
 
   editorToolRef.current = editorTool
+  setTextEditOnSingleClick(editorTool === 'text')
 
   useEffect(() => {
     const canvas = canvasRef.current
