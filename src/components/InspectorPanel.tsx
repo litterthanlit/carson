@@ -25,6 +25,7 @@ import {
 import type { FabricObject } from 'fabric'
 import type { PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
+import type { ShortcutGroup } from '../lib/commands'
 import type { PressRun } from '../lib/press'
 import type { StoredAsset } from '../lib/assets'
 import { formatProjectTimestamp } from '../lib/home'
@@ -67,6 +68,8 @@ import { ScopeSel } from './ScopeBadge'
 import { FrameControls } from './FrameControls'
 import { FRAME_COLOR, type FrameSpec } from '../lib/frameHandles'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
+
+const modKey = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl'
 
 export type InspectorPanelProps = {
   inspectorTab: InspectorTab
@@ -174,6 +177,8 @@ export type InspectorPanelProps = {
   recentColors: string[]
   onPushRecentColor: (color: string) => void
   onPickColorWithEyeDropper: () => void
+  /** The shortcut sheet, built from the command registry and the keymap. */
+  shortcutGroups: ShortcutGroup[]
   onApplyTextOnPath: () => void
   onApplyGradientFill: (mode: 'linear' | 'radial') => void
   onApplyStrokeDash: (preset: StrokeDashPreset) => void
@@ -378,6 +383,7 @@ export function InspectorPanel({
   recentColors,
   onPushRecentColor,
   onPickColorWithEyeDropper,
+  shortcutGroups,
   onApplyTextOnPath,
   onApplyGradientFill,
   onApplyStrokeDash,
@@ -1750,53 +1756,43 @@ export function InspectorPanel({
 
           <details className="panel-section shortcuts-disclosure">
             <summary>Shortcuts</summary>
-            <ul className="shortcut-list">
-              <li>
-                <kbd>Cmd+Z</kbd> Undo · <kbd>Cmd+Shift+Z</kbd> Redo
-              </li>
-              <li>
-                <kbd>Cmd+D</kbd> / <kbd>Cmd+J</kbd> Duplicate · <kbd>Alt</kbd>-drag Duplicate · <kbd>Delete</kbd> Remove
-              </li>
-              <li>
-                <kbd>Cmd+C</kbd> Copy · <kbd>Cmd+X</kbd> Cut · <kbd>Cmd+V</kbd> Paste · <kbd>Cmd+A</kbd> Select all
-              </li>
-              <li>
-                <kbd>Cmd+]</kbd> / <kbd>Cmd+[</kbd> Forward / backward · <kbd>Shift</kbd> to front / back · Right-click for the layer menu
-              </li>
-              <li>
-                <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> New version · <kbd>Cmd+Shift+B</kbd> Versions · <kbd>Cmd+F</kbd> Filter gallery
-              </li>
-              <li>
-                <kbd>Tab</kbd> Cycle layers (canvas focused) · <kbd>Shift+Tab</kbd> Reverse
-              </li>
-              <li>
-                <kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10
-              </li>
-              <li>
-                <kbd>V</kbd> Move · <kbd>T</kbd> Text (click, then type) · <kbd>S</kbd> Shape · <kbd>F</kbd> Frame · <kbd>M</kbd> Mask · <kbd>I</kbd> Effects
-              </li>
-              <li>
-                Mask: drag conceal · <kbd>Alt</kbd>-drag reveal · <kbd>[</kbd> <kbd>]</kbd> brush size
-              </li>
-              <li>
-                <kbd>B</kbd> Block · <kbd>P</kbd> Bezier pen · <kbd>G</kbd> Grid · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Shuffle layout
-              </li>
-              <li>
-                Pen: click anchors · drag handles · <kbd>Enter</kbd> finish · click start to close · <kbd>Esc</kbd> cancel
-              </li>
-              <li>
-                <kbd>Cmd+G</kbd> Group · <kbd>Cmd+Shift+G</kbd> Ungroup
-              </li>
-              <li>
-                <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom
-              </li>
-              <li>
-                <kbd>Cmd+K</kbd> Combine / Subtract shapes
-              </li>
-              <li>
-                <kbd>Space+Drag</kbd> Pan · <kbd>Cmd+Drag</kbd> No snapping
-              </li>
-            </ul>
+            {shortcutGroups.map((group) => (
+              <div key={group.title} className="shortcut-group">
+                <h3>{group.title}</h3>
+                <ul className="shortcut-list">
+                  {group.items.map((item) => (
+                    <li key={item.label}>
+                      <span>{item.label}</span>
+                      <span className="shortcut-keys">
+                        {item.keys.map((key) => (
+                          <kbd key={key}>{key}</kbd>
+                        ))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            <div className="shortcut-group">
+              <h3>Gestures</h3>
+              <ul className="shortcut-list shortcut-notes">
+                <li>
+                  <kbd>Space</kbd>-drag pans · <kbd>{modKey}</kbd>-scroll zooms · <kbd>{modKey}</kbd>-drag ignores snapping
+                </li>
+                <li>
+                  <kbd>Alt</kbd>-drag duplicates · Arrows nudge, <kbd>Shift</kbd> ×10 · Right-click for the layer menu
+                </li>
+                <li>
+                  <kbd>Tab</kbd> cycles layers when the canvas has focus · Double-click text to edit it
+                </li>
+                <li>
+                  Mask: drag conceals, <kbd>Alt</kbd>-drag reveals · <kbd>[</kbd> <kbd>]</kbd> brush size
+                </li>
+                <li>
+                  Pen: click anchors, drag handles · <kbd>Enter</kbd> finishes · <kbd>Esc</kbd> cancels
+                </li>
+              </ul>
+            </div>
           </details>
         </>
       ) : null}

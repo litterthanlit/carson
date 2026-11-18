@@ -343,7 +343,7 @@ function createHandlers(depsRef: RefObject<AgentBridgeDeps>, settle: () => Promi
 
     commands: async () =>
       d()
-        .commands().filter((command) => !BRIDGE_COMMANDS.has(command.id))
+        .commands().filter((command) => !command.hidden && !BRIDGE_COMMANDS.has(command.id))
         .map((command) => ({
           id: command.id,
           label: command.label,

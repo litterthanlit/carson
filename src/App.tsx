@@ -233,7 +233,7 @@ import {
   pruneTrailToOps,
   type TrailFrame,
 } from './lib/explorationTrail'
-import type { CommandAction } from './lib/commands'
+import { buildShortcutSheet, resolveKeyCommand, shortcutLabels, type CommandAction } from './lib/commands'
 import { EditorCanvas } from './components/EditorCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
 import { InstrumentsPalette } from './components/InstrumentsPalette'
@@ -289,6 +289,7 @@ import {
 } from './lib/components'
 import { reviveSerializedObject } from './lib/fabricRevive'
 import { setTextEditOnSingleClick } from './lib/textClickBehavior'
+import { DEFAULT_KEYMAP, SHORTCUT_SECTIONS } from './lib/keymap'
 import { buildCarsonPoster, CARSON_PAPER, CARSON_POSTER_FONTS } from './lib/carsonPoster'
 import {
   applyCharacterStyleToText,
@@ -349,6 +350,8 @@ type StyleBaseline = {
   fill: string | undefined
   globalCompositeOperation: string
 }
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
 
 type EyeDropperResult = { sRGBHex: string }
 type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
@@ -1075,6 +1078,8 @@ function App() {
 
   // Keyboard layer: full shortcut coverage. Stable listener reads handlers via ref.
   const keyActionsRef = useRef<Record<string, () => void>>({})
+  // The command registry as of the latest render; the keyboard, context menu and agent bridge read it.
+  const commandsRef = useRef<CommandAction[]>([])
   keyActionsRef.current = {
     undo: () => {
       void handleUserUndo()
@@ -1210,28 +1215,11 @@ function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       // A modal dialog owns the keyboard; editor shortcuts must not act on the poster behind it.
       if (document.querySelector('[aria-modal="true"]')) return
-      const actions = keyActionsRef.current
+      const typing = isTypingContext(event.target)
       const meta = event.metaKey || event.ctrlKey
-      if (meta) {
-        const key = event.key.toLowerCase()
-        if (key === 'n') {
-          event.preventDefault()
-          actions.newPoster()
-          return
-        }
-        if (key === 'o') {
-          event.preventDefault()
-          actions.openPoster()
-          return
-        }
-        if (key === 'k' && screenRef.current === 'home') {
-          event.preventDefault()
-          actions.commandPalette()
-          return
-        }
-      }
-      if (screenRef.current !== 'editor') return
-      if (event.key === ' ' && !isTypingContext(event.target)) {
+      const inEditor = screenRef.current === 'editor'
+
+      if (inEditor && event.key === ' ' && !typing) {
         if (!spaceDownRef.current) {
           spaceDownRef.current = true
           setIsPanMode(true)
@@ -1245,185 +1233,60 @@ function App() {
         return
       }
 
-      if (meta) {
-        const key = event.key.toLowerCase()
-        if (key === 'z') {
-          event.preventDefault()
-          if (event.shiftKey) actions.redo()
-          else actions.undo()
-        } else if (key === 'y') {
-          event.preventDefault()
-          actions.redo()
-        } else if (key === 's') {
-          event.preventDefault()
-          if (event.shiftKey) actions.saveAs()
-          else actions.save()
-        } else if (key === 'e') {
-          event.preventDefault()
-          actions.export()
-        } else if (key === 'd' && !isTypingContext(event.target)) {
-          event.preventDefault()
-          actions.duplicate()
-        } else if (key === '0') {
-          event.preventDefault()
-          actions.zoomFit()
-        } else if (key === '1') {
-          event.preventDefault()
-          actions.zoom100()
-        } else if (key === '=' || key === '+') {
-          event.preventDefault()
-          actions.zoomIn()
-        } else if (key === '-') {
-          event.preventDefault()
-          actions.zoomOut()
-        } else if (key === 'k') {
-          event.preventDefault()
-          actions.commandPalette()
-        } else if (key === 'b') {
-          event.preventDefault()
-          if (event.shiftKey) actions.openCompsGallery()
-          else actions.forkVariant()
-        } else if (key === 'g' && !isTypingContext(event.target)) {
-          event.preventDefault()
-          if (event.shiftKey) actions.ungroup()
-          else actions.group()
-        } else if (key === 'f') {
-          event.preventDefault()
-          actions.filterGallery()
-        } else if (key === 'j' && pixelSelectionRef.current) {
-          event.preventDefault()
-          if (event.shiftKey) actions.selectionViaCut()
-          else actions.selectionViaCopy()
-        } else if (key === 'j' && !isTypingContext(event.target)) {
-          event.preventDefault()
-          actions.duplicate()
-        } else if ((key === 'c' || key === 'x') && !event.shiftKey && !event.altKey && !isTypingContext(event.target)) {
-          // Leave native copy alone while the page has a text selection (e.g. inspector copy).
-          if (window.getSelection()?.toString()) return
-          if (!canvasRef.current?.getActiveObject()) return
-          event.preventDefault()
-          if (key === 'c') actions.copy()
-          else actions.cut()
-        } else if (key === 'a' && !event.shiftKey && !isTypingContext(event.target)) {
-          event.preventDefault()
-          actions.selectAll()
-        } else if ((event.code === 'BracketRight' || event.code === 'BracketLeft') && !isTypingContext(event.target)) {
-          event.preventDefault()
-          const forward = event.code === 'BracketRight'
-          if (event.shiftKey) {
-            if (forward) actions.bringToFront()
-            else actions.sendToBack()
-          } else if (forward) actions.bringForward()
-          else actions.sendBackward()
-        } else if (key === 'i' && event.shiftKey && pixelSelectionRef.current) {
-          event.preventDefault()
-          actions.selectionInvert()
-        }
-        return
-      }
+      // Keys that belong to whatever is in progress (a warp, a pen path, a nudge)
+      // come before the registry; everything else is a command in the keymap.
+      if (inEditor && !meta && !typing && handleContextualKey(event)) return
 
-      if (isTypingContext(event.target)) return
+      const command = resolveKeyCommand(commandsRef.current, DEFAULT_KEYMAP, event, {
+        typing,
+        screen: inEditor ? 'editor' : 'home',
+      })
+      if (!command) return
+      // Escape stays unprevented so open flyouts and panels can also close on it.
+      if (event.key !== 'Escape') event.preventDefault()
+      void command.run()
+    }
 
+    /** True when the key was used up by an in-progress edit. */
+    const handleContextualKey = (event: KeyboardEvent) => {
       if (warpEditRef.current && (event.key === 'Enter' || event.key === 'Escape')) {
         event.preventDefault()
         finishWarpEdit(event.key === 'Enter')
-        return
+        return true
       }
-
       const canvasFocused = document.activeElement?.closest('.canvas-scroll') != null
       if (event.key === 'Tab' && canvasFocused) {
         event.preventDefault()
         cycleCanvasSelection(event.shiftKey)
-        return
+        return true
       }
-
       if (event.key === 'Enter' && bezierPenActionsRef.current.finish()) {
         event.preventDefault()
-        return
+        return true
       }
-
       if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (bezierPenActionsRef.current.undoPoint()) {
+        if (bezierPenActionsRef.current.undoPoint() || (pathEditMode && pathEditActionsRef.current.deleteSelectedAnchor())) {
           event.preventDefault()
-          return
+          return true
         }
-        if (!isTypingContext(event.target) && pathEditMode && pathEditActionsRef.current.deleteSelectedAnchor()) {
-          event.preventDefault()
-          return
-        }
-        event.preventDefault()
-        // With a pixel selection, Delete masks the area out (Photoshop) instead of deleting the layer.
-        if (pixelSelectionRef.current) actions.selectionMaskOut()
-        else actions.delete()
-      } else if (event.key === 'Escape') {
-        if (bezierPenActionsRef.current.cancel()) {
-          event.preventDefault()
-          return
-        }
-        if (pixelSelectionRef.current) {
-          actions.selectionClear()
-          return
-        }
-        actions.deselect()
-      } else if (event.key === 'ArrowLeft') {
-        if (nudgeSelection(event.shiftKey ? -10 : -1, 0)) event.preventDefault()
-      } else if (event.key === 'ArrowRight') {
-        if (nudgeSelection(event.shiftKey ? 10 : 1, 0)) event.preventDefault()
-      } else if (event.key === 'ArrowUp') {
-        if (nudgeSelection(0, event.shiftKey ? -10 : -1)) event.preventDefault()
-      } else if (event.key === 'ArrowDown') {
-        if (nudgeSelection(0, event.shiftKey ? 10 : 1)) event.preventDefault()
-      } else if (event.key.toLowerCase() === 't') {
-        actions.addText()
-      } else if (event.key.toLowerCase() === 'v') {
-        event.preventDefault()
-        actions.moveTool()
-      } else if (event.key.toLowerCase() === 's') {
-        event.preventDefault()
-        actions.shapeTool()
-      } else if (event.key.toLowerCase() === 'f') {
-        event.preventDefault()
-        actions.frameTool()
-      } else if (event.key.toLowerCase() === 'l') {
-        event.preventDefault()
-        actions.selectTool()
-      } else if (event.key.toLowerCase() === 'm') {
-        event.preventDefault()
-        actions.maskTool()
-      } else if (event.key === '[' && editorToolRef.current === 'mask') {
-        event.preventDefault()
-        setMaskBrushSize((value) => Math.max(4, value - 6))
-        setStatus('Mask brush smaller')
-      } else if (event.key === ']' && editorToolRef.current === 'mask') {
-        event.preventDefault()
-        setMaskBrushSize((value) => Math.min(100, value + 6))
-        setStatus('Mask brush larger')
-      } else if (event.key.toLowerCase() === 'i') {
-        event.preventDefault()
-        actions.instrumentsTool()
-      } else if (event.key.toLowerCase() === 'b') {
-        event.preventDefault()
-        actions.brushTool()
-      } else if (event.key.toLowerCase() === 'e') {
-        event.preventDefault()
-        actions.eraserTool()
-      } else if ((event.key === '[' || event.key === ']') && editorToolRef.current === 'brush') {
-        event.preventDefault()
-        const factor = event.key === ']' ? 1.2 : 1 / 1.2
-        setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
-      } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
-        actions.togglePen()
-      } else if (event.key.toLowerCase() === 'g') {
-        event.preventDefault()
-        actions.toggleLayoutGrid()
-      } else if (event.key.toLowerCase() === 'r') {
-        if (event.shiftKey) {
-          event.preventDefault()
-          actions.scramble()
-        } else {
-          actions.reroll()
-        }
+        return false
       }
+      if (event.key === 'Escape') {
+        if (!bezierPenActionsRef.current.cancel()) return false
+        event.preventDefault()
+        return true
+      }
+      const step = event.shiftKey ? 10 : 1
+      const nudge: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, -step],
+        ArrowDown: [0, step],
+      }
+      const delta = nudge[event.key]
+      if (!delta) return false
+      if (nudgeSelection(delta[0], delta[1])) event.preventDefault()
+      return true
     }
 
     const onKeyUp = (event: KeyboardEvent) => {
@@ -2183,28 +2046,29 @@ function App() {
   }
 
   function contextMenuItems(): ContextMenuItem[] {
-    const mac = /Mac/i.test(navigator.platform)
-    const keys = (key: string) => (mac ? `⌘${key}` : `Ctrl+${key}`)
-    const shifted = (key: string) => (mac ? `⇧⌘${key}` : `Ctrl+Shift+${key}`)
-    const paste: ContextMenuItem = { label: 'Paste', shortcut: keys('V'), disabled: !hasLayerClipboard, run: keyActionsRef.current.paste! }
-    if (!contextMenu?.onLayer) {
-      return [paste, { label: 'Select all', shortcut: keys('A'), run: selectAllLayers }]
-    }
-    const actions = keyActionsRef.current
+    const byId = new Map(commandsRef.current.map((command) => [command.id, command]))
+    const item = (id: string, label: string, disabled = false): ContextMenuItem => ({
+      label,
+      shortcut: shortcutLabels(DEFAULT_KEYMAP, id, IS_MAC)[0],
+      disabled,
+      run: () => void byId.get(id)?.run(),
+    })
+    const paste = item('paste-layer', 'Paste', !hasLayerClipboard)
+    if (!contextMenu?.onLayer) return [paste, item('select-all', 'Select all')]
     const items: ContextMenuItem[] = [
-      { label: 'Cut', shortcut: keys('X'), run: actions.cut! },
-      { label: 'Copy', shortcut: keys('C'), run: actions.copy! },
+      item('cut-layer', 'Cut'),
+      item('copy-layer', 'Copy'),
       paste,
-      { label: 'Duplicate', shortcut: keys('J'), run: actions.duplicate! },
+      item('duplicate-layer', 'Duplicate'),
       { separator: true },
-      { label: 'Bring forward', shortcut: keys(']'), run: actions.bringForward! },
-      { label: 'Send backward', shortcut: keys('['), run: actions.sendBackward! },
-      { label: 'Bring to front', shortcut: shifted(']'), run: actions.bringToFront! },
-      { label: 'Send to back', shortcut: shifted('['), run: actions.sendToBack! },
+      item('bring-forward', 'Bring forward'),
+      item('send-backward', 'Send backward'),
+      item('bring-front', 'Bring to front'),
+      item('send-back', 'Send to back'),
     ]
-    if (canGroupLayers) items.push({ separator: true }, { label: 'Group', shortcut: keys('G'), run: actions.group! })
-    if (canUngroupLayers) items.push({ separator: true }, { label: 'Ungroup', shortcut: shifted('G'), run: actions.ungroup! })
-    items.push({ separator: true }, { label: 'Delete', shortcut: 'Del', run: actions.delete! })
+    if (canGroupLayers) items.push({ separator: true }, item('group-layers', 'Group'))
+    if (canUngroupLayers) items.push({ separator: true }, item('ungroup-layers', 'Ungroup'))
+    items.push({ separator: true }, item('delete-layer', 'Delete'))
     return items
   }
 
@@ -5915,7 +5779,6 @@ function App() {
   function handleTogglePencilMode() {
     togglePenKind('freehand')
   }
-  const commandsRef = useRef<CommandAction[]>([])
   const agentBridge = useAgentBridge({
     canvasRef,
     screen,
@@ -5970,6 +5833,15 @@ function App() {
     placeImage: handleImageFile,
   })
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
+  const keyAction = (name: string) => () => keyActionsRef.current[name]?.()
+  const pixelSelected = () => Boolean(pixelSelectionRef.current)
+  const toolIs = (tool: EditorTool) => () => editorToolRef.current === tool
+  const canvasHasFocus = () => document.activeElement?.closest('.canvas-scroll') != null
+  // Leave native copy alone while the page has a text selection (e.g. inspector copy).
+  const canCopyLayer = () => !window.getSelection()?.toString() && Boolean(canvasRef.current?.getActiveObject())
+  const resizeBrush = (factor: number) =>
+    setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
+
   const commands: CommandAction[] = [
     { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
     { id: 'open-poster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
@@ -6068,8 +5940,8 @@ function App() {
       disabled: !selected,
       run: () => applyGestureToSelection(gesture),
     })),
-    { id: 'copy-layer', label: 'Copy layer', keywords: ['copy', 'clipboard'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.copy?.() },
-    { id: 'cut-layer', label: 'Cut layer', keywords: ['cut', 'clipboard'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.cut?.() },
+    { id: 'copy-layer', label: 'Copy layer', keywords: ['copy', 'clipboard'], scope: 'selection', disabled: !selected, when: canCopyLayer, run: () => keyActionsRef.current.copy?.() },
+    { id: 'cut-layer', label: 'Cut layer', keywords: ['cut', 'clipboard'], scope: 'selection', disabled: !selected, when: canCopyLayer, run: () => keyActionsRef.current.cut?.() },
     { id: 'paste-layer', label: 'Paste layer', keywords: ['paste', 'clipboard'], scope: 'canvas', disabled: !hasLayerClipboard, run: () => keyActionsRef.current.paste?.() },
     { id: 'select-all', label: 'Select all layers', keywords: ['select', 'all'], scope: 'canvas', run: () => keyActionsRef.current.selectAll?.() },
     { id: 'bring-forward', label: 'Bring layer forward', keywords: ['order', 'arrange', 'stack', 'raise'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.bringForward?.() },
@@ -6094,7 +5966,7 @@ function App() {
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
     { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => exportPoster() },
     { id: 'export-plates', label: 'Export CMYK plates', keywords: ['cmyk', 'plates', 'print', 'separation', 'cyan', 'magenta'], scope: 'canvas', run: () => exportCmykPlates() },
-    { id: 'pen-tool', label: 'Pen tool', keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
+    { id: 'pen-tool', label: 'Pen tool', when: canvasHasFocus, keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => saveProjectAction() },
     {
       id: 'save-as',
@@ -6285,8 +6157,63 @@ function App() {
           scope: 'any' as const,
           run: agentBridge.disconnect,
         },
+    // ── Commands that used to exist only as key handlers. Order matters where keys are
+    // shared: the pixel-selection commands come before the layer commands they shadow.
+    { id: 'command-palette', label: 'Command palette', keywords: [], scope: 'any', hidden: true, run: keyAction('commandPalette') },
+    { id: 'undo', label: 'Undo', keywords: ['undo', 'back', 'history', 'step'], scope: 'any', run: keyAction('undo') },
+    { id: 'redo', label: 'Redo', keywords: ['redo', 'forward', 'history', 'step'], scope: 'any', run: keyAction('redo') },
+    { id: 'selection-via-copy', label: 'Layer via copy', keywords: ['marquee', 'selection', 'lift', 'copy'], scope: 'selection', disabled: !pixelSelection, when: pixelSelected, run: keyAction('selectionViaCopy') },
+    { id: 'selection-via-cut', label: 'Layer via cut', keywords: ['marquee', 'selection', 'lift', 'cut'], scope: 'selection', disabled: !pixelSelection, when: pixelSelected, run: keyAction('selectionViaCut') },
+    { id: 'selection-invert', label: 'Invert marquee selection', keywords: ['marquee', 'selection', 'inverse'], scope: 'selection', disabled: !pixelSelection, when: pixelSelected, run: keyAction('selectionInvert') },
+    { id: 'selection-mask-out', label: 'Mask out marquee selection', keywords: ['marquee', 'selection', 'mask', 'conceal', 'erase'], scope: 'selection', disabled: !pixelSelection, when: pixelSelected, run: keyAction('selectionMaskOut') },
+    { id: 'selection-clear', label: 'Clear marquee selection', keywords: [], scope: 'selection', hidden: true, when: pixelSelected, run: keyAction('selectionClear') },
+    { id: 'duplicate-layer', label: 'Duplicate layer', keywords: ['duplicate', 'copy', 'clone'], scope: 'selection', disabled: !selected, run: keyAction('duplicate') },
+    { id: 'delete-layer', label: 'Delete layer', keywords: ['delete', 'remove', 'trash'], scope: 'selection', disabled: !selected, run: keyAction('delete') },
+    { id: 'deselect', label: 'Deselect', keywords: [], scope: 'any', hidden: true, run: keyAction('deselect') },
+    { id: 'move-tool', label: 'Move tool', keywords: ['move', 'select', 'arrow', 'pointer', 'tool'], scope: 'any', run: keyAction('moveTool') },
+    { id: 'text-tool', label: 'Text tool', keywords: ['text', 'type', 'tool'], scope: 'any', run: keyAction('addText') },
+    { id: 'shape-tool', label: 'Shape tool', keywords: ['shape', 'block', 'rectangle', 'ellipse', 'line', 'star', 'tool'], scope: 'any', run: keyAction('shapeTool') },
+    { id: 'select-tool', label: 'Marquee tool', keywords: ['marquee', 'select', 'lasso', 'tool'], scope: 'any', run: keyAction('selectTool') },
+    { id: 'brush-tool', label: 'Brush tool', keywords: ['brush', 'paint', 'draw', 'tool'], scope: 'any', run: keyAction('brushTool') },
+    { id: 'eraser-tool', label: 'Eraser tool', keywords: ['eraser', 'erase', 'tool'], scope: 'any', run: keyAction('eraserTool') },
+    { id: 'mask-tool', label: 'Mask tool', keywords: ['mask', 'conceal', 'reveal', 'tool'], scope: 'any', run: keyAction('maskTool') },
+    {
+      id: 'mask-brush-smaller',
+      label: 'Mask brush smaller',
+      keywords: [],
+      hidden: true,
+      when: toolIs('mask'),
+      run: () => {
+        setMaskBrushSize((value) => Math.max(4, value - 6))
+        setStatus('Mask brush smaller')
+      },
+    },
+    {
+      id: 'mask-brush-larger',
+      label: 'Mask brush larger',
+      keywords: [],
+      hidden: true,
+      when: toolIs('mask'),
+      run: () => {
+        setMaskBrushSize((value) => Math.min(100, value + 6))
+        setStatus('Mask brush larger')
+      },
+    },
+    { id: 'brush-smaller', label: 'Brush smaller', keywords: [], hidden: true, when: toolIs('brush'), run: () => resizeBrush(1 / 1.2) },
+    { id: 'brush-larger', label: 'Brush larger', keywords: [], hidden: true, when: toolIs('brush'), run: () => resizeBrush(1.2) },
+    { id: 'reroll', label: 'Re-roll last effect', keywords: ['reroll', 're-roll', 'again', 'seed', 'random'], scope: 'any', run: keyAction('reroll') },
+    { id: 'zoom-fit', label: 'Zoom to fit', keywords: ['zoom', 'fit', 'view'], scope: 'any', run: keyAction('zoomFit') },
+    { id: 'zoom-100', label: 'Zoom to 100%', keywords: ['zoom', 'actual', 'view'], scope: 'any', run: keyAction('zoom100') },
+    { id: 'zoom-in', label: 'Zoom in', keywords: ['zoom', 'closer', 'view'], scope: 'any', run: keyAction('zoomIn') },
+    { id: 'zoom-out', label: 'Zoom out', keywords: ['zoom', 'further', 'view'], scope: 'any', run: keyAction('zoomOut') },
   ]
   commandsRef.current = commands
+  if (import.meta.env.DEV) {
+    const known = new Set(commands.map((command) => command.id))
+    for (const id of Object.keys(DEFAULT_KEYMAP)) if (!known.has(id)) console.warn(`Keymap binds unknown command "${id}"`)
+  }
+  const shortcutGroups = buildShortcutSheet(commands, DEFAULT_KEYMAP, SHORTCUT_SECTIONS, IS_MAC)
+  const commandShortcut = (id: string) => shortcutLabels(DEFAULT_KEYMAP, id, IS_MAC)[0]
 
   return (
     <main className={screen === 'home' ? 'home-root' : 'editor-shell'} data-tour={walkthroughStep ?? undefined}>
@@ -6294,7 +6221,7 @@ function App() {
         {contextMenu ? (
           <CanvasContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenuItems()} onClose={closeContextMenu} />
         ) : null}
-        {commandOpen ? <CommandPalette open commands={commands} onClose={() => setCommandOpen(false)} /> : null}
+        {commandOpen ? <CommandPalette open commands={commands} shortcutFor={commandShortcut} onClose={() => setCommandOpen(false)} /> : null}
         {onboardingOpen ? (
           <OnboardingModal
             open
@@ -6868,6 +6795,7 @@ function App() {
           recentColors={recentColors}
           onPushRecentColor={pushRecentColor}
           onPickColorWithEyeDropper={() => void pickColorWithEyeDropper()}
+          shortcutGroups={shortcutGroups}
           onApplyTextOnPath={applyTextOnPath}
           onApplyGradientFill={applyGradientFill}
           onApplyStrokeDash={applyStrokeDash}

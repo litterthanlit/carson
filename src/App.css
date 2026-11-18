@@ -1533,6 +1533,40 @@ input[type='color'] {
   color: var(--text);
 }
 
+.shortcut-group h3 {
+  margin: 10px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.shortcut-group .shortcut-list {
+  margin-top: 4px;
+}
+
+.shortcut-group .shortcut-list:not(.shortcut-notes) li {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+
+.shortcut-keys {
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+}
+
+.command-list button kbd {
+  margin-left: auto;
+  padding: 0 5px;
+  border: 1px solid var(--bg-muted);
+  border-radius: 3px;
+  background: var(--surface-sunken);
+  font: 500 10px/1.6 var(--font-mono);
+  color: var(--text-muted);
+}
+
 .saved-row {
   display: flex;
   gap: 2px;
