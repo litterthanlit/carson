@@ -1638,9 +1638,9 @@ function App() {
   tagObjectRef.current = tagObject
 
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
-    // A layered David Carson-style collage (see lib/carsonPoster) — the finished
+    // A clean, type-led David Carson-style layout (see lib/carsonPoster) — the finished
     // poster the walkthrough then wrecks further. Layer names "Oversized headline"
-    // and "Red interruption" are load-bearing for the walkthrough and verify scripts.
+    // and "Studio" are load-bearing for the walkthrough and verify scripts.
     const specs = buildCarsonPoster(currentPoster.width, currentPoster.height)
     const objects: FabricObject[] = []
     let headline: FabricObject | null = null

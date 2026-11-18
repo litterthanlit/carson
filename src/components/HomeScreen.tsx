@@ -48,6 +48,7 @@ const GLYPH_EM: Record<string, number> = {
   'Special Elite': 0.6,
   'Archivo Black': 0.78,
   Archivo: 0.56,
+  Oswald: 0.4,
 }
 
 function wrapLines(spec: CarsonTextSpec): string[] {
