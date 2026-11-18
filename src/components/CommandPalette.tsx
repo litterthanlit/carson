@@ -12,10 +12,13 @@ function commandTitle(command: CommandAction) {
 export function CommandPalette({
   open,
   commands,
+  shortcutFor,
   onClose,
 }: {
   open: boolean
   commands: CommandAction[]
+  /** The key hint for a command id, if it has one. */
+  shortcutFor?: (id: string) => string | undefined
   onClose: () => void
 }) {
   const [query, setQuery] = useState('')
@@ -88,6 +91,7 @@ export function CommandPalette({
                   onClick={() => run(command)}
                 >
                   <span>{command.label}</span>
+                  {shortcutFor?.(command.id) ? <kbd>{shortcutFor(command.id)}</kbd> : null}
                   {command.scope ? <small aria-hidden="true">{command.scope}</small> : null}
                 </button>
               </li>

@@ -35,20 +35,20 @@ export function ExplorationTrail({
     activeRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
   }, [active?.id])
 
-  const galleryLabel = variantCount > 0 ? `Comps gallery (${variantCount})` : 'Comps gallery'
+  const galleryLabel = variantCount > 0 ? `Versions (${variantCount})` : 'Versions'
 
   return (
-    <div className={collapsed ? 'exploration-trail glass-bar collapsed' : 'exploration-trail glass-bar'} role="region" aria-label="Exploration trail">
+    <div className={collapsed ? 'exploration-trail glass-bar collapsed' : 'exploration-trail glass-bar'} role="region" aria-label="History">
       <button
         type="button"
         className="trail-collapse"
         aria-expanded={!collapsed}
-        aria-label={collapsed ? 'Expand trail' : 'Collapse trail'}
-        title={collapsed ? 'Show history filmstrip' : 'Hide history filmstrip'}
+        aria-label={collapsed ? 'Expand history' : 'Collapse history'}
+        title={collapsed ? 'Show History (Trail) filmstrip' : 'Hide History (Trail) filmstrip'}
         onClick={onToggleCollapsed}
       >
-        <ChevronDown size={14} />
-        Trail
+        <ChevronDown size={14} aria-hidden />
+        History
       </button>
       <span role="status" aria-live="polite" className="stage-status trail-status">
         {status}
@@ -58,7 +58,7 @@ export function ExplorationTrail({
       ) : (
         <div className="trail-filmstrip" role="list" aria-label="History filmstrip">
           {frames.length === 0 ? (
-            <span className="trail-empty">Fork a look to start a comps set — edits land here as you go.</span>
+            <span className="trail-empty">Make a new version to start comparing looks — edits land here as you go.</span>
           ) : (
             frames.map((frame) => {
               const isActive = frame.id === active?.id
@@ -82,13 +82,13 @@ export function ExplorationTrail({
           )}
         </div>
       )}
-      <button type="button" className="trail-fork" onClick={onFork} title="Fork current state (Cmd+B)">
-        <GitFork size={13} />
-        Fork
+      <button type="button" className="trail-fork" onClick={onFork} title="New version (Fork) — keep the current look (Cmd+B)">
+        <GitFork size={13} aria-hidden />
+        New version
       </button>
-      <button type="button" className="trail-gallery" onClick={onOpenGallery} title="Open comps gallery (Cmd+Shift+B)" aria-label={galleryLabel}>
-        <LayoutGrid size={13} />
-        Comps
+      <button type="button" className="trail-gallery" onClick={onOpenGallery} title="Versions (Comps) — compare and restore saved looks (Cmd+Shift+B)" aria-label={galleryLabel}>
+        <LayoutGrid size={13} aria-hidden />
+        Versions
       </button>
     </div>
   )

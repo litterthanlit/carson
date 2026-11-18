@@ -1,12 +1,11 @@
 /**
- * The "Wreck this poster" seed: a David Carson-style collage — layered,
- * torn and overprinted, type breaking its own grid. Everything is a normal,
- * editable layer (text, rects, torn-paper polygons, rules), so the walkthrough
+ * The "Wreck this poster" seed: a clean, type-led David Carson-style layout —
+ * ink on paper, type breaking its own grid, no colour scraps. Everything is a
+ * normal, editable layer (text, fold lines, two red specks), so the walkthrough
  * can scatter and xerox it further.
  *
  * Pure module: returns layer specs in poster pixels; App.tsx turns them into
- * Fabric objects. Torn edges come from a fixed seed so the seed poster looks
- * the same every time.
+ * Fabric objects. `tornScrap` stays here for the found-paper and weave tools.
  */
 import { createSeededRandom } from './random'
 
@@ -14,9 +13,6 @@ export const CARSON_PAPER = '#ecebe6'
 export const CARSON_INK = '#111111'
 
 const RED = '#e5231b'
-const ORANGE = '#e8431a'
-const BLUE = '#2f6fd6'
-const YELLOW = '#f2c300'
 
 type Blend = 'source-over' | 'multiply'
 
@@ -110,9 +106,10 @@ const MONO = 'IBM Plex Mono'
 const TYPEWRITER = 'Special Elite'
 const HEAVY = 'Archivo Black'
 const GROTESK = 'Archivo'
+const CONDENSED = 'Oswald'
 
 /** Families the seed poster uses; App loads these before drawing it. */
-export const CARSON_POSTER_FONTS = [MONO, TYPEWRITER, HEAVY, GROTESK] as const
+export const CARSON_POSTER_FONTS = [MONO, TYPEWRITER, HEAVY, GROTESK, CONDENSED] as const
 
 /**
  * Build the collage for any poster size. Positions are fractions of the page so
@@ -133,46 +130,13 @@ export function buildCarsonPoster(width: number, height: number): CarsonLayerSpe
     line('Horizontal fold', 0, py(0.5), W, py(0.5), 'rgba(17,17,17,0.12)', Math.max(1, u * 0.0012)),
   )
 
-  // ── Colour scraps under the type (multiply, so ink overprints them).
+  // ── The only colour: two red specks.
   layers.push(
-    {
-      type: 'polygon',
-      name: 'Red interruption',
-      points: tornScrap(px(-0.02), py(0.015), px(0.42), py(0.16), 1983, 0.07),
-      fill: RED,
-      angle: -3,
-      blend: 'multiply',
-    },
-    rect('Blue scan', px(0.36), py(0.12), px(0.22), py(0.2), BLUE, { angle: 1.5, opacity: 0.92, blend: 'multiply' }),
-    rect('Orange card', px(0.07), py(0.39), px(0.17), py(0.17), ORANGE, { angle: -2, blend: 'multiply' }),
-    {
-      type: 'polygon',
-      name: 'Yellow smear',
-      points: tornScrap(px(0.62), py(0.53), px(0.28), py(0.075), 1991, 0.14),
-      fill: YELLOW,
-      angle: -4,
-      opacity: 0.95,
-      blend: 'multiply',
-    },
-    {
-      type: 'polygon',
-      name: 'Black tear',
-      points: tornScrap(px(0.06), py(0.74), px(0.24), py(0.17), 1996, 0.1),
-      fill: CARSON_INK,
-      angle: 6,
-    },
-    {
-      type: 'polygon',
-      name: 'Paper scrap',
-      points: tornScrap(px(0.6), py(0.075), px(0.29), py(0.105), 2001, 0.08),
-      fill: '#faf9f5',
-      angle: 5,
-    },
     rect('Red speck', px(0.33), py(0.765), px(0.014), px(0.014), RED, { angle: 12 }),
     rect('Red speck 2', px(0.365), py(0.79), px(0.009), px(0.009), RED, { angle: -8 }),
   )
 
-  // ── Running mono copy across the top, overlapping itself.
+  // ── Running condensed copy across the top.
   layers.push(
     text(
       'Mono lede',
@@ -180,25 +144,14 @@ export function buildCarsonPoster(width: number, height: number): CarsonLayerSpe
       px(0.03),
       py(0.022),
       px(0.94),
-      u * 0.026,
-      { fontFamily: TYPEWRITER, lineHeight: 0.92, fontWeight: 400 },
+      u * 0.027,
+      { fontFamily: CONDENSED, lineHeight: 0.95, fontWeight: 400 },
     ),
-  )
-
-  // ── A big word behind the headline, clipped by the page like a torn masthead.
-  layers.push(
-    text('Mess', 'mess', px(0.02), py(0.14), px(0.9), u * 0.2, {
-      fontFamily: HEAVY,
-      fontWeight: 400,
-      lineHeight: 0.8,
-      charSpacing: -60,
-      opacity: 0.88,
-    }),
   )
 
   // ── The headline: CARSON broken across lines, bleeding off the right edge.
   layers.push(
-    text('Oversized headline', 'CAR\nSON', px(0.04), py(0.37), px(1.1), u * 0.3, {
+    text('Oversized headline', 'CAR\nSON', px(0.41), py(0.37), px(1.1), u * 0.3, {
       fontFamily: HEAVY,
       fontWeight: 400,
       lineHeight: 0.74,
@@ -228,7 +181,7 @@ export function buildCarsonPoster(width: number, height: number): CarsonLayerSpe
 
   // ── A smeared stack of repeated type — lines crushed onto each other.
   layers.push(
-    text('Type smear', 'fragments\nfragments\nfragments\nfragments\nfragments\nfragments', px(0.2), py(0.66), px(0.3), u * 0.045, {
+    text('Type smear', 'fragments\nfragments\nfragments\nfragments\nfragments\nfragments', px(0.084), py(0.6), px(0.3), u * 0.045, {
       fontFamily: MONO,
       fontWeight: 700,
       lineHeight: 0.32,
@@ -236,26 +189,13 @@ export function buildCarsonPoster(width: number, height: number): CarsonLayerSpe
     }),
   )
 
-  // ── Stray rules crossing the headline, like registration lines left in.
-  layers.push(
-    line('Crossing rule', px(0.1), py(0.33), px(0.62), py(0.47), CARSON_INK, Math.max(1, u * 0.0016)),
-    line('Rule', px(0.05), py(0.635), px(0.66), py(0.635), CARSON_INK, Math.max(1, u * 0.0012)),
-  )
-
-  // ── Pasted fragments: a label on the paper scrap, reversed type on the black tear.
+  // ── A tilted issue label, top right.
   layers.push(
     text('Scrap label', 'ISSUE 01 / NO RULES\nlegibility is\nnot neutral', px(0.625), py(0.092), px(0.24), u * 0.018, {
       fontFamily: MONO,
       fontWeight: 700,
       lineHeight: 1.15,
       angle: 5,
-    }),
-    text('Reversed type', 'print\nis\nnot\ndead', px(0.12), py(0.77), px(0.14), u * 0.03, {
-      fontFamily: HEAVY,
-      fontWeight: 400,
-      lineHeight: 0.86,
-      fill: CARSON_PAPER,
-      angle: 6,
     }),
   )
 

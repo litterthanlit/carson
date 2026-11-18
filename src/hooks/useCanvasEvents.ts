@@ -39,6 +39,11 @@ type UseCanvasEventsOptions = {
   onLiveTransform?: () => void
   editorToolRef?: MutableRefObject<EditorTool>
   onPlaceText?: (point: { left: number; top: number }) => void
+  /**
+   * Alt-drag with the Move tool: leaves a copy of each source behind and resolves to a
+   * function that takes the copies back out (used when the drag never moved anything).
+   */
+  onAltDragDuplicate?: (sources: FabricObject[]) => Promise<() => void>
   onMaskPaint?: (
     phase: 'down' | 'move' | 'up',
     point: { x: number; y: number },
@@ -69,6 +74,7 @@ export function useCanvasEvents({
   onLiveTransform,
   editorToolRef,
   onPlaceText,
+  onAltDragDuplicate,
   onMaskPaint,
 }: UseCanvasEventsOptions) {
   const registerCanvasEvents = useCallback(
@@ -124,7 +130,16 @@ export function useCanvasEvents({
         return true
       }
 
+      let altSession: { pending: Promise<() => void> } | null = null
+
       canvas.on('object:modified', () => {
+        if (altSession) {
+          // The drag moved the originals away from their copies: one undo step for both.
+          altSession.pending.then(() => commitHistory('Duplicated layer'))
+          altSession = null
+          transformSession = null
+          return
+        }
         if (commitTransformSession()) return
         commitHistory('Changed layer')
       })
@@ -157,6 +172,18 @@ export function useCanvasEvents({
         transformSession = null
         const native = event.e as MouseEvent
         const point = canvas.getScenePoint(native)
+        altSession = null
+        if (
+          onAltDragDuplicate &&
+          editorToolRef?.current === 'move' &&
+          native.altKey &&
+          event.target &&
+          (event as { transform?: { action?: string } }).transform?.action === 'drag'
+        ) {
+          const active = canvas.getActiveObjects()
+          const sources = active.length > 0 ? active : [event.target]
+          altSession = { pending: onAltDragDuplicate(sources) }
+        }
         if (editorToolRef?.current === 'mask') {
           onMaskPaint?.('down', { x: point.x, y: point.y }, Boolean(native.altKey))
           return
@@ -173,6 +200,13 @@ export function useCanvasEvents({
         if (!native.buttons) return
         const point = canvas.getScenePoint(native)
         onMaskPaint?.('move', { x: point.x, y: point.y }, Boolean(native.altKey))
+      })
+
+      canvas.on('mouse:up', () => {
+        // Alt-click without a drag: nothing moved, so drop the copies again.
+        const session = altSession
+        altSession = null
+        session?.pending.then((cancel) => cancel())
       })
 
       canvas.on('mouse:up', (event) => {
@@ -403,6 +437,7 @@ export function useCanvasEvents({
       onLiveTransform,
       editorToolRef,
       onPlaceText,
+      onAltDragDuplicate,
       onMaskPaint,
     ],
   )

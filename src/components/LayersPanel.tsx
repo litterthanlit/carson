@@ -1,4 +1,4 @@
-import { memo, useRef, useState, type ComponentType } from 'react'
+import { memo, useEffect, useRef, useState, type ComponentType } from 'react'
 import {
   Brush,
   ChevronRight,
@@ -81,6 +81,13 @@ export const LayersPanel = memo(function LayersPanel({
   const paintingRef = useRef(false)
   // Layer rows re-sync on a debounce, so remember which rows this stroke already flipped.
   const paintedRef = useRef(new Set<string>())
+  const listRef = useRef<HTMLDivElement | null>(null)
+  // The list is docked and scrolls on its own: keep a canvas-made selection in view.
+  const selectionKey = selectedIds.join(',')
+  const rowCount = layers.length
+  useEffect(() => {
+    listRef.current?.querySelector('.layer-row.active')?.scrollIntoView?.({ block: 'nearest' })
+  }, [selectionKey, rowCount])
   const setPaintVisibility = (next: boolean | null) => {
     paintingRef.current = next !== null
     paintedRef.current.clear()
@@ -105,6 +112,7 @@ export const LayersPanel = memo(function LayersPanel({
 
   return (
     <div
+      ref={listRef}
       className="layer-list"
       role="list"
       aria-label="Layers"

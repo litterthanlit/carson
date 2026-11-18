@@ -308,8 +308,8 @@ export const ToolRail = memo(function ToolRail({
       <button
         type="button"
         className={tool === 'instruments' ? 'active' : undefined}
-        title="Instruments (I) — xerox, scatter, decay, accidents"
-        aria-label="Instruments"
+        title="Effects (Instruments) — copy machine, scatter, decay, accidents (I)"
+        aria-label="Effects"
         aria-pressed={tool === 'instruments'}
         onClick={() => selectTool(tool === 'instruments' ? 'move' : 'instruments')}
       >

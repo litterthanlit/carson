@@ -49,7 +49,7 @@ const AGENT_COPY: Record<Exclude<AgentBridgeStatus, 'off'>, { detail: string; ti
   },
   connected: {
     detail: 'live',
-    title: 'An agent is playing this poster. Every move lands on the trail and ⌘Z undoes it. Click to disconnect.',
+    title: 'An agent is playing this poster. Every move lands in History and ⌘Z undoes it. Click to disconnect.',
   },
   replaced: {
     detail: 'in another window',
@@ -234,7 +234,7 @@ export const TopBar = memo(function TopBar({
       </div>
       <TensionDial value={tension} onChange={onTensionChange} onCommit={onTensionCommit} />
       <div className="top-actions" aria-label="Poster actions">
-        <div className="top-cluster" role="group" aria-label="History">
+        <div className="top-cluster" role="group" aria-label="Undo and redo">
           <button type="button" className="icon-button" data-tour="undo" aria-label="Undo" title="Undo (⌘Z)" onClick={onUndo}>
             <Undo2 size={15} />
           </button>
@@ -254,13 +254,13 @@ export const TopBar = memo(function TopBar({
         <button
           type="button"
           className="scramble-button"
-          title="Rearrange every layer into a new structure (Shift+R). Press R to try another."
-          aria-label="Scramble layout"
+          title="Shuffle layout (Scramble) — rearrange every layer into a new structure (Shift+R). Press R to try another."
+          aria-label="Shuffle layout"
           disabled={scrambleDisabled}
           onClick={onScramble}
         >
           <Shuffle size={14} />
-          Scramble
+          Shuffle layout
         </button>
         <button type="button" className="primary-button" title="Export the poster (⌘E)" onClick={onExport}>
           <Download size={14} />

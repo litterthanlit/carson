@@ -30,7 +30,7 @@ Preconditions:
 - **Record.** Choose `Record gesture`. Status `Recorded plays` still says `Play an instrument`.
 - **Play chain.** Choose `Strips`, then `Scatter`, then `Copy selected`. Status `Recorded plays` includes `Strips → Scatter` and `Xerox`.
 - **Save.** Choose `Save performance`. The prompt is accepted as `Mark`. Instruments shows a button named `Mark`.
-- **Replay.** Choose tab `Layers`, then `Red interruption`. Choose `Mark` in Instruments. Choose `Move tool`. Choose tab `Treatments`. The empty copy `No layer treatments yet` is absent. Chips include Slice, Scatter, and Xerox.
+- **Replay.** Choose tab `Layers`, then `Studio`. Choose `Mark` in Instruments. Choose `Move tool`. Choose tab `Treatments`. The empty copy `No layer treatments yet` is absent. Chips include Slice, Scatter, and Xerox.
 - **Trail.** Region `Exploration trail` includes a chip for `Played Mark`. Choose `Undo`. Treatments on this layer return to empty.
 - **Commands.** Choose `Commands`. Search `Mark`. Choose `Play Mark`. Treatments again list Slice, Scatter, and Xerox.
 - **Proof.** `artifacts/gesture-performance/replay.aria.txt` and `replay.png` show the Treatments tab after Command replay.

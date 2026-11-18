@@ -9,7 +9,7 @@ export type PenKind = 'bezier' | 'freehand'
 
 export type LayerKind = 'text' | 'image' | 'shape' | 'fragment' | 'group' | 'adjustment'
 export type ExportFormat = 'png' | 'jpeg' | 'pdf' | 'tiff' | 'svg'
-export type InspectorTab = 'inspect' | 'treatments' | 'layers' | 'assets' | 'layout' | 'print'
+export type InspectorTab = 'inspect' | 'treatments' | 'assets' | 'layout' | 'print'
 export type StrokeDashPreset = 'solid' | 'dashed' | 'dotted'
 export type ExportBackground = 'paper' | 'white' | 'transparent'
 

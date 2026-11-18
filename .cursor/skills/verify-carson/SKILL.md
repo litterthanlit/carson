@@ -60,7 +60,7 @@ Stable handles:
 - Button `Carson home` in the editor top bar (Home is also in the `File` menu)
 - Tabs `Inspect`, `Treatments`, `Layers`, `Assets`, `Layout`, `Print`
 - Layer rows: the `button.layer-select` control (title `<name> · <kind>`)
-- Seed layer names `Oversized headline`, `Red interruption`
+- Seed layer names `Oversized headline`, `Studio`
 - Buttons `Group`, `Ungroup`, `Save selection as component`, `Detach`, `Scramble layout`, banner `Export`
 - Instruments tool, then `Copy selected`
 - Instruments tool, then `Copy machine`

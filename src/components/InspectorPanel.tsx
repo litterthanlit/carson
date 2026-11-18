@@ -14,7 +14,6 @@ import {
   EyeOff,
   Grid3x3,
   Image as ImageIcon,
-  Layers,
   Pipette,
   Printer,
   SendToBack,
@@ -26,6 +25,7 @@ import {
 import type { FabricObject } from 'fabric'
 import type { PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
+import type { ShortcutGroup } from '../lib/commands'
 import type { PressRun } from '../lib/press'
 import type { StoredAsset } from '../lib/assets'
 import { formatProjectTimestamp } from '../lib/home'
@@ -68,6 +68,8 @@ import { ScopeSel } from './ScopeBadge'
 import { FrameControls } from './FrameControls'
 import { FRAME_COLOR, type FrameSpec } from '../lib/frameHandles'
 import { formatDegrees, formatLineHeight, formatPercent } from '../lib/canvasUtils'
+
+const modKey = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl'
 
 export type InspectorPanelProps = {
   inspectorTab: InspectorTab
@@ -175,6 +177,8 @@ export type InspectorPanelProps = {
   recentColors: string[]
   onPushRecentColor: (color: string) => void
   onPickColorWithEyeDropper: () => void
+  /** The shortcut sheet, built from the command registry and the keymap. */
+  shortcutGroups: ShortcutGroup[]
   onApplyTextOnPath: () => void
   onApplyGradientFill: (mode: 'linear' | 'radial') => void
   onApplyStrokeDash: (preset: StrokeDashPreset) => void
@@ -379,6 +383,7 @@ export function InspectorPanel({
   recentColors,
   onPushRecentColor,
   onPickColorWithEyeDropper,
+  shortcutGroups,
   onApplyTextOnPath,
   onApplyGradientFill,
   onApplyStrokeDash,
@@ -465,6 +470,7 @@ export function InspectorPanel({
   onExportAllArtboards,
 }: InspectorPanelProps) {
   // Collapsed layer groups live here so they survive switching inspector tabs.
+  const [layersOpen, setLayersOpen] = useState(true)
   const [collapsedLayerIds, setCollapsedLayerIds] = useState<ReadonlySet<string>>(() => new Set())
   const toggleLayerCollapsed = useCallback((id: string) => {
     setCollapsedLayerIds((current) => {
@@ -577,36 +583,38 @@ export function InspectorPanel({
       <div className="inspector-tabs" role="tablist" aria-label="Inspector panels">
         {(
           [
-            ['inspect', 'Inspect', SlidersHorizontal],
-            ['treatments', 'Treatments', Blend],
-            ['layers', 'Layers', Layers],
-            ['assets', 'Assets', ImageIcon],
-            ['layout', 'Layout', Grid3x3],
-            ['print', 'Print', Printer],
+            ['inspect', 'Properties', 'Properties (Inspect)', SlidersHorizontal],
+            ['treatments', 'Applied', 'Applied effects (Treatments)', Blend],
+            ['assets', 'Assets', 'Assets', ImageIcon],
+            ['layout', 'Layout', 'Layout', Grid3x3],
+            ['print', 'Print', 'Print', Printer],
           ] as const
-        ).map(([id, label, Icon]) => (
+        ).map(([id, label, tooltip, Icon]) => (
           <button
             key={id}
             type="button"
             role="tab"
-            title={label}
-            aria-label={label}
+            title={tooltip}
             aria-selected={inspectorTab === id}
             className={inspectorTab === id ? 'active' : undefined}
             onClick={() => onInspectorTabChange(id)}
           >
-            <Icon size={14} />
+            <Icon size={14} aria-hidden />
+            <span>{label}</span>
           </button>
         ))}
       </div>
 
+      <div className="inspector-scroll">
       {inspectorTab === 'treatments' ? (
         <div className="panel-section">
-          <h2>Treatment stack</h2>
+          <h2>
+            Applied effects <span className="heading-sub">Treatments</span>
+          </h2>
           <p className="hint">Non-destructive — text stays editable; remove artifact treatments to restore the source layer.</p>
           {posterTreatments.length > 0 ? (
             <>
-              <h3 className="property-kicker">Poster treatments</h3>
+              <h3 className="property-kicker">Poster effects</h3>
               <ul className="treatment-stack">
                 {posterTreatments.map((treatment, index) => (
                   <li key={treatment.id} className={treatment.enabled ? undefined : 'bypassed'}>
@@ -666,12 +674,12 @@ export function InspectorPanel({
             </>
           ) : null}
           {!selected ? (
-            <p className="empty">Select a layer to view its treatment stack.</p>
+            <p className="empty">Select a layer to see its applied effects.</p>
           ) : selectedTreatments.length === 0 && !hasMaskContent(layerMask) ? (
-            <p className="empty">No layer treatments yet. Try Xerox, Scatter, or paint a mask.</p>
+            <p className="empty">No effects applied to this layer yet. Try Scatter, Copy machine, or paint a mask.</p>
           ) : (
             <>
-              <h3 className="property-kicker">Layer treatments</h3>
+              <h3 className="property-kicker">Layer effects</h3>
               <ul className="treatment-stack">
                 {hasMaskContent(layerMask) && layerMask ? (
                   <li className={layerMask.enabled ? undefined : 'bypassed'}>
@@ -1075,130 +1083,6 @@ export function InspectorPanel({
               </div>
             </>
           ) : null}
-        </div>
-      ) : null}
-
-      {inspectorTab === 'layers' ? (
-        <div className="panel-section layers-section">
-          <div className="layers-header">
-            <h2>Layers</h2>
-            <span className="layers-count" aria-label={`${layers.length} layers`}>
-              {layers.length}
-            </span>
-          </div>
-          <div className={selected ? 'layers-props' : 'layers-props is-disabled'}>
-            <div className="layers-blend" title="Blend mode">
-              {selected ? (
-                <BlendModePicker
-                  value={selected.blendMode ?? 'source-over'}
-                  onPreview={onPreviewBlendMode}
-                  onChange={onApplyBlendMode}
-                />
-              ) : (
-                <button type="button" className="layers-blend-placeholder" disabled>
-                  Normal
-                </button>
-              )}
-            </div>
-            <Slider
-              variant="field"
-              label="Opacity"
-              defaultValue={100}
-              disabled={!selected}
-              value={selected ? Math.round(selected.opacity * 100) : 100}
-              min={5}
-              max={100}
-              format={formatPercent}
-              onChange={(value) => onUpdateActive({ opacity: value / 100 })}
-              onCommit={() => onFinalizeActive('Changed opacity')}
-            />
-          </div>
-          <LayersPanel
-            layers={layers}
-            selectedIds={selectedLayerIds}
-            renamingLayerId={renamingLayerId}
-            dragLayerId={dragLayerId}
-            onSelect={onSelectLayer}
-            onToggleVisibility={onToggleLayerVisibility}
-            onToggleLock={onToggleLayerLock}
-            onRenameStart={onRenameLayerStart}
-            onRenameEnd={onRenameLayerEnd}
-            onDragStart={onDragLayerStart}
-            onDragOver={onDragLayerOver}
-            onDragEnd={onDragLayerEnd}
-            onZoomToLayer={onZoomToLayer}
-            collapsedIds={collapsedLayerIds}
-            onToggleCollapsed={toggleLayerCollapsed}
-          />
-          <div className="layers-footer" role="toolbar" aria-label="Layer actions">
-            {onAddAdjustment ? (
-              <label className="layers-footer-button layers-adjustment" title="New adjustment layer">
-                <Contrast size={15} aria-hidden="true" />
-                <select
-                  aria-label="Add adjustment layer"
-                  value=""
-                  onChange={(event) => {
-                    const type = event.target.value as AdjustmentType
-                    if (type) onAddAdjustment(type)
-                  }}
-                >
-                  <option value="" disabled>
-                    Adjustment layer
-                  </option>
-                  {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
-                    <option key={type} value={type}>
-                      {ADJUSTMENT_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <button
-              type="button"
-              className="layers-footer-button"
-              title="Group layers (⌘G)"
-              aria-label="Group layers"
-              disabled={!canGroupLayers}
-              onClick={onGroupLayers}
-            >
-              <Group size={15} />
-            </button>
-            <button
-              type="button"
-              className="layers-footer-button"
-              title="Ungroup (⇧⌘G)"
-              aria-label="Ungroup"
-              disabled={!canUngroupLayers}
-              onClick={onUngroupLayers}
-            >
-              <Ungroup size={15} />
-            </button>
-            <span className="layers-footer-spacer" />
-            {onDuplicateLayer ? (
-              <button
-                type="button"
-                className="layers-footer-button"
-                title="Duplicate layer (⌘D)"
-                aria-label="Duplicate layer"
-                disabled={!selected}
-                onClick={onDuplicateLayer}
-              >
-                <Copy size={15} />
-              </button>
-            ) : null}
-            {onDeleteLayer ? (
-              <button
-                type="button"
-                className="layers-footer-button"
-                title="Delete layer (⌫)"
-                aria-label="Delete layer"
-                disabled={!selected}
-                onClick={onDeleteLayer}
-              >
-                <Trash2 size={15} />
-              </button>
-            ) : null}
-          </div>
         </div>
       ) : null}
 
@@ -1870,50 +1754,46 @@ export function InspectorPanel({
             </div>
           </div>
 
-          <div className="panel-section">
-            <h2>Shortcuts</h2>
-            <ul className="shortcut-list">
-              <li>
-                <kbd>Cmd+Z</kbd> Undo · <kbd>Cmd+Shift+Z</kbd> Redo
-              </li>
-              <li>
-                <kbd>Cmd+D</kbd> Duplicate · <kbd>Delete</kbd> Remove
-              </li>
-              <li>
-                <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant · <kbd>Cmd+Shift+B</kbd> Comps gallery · <kbd>Cmd+F</kbd> Filter gallery
-              </li>
-              <li>
-                <kbd>Tab</kbd> Cycle layers (canvas focused) · <kbd>Shift+Tab</kbd> Reverse
-              </li>
-              <li>
-                <kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10
-              </li>
-              <li>
-                <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>F</kbd> Frame · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
-              </li>
-              <li>
-                Mask: drag conceal · <kbd>Alt</kbd>-drag reveal · <kbd>[</kbd> <kbd>]</kbd> brush size
-              </li>
-              <li>
-                <kbd>B</kbd> Block · <kbd>P</kbd> Bezier pen · <kbd>G</kbd> Grid · <kbd>R</kbd> Re-roll · <kbd>Shift+R</kbd> Scramble
-              </li>
-              <li>
-                Pen: click anchors · drag handles · <kbd>Enter</kbd> finish · click start to close · <kbd>Esc</kbd> cancel
-              </li>
-              <li>
-                <kbd>Cmd+G</kbd> Group · <kbd>Cmd+Shift+G</kbd> Ungroup
-              </li>
-              <li>
-                <kbd>Cmd+0</kbd> Fit · <kbd>Cmd+1</kbd> 100% · <kbd>Cmd+Scroll</kbd> Zoom
-              </li>
-              <li>
-                <kbd>Cmd+K</kbd> Combine / Subtract shapes
-              </li>
-              <li>
-                <kbd>Space+Drag</kbd> Pan · <kbd>Cmd+Drag</kbd> No snapping
-              </li>
-            </ul>
-          </div>
+          <details className="panel-section shortcuts-disclosure">
+            <summary>Shortcuts</summary>
+            {shortcutGroups.map((group) => (
+              <div key={group.title} className="shortcut-group">
+                <h3>{group.title}</h3>
+                <ul className="shortcut-list">
+                  {group.items.map((item) => (
+                    <li key={item.label}>
+                      <span>{item.label}</span>
+                      <span className="shortcut-keys">
+                        {item.keys.map((key) => (
+                          <kbd key={key}>{key}</kbd>
+                        ))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            <div className="shortcut-group">
+              <h3>Gestures</h3>
+              <ul className="shortcut-list shortcut-notes">
+                <li>
+                  <kbd>Space</kbd>-drag pans · <kbd>{modKey}</kbd>-scroll zooms · <kbd>{modKey}</kbd>-drag ignores snapping
+                </li>
+                <li>
+                  <kbd>Alt</kbd>-drag duplicates · Arrows nudge, <kbd>Shift</kbd> ×10 · Right-click for the layer menu
+                </li>
+                <li>
+                  <kbd>Tab</kbd> cycles layers when the canvas has focus · Double-click text to edit it
+                </li>
+                <li>
+                  Mask: drag conceals, <kbd>Alt</kbd>-drag reveals · <kbd>[</kbd> <kbd>]</kbd> brush size
+                </li>
+                <li>
+                  Pen: click anchors, drag handles · <kbd>Enter</kbd> finishes · <kbd>Esc</kbd> cancels
+                </li>
+              </ul>
+            </div>
+          </details>
         </>
       ) : null}
 
@@ -1994,7 +1874,7 @@ export function InspectorPanel({
           {storedAssets.length === 0 &&
           (!documentMeta || documentMeta.components.filter((item) => item.kind !== 'stack').length === 0) ? (
             savedInstruments.length === 0 && savedGestures.length === 0 ? (
-              <p className="empty">Save an Instrument from Treatments, or import an image.</p>
+              <p className="empty">Save an Instrument from Applied effects, or import an image.</p>
             ) : null
           ) : (
             <div className="asset-grid">
@@ -2067,7 +1947,7 @@ export function InspectorPanel({
       {inspectorTab === 'layout' ? (
         <div className="panel-section">
           <h2>Layout grid</h2>
-          <p className="hint">Structure to play against. Click the rulers to drop guides. Tension loosens the snap.</p>
+          <p className="hint">Structure to play against. Click the rulers to drop guides. Looseness loosens the snap.</p>
           <div className="button-row">
             <button type="button" className={showLayoutGrid ? 'active' : undefined} onClick={onToggleLayoutGrid} title="Toggle column grid (G)">
               <Grid3x3 size={16} />
@@ -2129,7 +2009,7 @@ export function InspectorPanel({
             />
           </label>
           <Slider
-            label="Grid tension"
+            label="Grid looseness"
             value={gridOverlay.tension}
             min={0}
             max={100}
@@ -2222,11 +2102,11 @@ export function InspectorPanel({
           </div>
           <h3>Variations</h3>
           <p className="hint">
-            Fork with <kbd>Cmd+B</kbd>. Trail under the canvas is spatial undo. Comps gallery compares named looks.
+            Make a new version with <kbd>Cmd+B</kbd>. History under the canvas is spatial undo. Versions compares named looks.
           </p>
           <div className="button-row">
             <button type="button" onClick={onOpenCompsGallery}>
-              Comps gallery
+              Versions
             </button>
           </div>
           {documentMeta && documentMeta.variants.length > 0 ? (
@@ -2359,6 +2239,141 @@ export function InspectorPanel({
           <p className="hint">Bleed, trim, and safe are document chrome — they never bake into artwork. PDF marks sit in the slug; SVG keeps type and vectors editable.</p>
         </div>
       ) : null}
+      </div>
+
+      <section className={layersOpen ? 'layers-dock' : 'layers-dock is-collapsed'} aria-label="Layers">
+          <div className="layers-header">
+            <button
+              type="button"
+              className="layers-toggle"
+              aria-expanded={layersOpen}
+              aria-controls="layers-dock-body"
+              onClick={() => setLayersOpen((open) => !open)}
+            >
+              <ChevronDown size={12} aria-hidden="true" className="layers-toggle-caret" />
+              <h2>Layers</h2>
+            </button>
+            <span className="layers-count" aria-label={`${layers.length} layers`}>
+              {layers.length}
+            </span>
+          </div>
+          <div id="layers-dock-body" className="layers-dock-body" hidden={!layersOpen}>
+          <div className={selected ? 'layers-props' : 'layers-props is-disabled'}>
+            <div className="layers-blend" title="Blend mode">
+              {selected ? (
+                <BlendModePicker
+                  value={selected.blendMode ?? 'source-over'}
+                  onPreview={onPreviewBlendMode}
+                  onChange={onApplyBlendMode}
+                />
+              ) : (
+                <button type="button" className="layers-blend-placeholder" disabled>
+                  Normal
+                </button>
+              )}
+            </div>
+            <Slider
+              variant="field"
+              label="Opacity"
+              defaultValue={100}
+              disabled={!selected}
+              value={selected ? Math.round(selected.opacity * 100) : 100}
+              min={5}
+              max={100}
+              format={formatPercent}
+              onChange={(value) => onUpdateActive({ opacity: value / 100 })}
+              onCommit={() => onFinalizeActive('Changed opacity')}
+            />
+          </div>
+          <LayersPanel
+            layers={layers}
+            selectedIds={selectedLayerIds}
+            renamingLayerId={renamingLayerId}
+            dragLayerId={dragLayerId}
+            onSelect={onSelectLayer}
+            onToggleVisibility={onToggleLayerVisibility}
+            onToggleLock={onToggleLayerLock}
+            onRenameStart={onRenameLayerStart}
+            onRenameEnd={onRenameLayerEnd}
+            onDragStart={onDragLayerStart}
+            onDragOver={onDragLayerOver}
+            onDragEnd={onDragLayerEnd}
+            onZoomToLayer={onZoomToLayer}
+            collapsedIds={collapsedLayerIds}
+            onToggleCollapsed={toggleLayerCollapsed}
+          />
+          <div className="layers-footer" role="toolbar" aria-label="Layer actions">
+            {onAddAdjustment ? (
+              <label className="layers-footer-button layers-adjustment" title="New adjustment layer">
+                <Contrast size={15} aria-hidden="true" />
+                <select
+                  aria-label="Add adjustment layer"
+                  value=""
+                  onChange={(event) => {
+                    const type = event.target.value as AdjustmentType
+                    if (type) onAddAdjustment(type)
+                  }}
+                >
+                  <option value="" disabled>
+                    Adjustment layer
+                  </option>
+                  {(Object.keys(ADJUSTMENT_LABELS) as AdjustmentType[]).map((type) => (
+                    <option key={type} value={type}>
+                      {ADJUSTMENT_LABELS[type]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <button
+              type="button"
+              className="layers-footer-button"
+              title="Group layers (⌘G)"
+              aria-label="Group layers"
+              disabled={!canGroupLayers}
+              onClick={onGroupLayers}
+            >
+              <Group size={15} />
+            </button>
+            <button
+              type="button"
+              className="layers-footer-button"
+              title="Ungroup (⇧⌘G)"
+              aria-label="Ungroup"
+              disabled={!canUngroupLayers}
+              onClick={onUngroupLayers}
+            >
+              <Ungroup size={15} />
+            </button>
+            <span className="layers-footer-spacer" />
+            {onDuplicateLayer ? (
+              <button
+                type="button"
+                className="layers-footer-button"
+                title="Duplicate layer (⌘D)"
+                aria-label="Duplicate layer"
+                disabled={!selected}
+                onClick={onDuplicateLayer}
+              >
+                <Copy size={15} />
+              </button>
+            ) : null}
+            {onDeleteLayer ? (
+              <button
+                type="button"
+                className="layers-footer-button"
+                title="Delete layer (⌫)"
+                aria-label="Delete layer"
+                disabled={!selected}
+                onClick={onDeleteLayer}
+              >
+                <Trash2 size={15} />
+              </button>
+            ) : null}
+          </div>
+        
+          </div>
+      </section>
     </aside>
   )
 }

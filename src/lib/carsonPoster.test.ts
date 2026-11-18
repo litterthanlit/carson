@@ -34,8 +34,13 @@ describe('buildCarsonPoster', () => {
   it('keeps the layer names the walkthrough and verify scripts rely on', () => {
     const names = specs.map((spec) => spec.name)
     expect(names).toContain('Oversized headline')
-    expect(names).toContain('Red interruption')
+    expect(names).toContain('Studio')
     expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('is ink on paper: no colour scraps, only the two red specks', () => {
+    const coloured = specs.filter((spec) => spec.type === 'rect' || spec.type === 'polygon')
+    expect(coloured.map((spec) => spec.name).sort()).toEqual(['Red speck', 'Red speck 2'])
   })
 
   it('spells CARSON in the headline', () => {

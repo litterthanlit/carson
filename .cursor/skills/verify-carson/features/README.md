@@ -9,7 +9,7 @@ This directory is the maintained source for verifying Carson user-facing behavio
 - Run `.cursor/skills/verify-carson/scripts/doctor.sh` and require the recorded pid to own that port.
 - Use a fresh Playwright profile (the driver puts it in the run directory). Do not reuse the operator's browser.
 - Dismiss `Wreck this poster` with `Skip intro` when it appears. That lands on Home. Editor recipes then choose `Start from wreck` unless the feature file says otherwise.
-- Seed layers include `Oversized headline` and `Red interruption`.
+- Seed layers include `Oversized headline` and `Studio`.
 - Never drive an instance that this run did not start.
 
 ## Driving conventions

@@ -23,7 +23,7 @@ Preconditions:
 - Two seed layers can be grouped.
 - The driver accepts `window.prompt` with `Mark`.
 
-- **Group then save.** Group `Oversized headline` and `Red interruption`. Choose tab `Assets`, then `Save selection as component`. Run `node .cursor/skills/verify-carson/scripts/drive.mjs --feature component-instances`. An Assets control named `Mark` appears. Status contains `Saved component`.
+- **Group then save.** Group `Oversized headline` and `Studio`. Choose tab `Assets`, then `Save selection as component`. Run `node .cursor/skills/verify-carson/scripts/drive.mjs --feature component-instances`. An Assets control named `Mark` appears. Status contains `Saved component`.
 - **Insert instance.** Choose `Mark`. Status contains `Instance of`. Inspect shows Detach, Reset, and Update.
 - **Detach.** Choose Detach. Status contains `Detached`. Detach is gone from Inspect.
 - **Proof.** `artifacts/component-instances/instance.aria.txt` includes `Component instance`. `detached.aria.txt` does not include a Detach button.

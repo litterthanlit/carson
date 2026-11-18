@@ -6,7 +6,7 @@ First load shows the seeded poster after the intro dialog, with `Oversized headl
 
 - `baseline-onboarding` dismisses `Wreck this poster` without running the walkthrough.
 - `baseline-canvas` shows the poster canvas and the Carson heading.
-- `baseline-layers` lists seed layers including `Oversized headline` and `Red interruption`.
+- `baseline-layers` lists seed layers including `Oversized headline` and `Studio`.
 - `baseline-inspect` shows headline name `Oversized headline` and text containing `RAY GUN`.
 
 ## How to get to it (user POV)
@@ -24,7 +24,7 @@ Preconditions:
 - No prior grouping of the seed layers.
 
 - **Skip intro.** Choose `Skip intro`. The driver does this before every feature. The dialog closes and region `Home` is visible. Editor recipes then choose `Start from wreck` so region `Poster canvas` is visible.
-- **Open layers.** Choose tab `Layers`. Run `node .cursor/skills/verify-carson/scripts/drive.mjs --feature editor-baseline`. Buttons matching `Oversized headline` and `Red interruption` are present.
+- **Open layers.** Choose tab `Layers`. Run `node .cursor/skills/verify-carson/scripts/drive.mjs --feature editor-baseline`. Buttons matching `Oversized headline` and `Studio` are present.
 - **Select headline.** Choose the `Oversized headline` layer, then tab `Inspect`. The Name textbox value is `Oversized headline`. The Text control value contains `RAY GUN`.
 - **Proof.** Artifacts `inspect-headline.proof.json` (name and text), `inspect-headline.aria.txt`, and `inspect-headline.png` show heading `Carson`, Inspect selected, and headline name `Oversized headline`.
 

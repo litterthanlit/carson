@@ -41,6 +41,7 @@ import { StrokeSession, bumpPaintVersion, createPaintLayer, isPaintLayer, poster
 import { storePixels } from './lib/pixelStore'
 import { WarpOverlay } from './components/WarpOverlay'
 import { WarpBar } from './components/WarpBar'
+import { CanvasContextMenu, type ContextMenuItem } from './components/CanvasContextMenu'
 import { MESH_SIZE, identityDistort, identityMesh, isIdentityWarp, warpPoint, type Warp } from './lib/warp'
 import { readWarp } from './lib/warpRender'
 import { AdjustmentLayer, readAdjustment } from './lib/adjustmentLayer'
@@ -232,7 +233,7 @@ import {
   pruneTrailToOps,
   type TrailFrame,
 } from './lib/explorationTrail'
-import type { CommandAction } from './lib/commands'
+import { buildShortcutSheet, resolveKeyCommand, shortcutLabels, type CommandAction } from './lib/commands'
 import { EditorCanvas } from './components/EditorCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
 import { InstrumentsPalette } from './components/InstrumentsPalette'
@@ -287,6 +288,8 @@ import {
   writeComponentOverrides,
 } from './lib/components'
 import { reviveSerializedObject } from './lib/fabricRevive'
+import { setTextEditOnSingleClick } from './lib/textClickBehavior'
+import { DEFAULT_KEYMAP, SHORTCUT_SECTIONS } from './lib/keymap'
 import { buildCarsonPoster, CARSON_PAPER, CARSON_POSTER_FONTS } from './lib/carsonPoster'
 import {
   applyCharacterStyleToText,
@@ -348,6 +351,8 @@ type StyleBaseline = {
   globalCompositeOperation: string
 }
 
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
+
 type EyeDropperResult = { sRGBHex: string }
 type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 
@@ -358,6 +363,9 @@ type EditorIntent =
   | { kind: 'autosave'; project: StoredProject }
 
 type EditorScreen = 'home' | 'editor'
+
+/** A detached copy of a layer, kept for duplicate and the in-app clipboard. */
+type LayerClone = { object: FabricObject; kind: LayerKind; name: string; linkedId: string | null }
 
 /** Point the canvas at the active poster's press (or none); returns the run's signature. */
 function bindPressForDocument(
@@ -449,6 +457,18 @@ function App() {
   const [dragLayerId, setDragLayerId] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
   const [commandOpen, setCommandOpen] = useState(false)
+  // Effects palette: groups stay as the user left them for the session; the search field takes focus only when
+  // the palette was opened from the tool rail (the I key must keep working as a shortcut).
+  const [paletteOpenGroups, setPaletteOpenGroups] = useState<ReadonlySet<string>>(() => new Set())
+  const [paletteSearchFocus, setPaletteSearchFocus] = useState(false)
+  const togglePaletteGroup = useCallback((id: string) => {
+    setPaletteOpenGroups((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
   const [performance, setPerformance] = useState(idlePerformance)
   const [filterGalleryOpen, setFilterGalleryOpen] = useState(false)
   const [textureGalleryOpen, setTextureGalleryOpen] = useState(false)
@@ -490,6 +510,12 @@ function App() {
   const [pixelSelection, setPixelSelection] = useState<PixelSelection | null>(null)
   const pixelSelectionRef = useRef<PixelSelection | null>(null)
   pixelSelectionRef.current = pixelSelection
+  const layerClipboardRef = useRef<{ clones: LayerClone[]; pastes: number } | null>(null)
+  const [hasLayerClipboard, setHasLayerClipboard] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; onLayer: boolean } | null>(null)
+  const contextMenuHandlerRef = useRef<(event: MouseEvent) => void>(() => {})
+  const pasteImageRef = useRef<(file: File) => void>(() => {})
+  const duplicateForAltDragRef = useRef<(sources: FabricObject[]) => Promise<() => void>>(async () => () => {})
   const [pathEditMode, setPathEditMode] = useState(false)
   const [pathAddPointMode, setPathAddPointMode] = useState(false)
   const [pathGeometryTick, setPathGeometryTick] = useState(0)
@@ -746,6 +772,7 @@ function App() {
     onTextSelectionChange: setTextSelection,
     editorToolRef,
     onPlaceText: (point) => addTextRef.current(point),
+    onAltDragDuplicate: (sources) => duplicateForAltDragRef.current(sources),
     onMaskPaint: (phase, point, reveal) => maskPaintRef.current(phase, point, reveal),
   })
 
@@ -957,6 +984,7 @@ function App() {
   }, [penMode, penKind, penStrokeColor, penStrokeWidth])
 
   editorToolRef.current = editorTool
+  setTextEditOnSingleClick(editorTool === 'text')
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -1050,6 +1078,8 @@ function App() {
 
   // Keyboard layer: full shortcut coverage. Stable listener reads handlers via ref.
   const keyActionsRef = useRef<Record<string, () => void>>({})
+  // The command registry as of the latest render; the keyboard, context menu and agent bridge read it.
+  const commandsRef = useRef<CommandAction[]>([])
   keyActionsRef.current = {
     undo: () => {
       void handleUserUndo()
@@ -1065,6 +1095,14 @@ function App() {
     openPoster: () => openOpenPosterDialog(),
     export: () => void exportPoster(),
     duplicate: () => void duplicateSelected(),
+    copy: () => void copySelected(),
+    cut: () => void cutSelected(),
+    paste: () => void pasteLayers(),
+    selectAll: selectAllLayers,
+    bringForward: () => moveLayer('forward'),
+    sendBackward: () => moveLayer('backward'),
+    bringToFront: () => moveLayer('front'),
+    sendToBack: () => moveLayer('back'),
     delete: deleteSelected,
     deselect: () => {
       canvasRef.current?.discardActiveObject()
@@ -1136,6 +1174,7 @@ function App() {
     ungroup: () => void ungroupSelection(),
     instrumentsTool: () => {
       setPenMode(false)
+      setPaletteSearchFocus(false)
       setEditorTool((current) => (current === 'instruments' ? 'move' : 'instruments'))
     },
     filterGallery: () => setFilterGalleryOpen(true),
@@ -1176,28 +1215,11 @@ function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       // A modal dialog owns the keyboard; editor shortcuts must not act on the poster behind it.
       if (document.querySelector('[aria-modal="true"]')) return
-      const actions = keyActionsRef.current
+      const typing = isTypingContext(event.target)
       const meta = event.metaKey || event.ctrlKey
-      if (meta) {
-        const key = event.key.toLowerCase()
-        if (key === 'n') {
-          event.preventDefault()
-          actions.newPoster()
-          return
-        }
-        if (key === 'o') {
-          event.preventDefault()
-          actions.openPoster()
-          return
-        }
-        if (key === 'k' && screenRef.current === 'home') {
-          event.preventDefault()
-          actions.commandPalette()
-          return
-        }
-      }
-      if (screenRef.current !== 'editor') return
-      if (event.key === ' ' && !isTypingContext(event.target)) {
+      const inEditor = screenRef.current === 'editor'
+
+      if (inEditor && event.key === ' ' && !typing) {
         if (!spaceDownRef.current) {
           spaceDownRef.current = true
           setIsPanMode(true)
@@ -1211,164 +1233,60 @@ function App() {
         return
       }
 
-      if (meta) {
-        const key = event.key.toLowerCase()
-        if (key === 'z') {
-          event.preventDefault()
-          if (event.shiftKey) actions.redo()
-          else actions.undo()
-        } else if (key === 'y') {
-          event.preventDefault()
-          actions.redo()
-        } else if (key === 's') {
-          event.preventDefault()
-          if (event.shiftKey) actions.saveAs()
-          else actions.save()
-        } else if (key === 'e') {
-          event.preventDefault()
-          actions.export()
-        } else if (key === 'd' && !isTypingContext(event.target)) {
-          event.preventDefault()
-          actions.duplicate()
-        } else if (key === '0') {
-          event.preventDefault()
-          actions.zoomFit()
-        } else if (key === '1') {
-          event.preventDefault()
-          actions.zoom100()
-        } else if (key === '=' || key === '+') {
-          event.preventDefault()
-          actions.zoomIn()
-        } else if (key === '-') {
-          event.preventDefault()
-          actions.zoomOut()
-        } else if (key === 'k') {
-          event.preventDefault()
-          actions.commandPalette()
-        } else if (key === 'b') {
-          event.preventDefault()
-          if (event.shiftKey) actions.openCompsGallery()
-          else actions.forkVariant()
-        } else if (key === 'g' && !isTypingContext(event.target)) {
-          event.preventDefault()
-          if (event.shiftKey) actions.ungroup()
-          else actions.group()
-        } else if (key === 'f') {
-          event.preventDefault()
-          actions.filterGallery()
-        } else if (key === 'j' && pixelSelectionRef.current) {
-          event.preventDefault()
-          if (event.shiftKey) actions.selectionViaCut()
-          else actions.selectionViaCopy()
-        } else if (key === 'i' && event.shiftKey && pixelSelectionRef.current) {
-          event.preventDefault()
-          actions.selectionInvert()
-        }
-        return
-      }
+      // Keys that belong to whatever is in progress (a warp, a pen path, a nudge)
+      // come before the registry; everything else is a command in the keymap.
+      if (inEditor && !meta && !typing && handleContextualKey(event)) return
 
-      if (isTypingContext(event.target)) return
+      const command = resolveKeyCommand(commandsRef.current, DEFAULT_KEYMAP, event, {
+        typing,
+        screen: inEditor ? 'editor' : 'home',
+      })
+      if (!command) return
+      // Escape stays unprevented so open flyouts and panels can also close on it.
+      if (event.key !== 'Escape') event.preventDefault()
+      void command.run()
+    }
 
+    /** True when the key was used up by an in-progress edit. */
+    const handleContextualKey = (event: KeyboardEvent) => {
       if (warpEditRef.current && (event.key === 'Enter' || event.key === 'Escape')) {
         event.preventDefault()
         finishWarpEdit(event.key === 'Enter')
-        return
+        return true
       }
-
       const canvasFocused = document.activeElement?.closest('.canvas-scroll') != null
       if (event.key === 'Tab' && canvasFocused) {
         event.preventDefault()
         cycleCanvasSelection(event.shiftKey)
-        return
+        return true
       }
-
       if (event.key === 'Enter' && bezierPenActionsRef.current.finish()) {
         event.preventDefault()
-        return
+        return true
       }
-
       if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (bezierPenActionsRef.current.undoPoint()) {
+        if (bezierPenActionsRef.current.undoPoint() || (pathEditMode && pathEditActionsRef.current.deleteSelectedAnchor())) {
           event.preventDefault()
-          return
+          return true
         }
-        if (!isTypingContext(event.target) && pathEditMode && pathEditActionsRef.current.deleteSelectedAnchor()) {
-          event.preventDefault()
-          return
-        }
-        event.preventDefault()
-        // With a pixel selection, Delete masks the area out (Photoshop) instead of deleting the layer.
-        if (pixelSelectionRef.current) actions.selectionMaskOut()
-        else actions.delete()
-      } else if (event.key === 'Escape') {
-        if (bezierPenActionsRef.current.cancel()) {
-          event.preventDefault()
-          return
-        }
-        if (pixelSelectionRef.current) {
-          actions.selectionClear()
-          return
-        }
-        actions.deselect()
-      } else if (event.key === 'ArrowLeft') {
-        if (nudgeSelection(event.shiftKey ? -10 : -1, 0)) event.preventDefault()
-      } else if (event.key === 'ArrowRight') {
-        if (nudgeSelection(event.shiftKey ? 10 : 1, 0)) event.preventDefault()
-      } else if (event.key === 'ArrowUp') {
-        if (nudgeSelection(0, event.shiftKey ? -10 : -1)) event.preventDefault()
-      } else if (event.key === 'ArrowDown') {
-        if (nudgeSelection(0, event.shiftKey ? 10 : 1)) event.preventDefault()
-      } else if (event.key.toLowerCase() === 't') {
-        actions.addText()
-      } else if (event.key.toLowerCase() === 'v') {
-        event.preventDefault()
-        actions.moveTool()
-      } else if (event.key.toLowerCase() === 's') {
-        event.preventDefault()
-        actions.shapeTool()
-      } else if (event.key.toLowerCase() === 'f') {
-        event.preventDefault()
-        actions.frameTool()
-      } else if (event.key.toLowerCase() === 'l') {
-        event.preventDefault()
-        actions.selectTool()
-      } else if (event.key.toLowerCase() === 'm') {
-        event.preventDefault()
-        actions.maskTool()
-      } else if (event.key === '[' && editorToolRef.current === 'mask') {
-        event.preventDefault()
-        setMaskBrushSize((value) => Math.max(4, value - 6))
-        setStatus('Mask brush smaller')
-      } else if (event.key === ']' && editorToolRef.current === 'mask') {
-        event.preventDefault()
-        setMaskBrushSize((value) => Math.min(100, value + 6))
-        setStatus('Mask brush larger')
-      } else if (event.key.toLowerCase() === 'i') {
-        event.preventDefault()
-        actions.instrumentsTool()
-      } else if (event.key.toLowerCase() === 'b') {
-        event.preventDefault()
-        actions.brushTool()
-      } else if (event.key.toLowerCase() === 'e') {
-        event.preventDefault()
-        actions.eraserTool()
-      } else if ((event.key === '[' || event.key === ']') && editorToolRef.current === 'brush') {
-        event.preventDefault()
-        const factor = event.key === ']' ? 1.2 : 1 / 1.2
-        setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
-      } else if (event.key.toLowerCase() === 'p' && canvasFocused) {
-        actions.togglePen()
-      } else if (event.key.toLowerCase() === 'g') {
-        event.preventDefault()
-        actions.toggleLayoutGrid()
-      } else if (event.key.toLowerCase() === 'r') {
-        if (event.shiftKey) {
-          event.preventDefault()
-          actions.scramble()
-        } else {
-          actions.reroll()
-        }
+        return false
       }
+      if (event.key === 'Escape') {
+        if (!bezierPenActionsRef.current.cancel()) return false
+        event.preventDefault()
+        return true
+      }
+      const step = event.shiftKey ? 10 : 1
+      const nudge: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, -step],
+        ArrowDown: [0, step],
+      }
+      const delta = nudge[event.key]
+      if (!delta) return false
+      if (nudgeSelection(delta[0], delta[1])) event.preventDefault()
+      return true
     }
 
     const onKeyUp = (event: KeyboardEvent) => {
@@ -1388,11 +1306,36 @@ function App() {
       }
     }
 
+    // Paste goes through the paste event (not Cmd+V) so a system clipboard image can win.
+    const onPaste = (event: ClipboardEvent) => {
+      if (screenRef.current !== 'editor') return
+      if (document.querySelector('[aria-modal="true"]') || isTypingContext(event.target)) return
+      const image = Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith('image/'))
+      if (image) {
+        event.preventDefault()
+        pasteImageRef.current(image)
+      } else if (layerClipboardRef.current) {
+        event.preventDefault()
+        keyActionsRef.current.paste?.()
+      }
+    }
+
+    const onContextMenu = (event: MouseEvent) => {
+      if (screenRef.current !== 'editor') return
+      if (!(event.target as HTMLElement | null)?.closest?.('.canvas-container')) return
+      if (document.querySelector('[aria-modal="true"]')) return
+      contextMenuHandlerRef.current(event)
+    }
+
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('paste', onPaste)
+    window.addEventListener('contextmenu', onContextMenu, true)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('paste', onPaste)
+      window.removeEventListener('contextmenu', onContextMenu, true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1560,9 +1503,9 @@ function App() {
   tagObjectRef.current = tagObject
 
   function seedPoster(canvas: Canvas, currentPoster: PosterPreset) {
-    // A layered David Carson-style collage (see lib/carsonPoster) — the finished
+    // A clean, type-led David Carson-style layout (see lib/carsonPoster) — the finished
     // poster the walkthrough then wrecks further. Layer names "Oversized headline"
-    // and "Red interruption" are load-bearing for the walkthrough and verify scripts.
+    // and "Studio" are load-bearing for the walkthrough and verify scripts.
     const specs = buildCarsonPoster(currentPoster.width, currentPoster.height)
     const objects: FabricObject[] = []
     let headline: FabricObject | null = null
@@ -2039,7 +1982,11 @@ function App() {
     return objects.map((object) => String(readObjectProp(object, 'id') ?? ''))
   }
 
-  function addText(position?: { left: number; top: number }, spec: Partial<AgentTextSpec> = {}) {
+  function addText(
+    position?: { left: number; top: number },
+    spec: Partial<AgentTextSpec> = {},
+    options: { edit?: boolean } = {},
+  ) {
     const canvas = canvasRef.current
     if (!canvas) return
     const { text: content = 'NEW TYPE', name = 'Text layer', ...style } = spec
@@ -2059,9 +2006,71 @@ function App() {
     canvas.add(text)
     canvas.setActiveObject(text)
     commitHistory('Added text')
+    if (options.edit) {
+      // Click-to-type: the placeholder is fully selected so the first keystroke replaces it.
+      text.enterEditing()
+      text.selectAll()
+      canvas.requestRenderAll()
+    }
   }
 
-  addTextRef.current = addText
+  addTextRef.current = (point) => addText(point, {}, { edit: true })
+  pasteImageRef.current = (file) => void handleImageFile(file)
+
+  contextMenuHandlerRef.current = (event) => {
+    const canvas = canvasRef.current
+    if (!canvas || canvas.isDrawingMode || penMode) return
+    const editing = canvas.getActiveObject() as (FabricObject & { isEditing?: boolean }) | undefined
+    if (editing?.isEditing) return
+    event.preventDefault()
+    const target = canvas.findTarget(event).target
+    const active = canvas.getActiveObject()
+    if (target && target.selectable !== false) {
+      const inSelection = active?.type === 'activeselection' ? canvas.getActiveObjects().includes(target) : false
+      if (target !== active && !inSelection) {
+        canvas.setActiveObject(topLevelLayer(target))
+        canvas.requestRenderAll()
+        syncSelected()
+      }
+    } else if (active) {
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      syncSelected()
+    }
+    setContextMenu({ x: event.clientX, y: event.clientY, onLayer: Boolean(canvas.getActiveObject()) })
+  }
+
+  function closeContextMenu() {
+    setContextMenu(null)
+    scrollRef.current?.focus({ preventScroll: true })
+  }
+
+  function contextMenuItems(): ContextMenuItem[] {
+    const byId = new Map(commandsRef.current.map((command) => [command.id, command]))
+    const item = (id: string, label: string, disabled = false): ContextMenuItem => ({
+      label,
+      shortcut: shortcutLabels(DEFAULT_KEYMAP, id, IS_MAC)[0],
+      disabled,
+      run: () => void byId.get(id)?.run(),
+    })
+    const paste = item('paste-layer', 'Paste', !hasLayerClipboard)
+    if (!contextMenu?.onLayer) return [paste, item('select-all', 'Select all')]
+    const items: ContextMenuItem[] = [
+      item('cut-layer', 'Cut'),
+      item('copy-layer', 'Copy'),
+      paste,
+      item('duplicate-layer', 'Duplicate'),
+      { separator: true },
+      item('bring-forward', 'Bring forward'),
+      item('send-backward', 'Send backward'),
+      item('bring-front', 'Bring to front'),
+      item('send-back', 'Send to back'),
+    ]
+    if (canGroupLayers) items.push({ separator: true }, item('group-layers', 'Group'))
+    if (canUngroupLayers) items.push({ separator: true }, item('ungroup-layers', 'Ungroup'))
+    items.push({ separator: true }, item('delete-layer', 'Delete'))
+    return items
+  }
 
   function addShape() {
     const canvas = canvasRef.current
@@ -3061,8 +3070,8 @@ function App() {
     const thumbnail = await createThumbnail(preview, 120)
     setDocumentMeta(forkVariant(documentMeta, snapshot, name, thumbnail))
     setInspectorTab('layout')
-    setStatus(`Forked ${name} — open Comps to compare`)
-    commitHistory(`Forked ${name}`)
+    setStatus(`Saved ${name} as a new version — open Versions to compare`)
+    commitHistory(`New version ${name}`)
   }
 
   async function restoreVariant(variantId: string) {
@@ -3628,6 +3637,7 @@ function App() {
       syncSelected()
     }
     setPenMode(false)
+    setPaletteSearchFocus(false)
     setEditorTool('instruments')
     setOnboardingOpen(false)
     setWalkthroughStep('scatter')
@@ -3859,22 +3869,119 @@ function App() {
     noteWalkthrough('undo')
   }
 
-  async function duplicateSelected() {
+  /** Clones the selected layers at their absolute poster positions, bottom layer first. */
+  async function cloneSelectedLayers(): Promise<LayerClone[]> {
     const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object) return
-    const clone = await object.clone()
-    clone.set({
-      left: (object.left ?? 0) + 28,
-      top: (object.top ?? 0) + 28,
-    })
-    const linkedId = readComponentId(object)
-    retargetObjectIds(clone, nextIdForKind)
-    tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'shape', `${readObjectProp(object, 'name') ?? 'Layer'} copy`)
-    if (linkedId) writeComponentId(clone, linkedId)
-    canvas.add(clone)
-    canvas.setActiveObject(clone)
-    commitHistory('Duplicated layer')
+    const active = activeObject()
+    if (!canvas || !active) return []
+    const stack = canvas.getObjects()
+    const sources = (active.type === 'activeselection' ? canvas.getActiveObjects() : [active]).sort(
+      (a, b) => stack.indexOf(a) - stack.indexOf(b),
+    )
+    const clones: LayerClone[] = []
+    for (const source of sources) {
+      const object = await source.clone()
+      // Children of a multi-selection carry selection-relative coordinates.
+      if (source.group) util.applyTransformToObject(object, source.calcTransformMatrix())
+      clones.push({
+        object,
+        kind: (readObjectProp(source, 'kind') as LayerKind) ?? 'shape',
+        name: String(readObjectProp(source, 'name') ?? 'Layer'),
+        linkedId: readComponentId(source),
+      })
+    }
+    return clones
+  }
+
+  function placeLayerClones(clones: LayerClone[], offset: number, nameSuffix: string, label: string) {
+    const canvas = canvasRef.current
+    if (!canvas || clones.length === 0) return
+    canvas.discardActiveObject()
+    for (const { object, kind, name, linkedId } of clones) {
+      object.set({ left: (object.left ?? 0) + offset, top: (object.top ?? 0) + offset })
+      retargetObjectIds(object, nextIdForKind)
+      tagObject(object, kind, `${name}${nameSuffix}`)
+      if (linkedId) writeComponentId(object, linkedId)
+      canvas.add(object)
+    }
+    const objects = clones.map((clone) => clone.object)
+    canvas.setActiveObject(objects.length > 1 ? new ActiveSelection(objects, { canvas }) : objects[0]!)
+    commitHistory(label)
+  }
+
+  async function duplicateSelected() {
+    const clones = await cloneSelectedLayers()
+    placeLayerClones(clones, 28, ' copy', clones.length > 1 ? `Duplicated ${clones.length} layers` : 'Duplicated layer')
+  }
+
+  async function copySelected() {
+    const clones = await cloneSelectedLayers()
+    if (clones.length === 0) return false
+    layerClipboardRef.current = { clones, pastes: 0 }
+    setHasLayerClipboard(true)
+    setStatus(clones.length > 1 ? `Copied ${clones.length} layers` : 'Copied layer')
+    return true
+  }
+
+  async function cutSelected() {
+    if (await copySelected()) deleteSelected()
+  }
+
+  async function pasteLayers() {
+    const clipboard = layerClipboardRef.current
+    if (!clipboard) return
+    clipboard.pastes += 1
+    const clones: LayerClone[] = []
+    for (const entry of clipboard.clones) clones.push({ ...entry, object: await entry.object.clone() })
+    placeLayerClones(clones, 28 * clipboard.pastes, '', clones.length > 1 ? `Pasted ${clones.length} layers` : 'Pasted layer')
+  }
+
+  // Alt-drag: the dragged layers become the copies ("… copy") and fresh clones of the
+  // originals stay behind, so the pointer's drag session never has to change target.
+  duplicateForAltDragRef.current = async (sources) => {
+    const canvas = canvasRef.current
+    if (!canvas) return () => {}
+    // clone() snapshots the object synchronously, before the drag moves it.
+    const pending = sources.map((source) => ({
+      source,
+      matrix: source.calcTransformMatrix(),
+      name: String(readObjectProp(source, 'name') ?? 'Layer'),
+      kind: (readObjectProp(source, 'kind') as LayerKind) ?? 'shape',
+      linkedId: readComponentId(source),
+      clone: source.clone(),
+    }))
+    const added: FabricObject[] = []
+    const renamed: Array<{ source: FabricObject; name: string }> = []
+    for (const entry of pending.sort((a, b) => canvas.getObjects().indexOf(a.source) - canvas.getObjects().indexOf(b.source))) {
+      const clone = await entry.clone
+      if (entry.source.group) util.applyTransformToObject(clone, entry.matrix)
+      retargetObjectIds(clone, nextIdForKind)
+      tagObject(clone, entry.kind, entry.name)
+      if (entry.linkedId) writeComponentId(clone, entry.linkedId)
+      canvas.insertAt(canvas.getObjects().indexOf(entry.source), clone)
+      entry.source.set({ name: `${entry.name} copy` } as Partial<FabricObject>)
+      added.push(clone)
+      renamed.push({ source: entry.source, name: entry.name })
+    }
+    canvas.requestRenderAll()
+    return () => {
+      added.forEach((clone) => canvas.remove(clone))
+      renamed.forEach(({ source, name }) => source.set({ name } as Partial<FabricObject>))
+      canvas.requestRenderAll()
+      syncLayers()
+    }
+  }
+
+  function selectAllLayers() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const objects = getSelectableLayerObjects().reverse()
+    if (objects.length === 0) return
+    canvas.discardActiveObject()
+    canvas.setActiveObject(objects.length > 1 ? new ActiveSelection(objects, { canvas }) : objects[0]!)
+    canvas.requestRenderAll()
+    syncSelected()
+    setStatus(objects.length > 1 ? `Selected ${objects.length} layers` : 'Selected layer')
   }
 
   function deleteSelected() {
@@ -3887,17 +3994,35 @@ function App() {
     commitHistory(objects.length > 1 ? `Deleted ${objects.length} layers` : 'Deleted layer')
   }
 
-  function moveLayer(direction: 'front' | 'back') {
+  function moveLayer(direction: 'front' | 'back' | 'forward' | 'backward') {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object) return
     const before = captureLayerOrder(canvas)
-    if (direction === 'front') canvas.bringObjectToFront(object)
-    else canvas.sendObjectToBack(object)
-    commitLayerOrderChange(
-      direction === 'front' ? 'Moved layer to front' : 'Moved layer to back',
-      before,
-    )
+    const selection = new Set(object.type === 'activeselection' ? canvas.getActiveObjects() : [object])
+    const ordered = canvas.getObjects().filter((item) => selection.has(item))
+    if (direction === 'front') ordered.forEach((item) => canvas.bringObjectToFront(item))
+    else if (direction === 'back') [...ordered].reverse().forEach((item) => canvas.sendObjectToBack(item))
+    else if (direction === 'forward') {
+      // Step each layer past its neighbour, but not past another selected layer.
+      ;[...ordered].reverse().forEach((item) => {
+        const live = canvas.getObjects()
+        if (!selection.has(live[live.indexOf(item) + 1] as FabricObject)) canvas.bringObjectForward(item)
+      })
+    } else {
+      ordered.forEach((item) => {
+        const live = canvas.getObjects()
+        if (!selection.has(live[live.indexOf(item) - 1] as FabricObject)) canvas.sendObjectBackwards(item)
+      })
+    }
+    canvas.requestRenderAll()
+    const labels = {
+      front: 'Moved layer to front',
+      back: 'Moved layer to back',
+      forward: 'Brought layer forward',
+      backward: 'Sent layer backward',
+    }
+    commitLayerOrderChange(labels[direction], before)
   }
 
   function getSelectableLayerObjects(): FabricObject[] {
@@ -4461,7 +4586,7 @@ function App() {
     if (!canvas) return
     const targets = scrambleSourceObjects()
     if (targets.length === 0) {
-      setStatus('Add a layer before scrambling')
+      setStatus('Add a layer before shuffling')
       return
     }
 
@@ -4503,9 +4628,9 @@ function App() {
     canvas.requestRenderAll()
     syncLayers()
     syncSelected()
-    trackChaos('Scramble', seed, [], (next) => scrambleCanvas(next))
-    commitHistory(`Scrambled into ${result.label} #${seed}`)
-    setStatus(`Scrambled into ${result.label} #${seed} — press R for another structure`)
+    trackChaos('Shuffle layout', seed, [], (next) => scrambleCanvas(next))
+    commitHistory(`Shuffled into ${result.label} #${seed}`)
+    setStatus(`Shuffled into ${result.label} #${seed} — press R for another structure`)
   }
 
   async function badCropAccident(seed = newSeed()) {
@@ -5626,6 +5751,7 @@ function App() {
   const handleOpenCommands = useCallback(() => setCommandOpen(true), [])
   const handleToolChange = useCallback((next: EditorTool) => {
     setEditorTool(next)
+    setPaletteSearchFocus(next === 'instruments')
     if (next !== 'shape') setPenMode(false)
     if (next === 'mask') setStatus('Mask — paint to conceal, Alt to reveal · [ ] size')
     if (next === 'frame') setStatus('Frame — drag to draw (Shift square, Alt from center), or click a layer to frame it')
@@ -5653,7 +5779,6 @@ function App() {
   function handleTogglePencilMode() {
     togglePenKind('freehand')
   }
-  const commandsRef = useRef<CommandAction[]>([])
   const agentBridge = useAgentBridge({
     canvasRef,
     screen,
@@ -5708,6 +5833,15 @@ function App() {
     placeImage: handleImageFile,
   })
   const textContrast = selectedIsText ? contrastRatio(String(selected?.fill ?? '#111111'), '#f6f1e6') : null
+  const keyAction = (name: string) => () => keyActionsRef.current[name]?.()
+  const pixelSelected = () => Boolean(pixelSelectionRef.current)
+  const toolIs = (tool: EditorTool) => () => editorToolRef.current === tool
+  const canvasHasFocus = () => document.activeElement?.closest('.canvas-scroll') != null
+  // Leave native copy alone while the page has a text selection (e.g. inspector copy).
+  const canCopyLayer = () => !window.getSelection()?.toString() && Boolean(canvasRef.current?.getActiveObject())
+  const resizeBrush = (factor: number) =>
+    setBrush((current) => ({ ...current, size: Math.max(1, Math.min(brushMaxSize(), Math.round(current.size * factor))) }))
+
   const commands: CommandAction[] = [
     { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
     { id: 'open-poster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
@@ -5732,6 +5866,8 @@ function App() {
     })),
     { id: 'distort', label: 'Distort / perspective', keywords: ['perspective', 'distort', 'transform', 'corner', 'skew', 'free transform'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('distort') },
     { id: 'warp', label: 'Warp', keywords: ['warp', 'mesh', 'bend', 'transform', 'puppet'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('mesh') },
+    { id: 'effects-palette', label: 'Effects palette', keywords: ['effects', 'instruments', 'wand', 'palette', 'tool'], scope: 'any', run: () => keyActionsRef.current.instrumentsTool() },
+    { id: 'history-strip', label: 'Toggle History', keywords: ['history', 'trail', 'filmstrip', 'strip', 'steps', 'spatial undo'], scope: 'any', run: () => setTrailCollapsed((value) => !value) },
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => applyXeroxToSelected() },
@@ -5804,10 +5940,18 @@ function App() {
       disabled: !selected,
       run: () => applyGestureToSelection(gesture),
     })),
+    { id: 'copy-layer', label: 'Copy layer', keywords: ['copy', 'clipboard'], scope: 'selection', disabled: !selected, when: canCopyLayer, run: () => keyActionsRef.current.copy?.() },
+    { id: 'cut-layer', label: 'Cut layer', keywords: ['cut', 'clipboard'], scope: 'selection', disabled: !selected, when: canCopyLayer, run: () => keyActionsRef.current.cut?.() },
+    { id: 'paste-layer', label: 'Paste layer', keywords: ['paste', 'clipboard'], scope: 'canvas', disabled: !hasLayerClipboard, run: () => keyActionsRef.current.paste?.() },
+    { id: 'select-all', label: 'Select all layers', keywords: ['select', 'all'], scope: 'canvas', run: () => keyActionsRef.current.selectAll?.() },
+    { id: 'bring-forward', label: 'Bring layer forward', keywords: ['order', 'arrange', 'stack', 'raise'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.bringForward?.() },
+    { id: 'send-backward', label: 'Send layer backward', keywords: ['order', 'arrange', 'stack', 'lower'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.sendBackward?.() },
+    { id: 'bring-front', label: 'Bring layer to front', keywords: ['order', 'arrange', 'stack', 'top'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.bringToFront?.() },
+    { id: 'send-back', label: 'Send layer to back', keywords: ['order', 'arrange', 'stack', 'bottom'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.sendToBack?.() },
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
     {
       id: 'scramble',
-      label: 'Scramble layout',
+      label: 'Shuffle layout',
       keywords: ['scramble', 'shuffle', 'rearrange', 'structure', 'layout', 'riff'],
       scope: 'canvas',
       disabled: scrambleSourceObjects().length === 0,
@@ -5822,7 +5966,7 @@ function App() {
     { id: 'align-left', label: 'Align left', keywords: ['align', 'layout'], scope: 'selection', disabled: !selected, run: () => alignSelection('left') },
     { id: 'export', label: 'Export poster', keywords: ['export', 'download', 'pdf', 'svg', 'tiff', 'print'], scope: 'canvas', run: () => exportPoster() },
     { id: 'export-plates', label: 'Export CMYK plates', keywords: ['cmyk', 'plates', 'print', 'separation', 'cyan', 'magenta'], scope: 'canvas', run: () => exportCmykPlates() },
-    { id: 'pen-tool', label: 'Pen tool', keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
+    { id: 'pen-tool', label: 'Pen tool', when: canvasHasFocus, keywords: ['pen', 'bezier', 'path', 'draw', 'vector'], scope: 'any', run: () => togglePenKind('bezier') },
     { id: 'save', label: 'Save project', keywords: ['save'], scope: 'canvas', run: () => saveProjectAction() },
     {
       id: 'save-as',
@@ -5840,8 +5984,8 @@ function App() {
       disabled: screen !== 'editor',
       run: () => duplicatePosterAction(),
     },
-    { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => forkVariation() },
-    { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
+    { id: 'fork', label: 'New version', keywords: ['fork', 'fork variation', 'variant', 'variation', 'branch', 'comp', 'save look', 'duplicate look'], scope: 'canvas', run: () => forkVariation() },
+    { id: 'comps-gallery', label: 'Open versions', keywords: ['versions gallery', 'comps', 'comps gallery', 'variant', 'gallery', 'compare', 'restore'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => clipSelectionToShape() },
     {
       id: 'weave',
@@ -6013,13 +6157,71 @@ function App() {
           scope: 'any' as const,
           run: agentBridge.disconnect,
         },
+    // ── Commands that used to exist only as key handlers. Order matters where keys are
+    // shared: the pixel-selection commands come before the layer commands they shadow.
+    { id: 'command-palette', label: 'Command palette', keywords: [], scope: 'any', hidden: true, run: keyAction('commandPalette') },
+    { id: 'undo', label: 'Undo', keywords: ['undo', 'back', 'history', 'step'], scope: 'any', run: keyAction('undo') },
+    { id: 'redo', label: 'Redo', keywords: ['redo', 'forward', 'history', 'step'], scope: 'any', run: keyAction('redo') },
+    { id: 'selection-via-copy', label: 'Layer via copy', keywords: ['marquee', 'selection', 'lift', 'copy'], scope: 'selection', disabled: !pixelSelection, when: pixelSelected, run: keyAction('selectionViaCopy') },
+    { id: 'selection-via-cut', label: 'Layer via cut', keywords: ['marquee', 'selection', 'lift', 'cut'], scope: 'selection', disabled: !pixelSelection, when: pixelSelected, run: keyAction('selectionViaCut') },
+    { id: 'selection-invert', label: 'Invert marquee selection', keywords: ['marquee', 'selection', 'inverse'], scope: 'selection', disabled: !pixelSelection, when: pixelSelected, run: keyAction('selectionInvert') },
+    { id: 'selection-mask-out', label: 'Mask out marquee selection', keywords: ['marquee', 'selection', 'mask', 'conceal', 'erase'], scope: 'selection', disabled: !pixelSelection, when: pixelSelected, run: keyAction('selectionMaskOut') },
+    { id: 'selection-clear', label: 'Clear marquee selection', keywords: [], scope: 'selection', hidden: true, when: pixelSelected, run: keyAction('selectionClear') },
+    { id: 'duplicate-layer', label: 'Duplicate layer', keywords: ['duplicate', 'copy', 'clone'], scope: 'selection', disabled: !selected, run: keyAction('duplicate') },
+    { id: 'delete-layer', label: 'Delete layer', keywords: ['delete', 'remove', 'trash'], scope: 'selection', disabled: !selected, run: keyAction('delete') },
+    { id: 'deselect', label: 'Deselect', keywords: [], scope: 'any', hidden: true, run: keyAction('deselect') },
+    { id: 'move-tool', label: 'Move tool', keywords: ['move', 'select', 'arrow', 'pointer', 'tool'], scope: 'any', run: keyAction('moveTool') },
+    { id: 'text-tool', label: 'Text tool', keywords: ['text', 'type', 'tool'], scope: 'any', run: keyAction('addText') },
+    { id: 'shape-tool', label: 'Shape tool', keywords: ['shape', 'block', 'rectangle', 'ellipse', 'line', 'star', 'tool'], scope: 'any', run: keyAction('shapeTool') },
+    { id: 'select-tool', label: 'Marquee tool', keywords: ['marquee', 'select', 'lasso', 'tool'], scope: 'any', run: keyAction('selectTool') },
+    { id: 'brush-tool', label: 'Brush tool', keywords: ['brush', 'paint', 'draw', 'tool'], scope: 'any', run: keyAction('brushTool') },
+    { id: 'eraser-tool', label: 'Eraser tool', keywords: ['eraser', 'erase', 'tool'], scope: 'any', run: keyAction('eraserTool') },
+    { id: 'mask-tool', label: 'Mask tool', keywords: ['mask', 'conceal', 'reveal', 'tool'], scope: 'any', run: keyAction('maskTool') },
+    {
+      id: 'mask-brush-smaller',
+      label: 'Mask brush smaller',
+      keywords: [],
+      hidden: true,
+      when: toolIs('mask'),
+      run: () => {
+        setMaskBrushSize((value) => Math.max(4, value - 6))
+        setStatus('Mask brush smaller')
+      },
+    },
+    {
+      id: 'mask-brush-larger',
+      label: 'Mask brush larger',
+      keywords: [],
+      hidden: true,
+      when: toolIs('mask'),
+      run: () => {
+        setMaskBrushSize((value) => Math.min(100, value + 6))
+        setStatus('Mask brush larger')
+      },
+    },
+    { id: 'brush-smaller', label: 'Brush smaller', keywords: [], hidden: true, when: toolIs('brush'), run: () => resizeBrush(1 / 1.2) },
+    { id: 'brush-larger', label: 'Brush larger', keywords: [], hidden: true, when: toolIs('brush'), run: () => resizeBrush(1.2) },
+    { id: 'reroll', label: 'Re-roll last effect', keywords: ['reroll', 're-roll', 'again', 'seed', 'random'], scope: 'any', run: keyAction('reroll') },
+    { id: 'zoom-fit', label: 'Zoom to fit', keywords: ['zoom', 'fit', 'view'], scope: 'any', run: keyAction('zoomFit') },
+    { id: 'zoom-100', label: 'Zoom to 100%', keywords: ['zoom', 'actual', 'view'], scope: 'any', run: keyAction('zoom100') },
+    { id: 'zoom-in', label: 'Zoom in', keywords: ['zoom', 'closer', 'view'], scope: 'any', run: keyAction('zoomIn') },
+    { id: 'zoom-out', label: 'Zoom out', keywords: ['zoom', 'further', 'view'], scope: 'any', run: keyAction('zoomOut') },
   ]
   commandsRef.current = commands
+  if (import.meta.env.DEV) {
+    const known = new Set(commands.map((command) => command.id))
+    for (const id of Object.keys(DEFAULT_KEYMAP)) if (!known.has(id)) console.warn(`Keymap binds unknown command "${id}"`)
+  }
+  const shortcutGroups = buildShortcutSheet(commands, DEFAULT_KEYMAP, SHORTCUT_SECTIONS, IS_MAC)
+  const commandShortcut = (id: string) => shortcutLabels(DEFAULT_KEYMAP, id, IS_MAC)[0]
 
   return (
     <main className={screen === 'home' ? 'home-root' : 'editor-shell'} data-tour={walkthroughStep ?? undefined}>
       <Suspense fallback={null}>
-        {commandOpen ? <CommandPalette open commands={commands} onClose={() => setCommandOpen(false)} /> : null}
+        {contextMenu ? (
+          <CanvasContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenuItems()} onClose={closeContextMenu} />
+        ) : null}
+        {commandOpen ? <CommandPalette open commands={commands} shortcutFor={commandShortcut} onClose={() => setCommandOpen(false)} /> : null}
         {onboardingOpen ? (
           <OnboardingModal
             open
@@ -6227,6 +6429,11 @@ function App() {
             onScatter={() => scatterSelected()}
             onScramble={() => void scrambleCanvas()}
             scrambleDisabled={scrambleSourceObjects().length === 0}
+            autoFocusSearch={paletteSearchFocus}
+            openGroups={paletteOpenGroups}
+            onToggleGroup={togglePaletteGroup}
+            forceOpenGroups={walkthroughStep === 'xerox' ? ['print'] : undefined}
+            onClose={() => setEditorTool('move')}
             onApplyPosterStyle={applyPosterStyle}
             onTypeLegibilityChange={setTypeLegibility}
             onTypeIntensityChange={setTypeIntensity}
@@ -6588,6 +6795,7 @@ function App() {
           recentColors={recentColors}
           onPushRecentColor={pushRecentColor}
           onPickColorWithEyeDropper={() => void pickColorWithEyeDropper()}
+          shortcutGroups={shortcutGroups}
           onApplyTextOnPath={applyTextOnPath}
           onApplyGradientFill={applyGradientFill}
           onApplyStrokeDash={applyStrokeDash}

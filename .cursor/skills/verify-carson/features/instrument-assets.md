@@ -27,7 +27,7 @@ Preconditions:
 - **Xerox the headline.** Choose tab `Layers`, then `Oversized headline`. Choose `Instruments`, then `Copy selected`.
 - **Save.** Choose `Move tool`. Choose tab `Treatments`. Choose `Save as instrument`. The prompt is accepted as `Mark`.
 - **Assets.** Tab `Assets` is active. Heading `Instruments` is visible. Button `Play instrument Mark` is present. Capture `assets`.
-- **Replay.** Choose tab `Layers`, then `Red interruption`. Choose `Instruments`. Choose `Play instrument Mark`. Choose `Move tool`. Choose tab `Treatments`. The empty copy `No layer treatments yet` is absent. Region `Exploration trail` includes `Played Mark`. Capture `replay`.
+- **Replay.** Choose tab `Layers`, then `Studio`. Choose `Instruments`. Choose `Play instrument Mark`. Choose `Move tool`. Choose tab `Treatments`. The empty copy `No layer treatments yet` is absent. Region `Exploration trail` includes `Played Mark`. Capture `replay`.
 - **Undo.** Choose `Undo`. Treatments on this layer return to empty.
 - **Commands.** Choose `Commands`. Search `Mark`. Choose `Play instrument Mark`. Treatments again list Xerox. Capture `commands`.
 
