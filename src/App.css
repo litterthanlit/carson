@@ -649,9 +649,150 @@ textarea:focus-visible {
   color: var(--accent);
 }
 
+/* Effects palette: search, a short Start here set, then collapsed groups. */
+.instruments-palette .effects-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 6px;
+  font: 600 12px/1.2 var(--font);
+  color: var(--text);
+}
+
 .heading-sub {
   font: 400 10px/1.2 var(--font);
   color: var(--text-faint);
+}
+
+.effects-search {
+  margin: 0;
+}
+
+.effects-search input {
+  height: 28px;
+}
+
+.effects-start-title {
+  margin: 0 0 6px;
+  font: 600 11px/1.2 var(--font);
+  color: var(--text);
+}
+
+.effects-starters {
+  display: grid;
+  gap: 4px;
+}
+
+.instruments-palette .effect-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 10px;
+  justify-content: flex-start;
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+
+.instruments-palette .effect-button svg {
+  flex-shrink: 0;
+}
+
+.instruments-palette .effect-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instruments-palette .effect-button.starter {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-color: var(--border-strong);
+}
+
+.instruments-palette .effect-button.result {
+  width: 100%;
+  min-height: 32px;
+}
+
+.instruments-palette .effect-context {
+  margin-left: auto;
+  padding-left: 6px;
+  color: var(--text-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.instruments-palette .effect-button.result .scope-badge {
+  margin-left: 6px;
+}
+
+.effects-result-list {
+  display: grid;
+  gap: 3px;
+}
+
+.effects-results-status {
+  margin: 0 0 6px;
+  font: 400 11px/1.35 var(--font);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.effects-groups {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.effects-group h3 {
+  margin: 0;
+}
+
+.instruments-palette .effects-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  font: 500 11px/1.2 var(--font);
+  text-align: left;
+}
+
+.instruments-palette .effects-group-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.effects-group-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.effects-group-count {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.effects-group-live {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.effects-group-body {
+  padding: 2px 0 8px 18px;
+}
+
+.instruments-palette .effects-group-body .preset-row {
+  grid-template-columns: 1fr;
 }
 
 .inspector-column {

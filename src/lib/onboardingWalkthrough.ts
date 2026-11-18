@@ -17,7 +17,7 @@ const COPY: Record<WalkthroughStep, Omit<WalkthroughCopy, 'index' | 'total'>> = 
   scatter: {
     title: 'Scatter the headline',
     body: 'Effects is open. Hit Scatter and watch the type jump — the seed is the leash.',
-    hint: 'Scatter in Effects',
+    hint: 'Scatter in Start here',
     status: 'Scatter the headline',
   },
   xerox: {

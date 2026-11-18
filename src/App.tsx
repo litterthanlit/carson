@@ -453,6 +453,18 @@ function App() {
   const [dragLayerId, setDragLayerId] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
   const [commandOpen, setCommandOpen] = useState(false)
+  // Effects palette: groups stay as the user left them for the session; the search field takes focus only when
+  // the palette was opened from the tool rail (the I key must keep working as a shortcut).
+  const [paletteOpenGroups, setPaletteOpenGroups] = useState<ReadonlySet<string>>(() => new Set())
+  const [paletteSearchFocus, setPaletteSearchFocus] = useState(false)
+  const togglePaletteGroup = useCallback((id: string) => {
+    setPaletteOpenGroups((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
   const [performance, setPerformance] = useState(idlePerformance)
   const [filterGalleryOpen, setFilterGalleryOpen] = useState(false)
   const [textureGalleryOpen, setTextureGalleryOpen] = useState(false)
@@ -1155,6 +1167,7 @@ function App() {
     ungroup: () => void ungroupSelection(),
     instrumentsTool: () => {
       setPenMode(false)
+      setPaletteSearchFocus(false)
       setEditorTool((current) => (current === 'instruments' ? 'move' : 'instruments'))
     },
     filterGallery: () => setFilterGalleryOpen(true),
@@ -3758,6 +3771,7 @@ function App() {
       syncSelected()
     }
     setPenMode(false)
+    setPaletteSearchFocus(false)
     setEditorTool('instruments')
     setOnboardingOpen(false)
     setWalkthroughStep('scatter')
@@ -5871,6 +5885,7 @@ function App() {
   const handleOpenCommands = useCallback(() => setCommandOpen(true), [])
   const handleToolChange = useCallback((next: EditorTool) => {
     setEditorTool(next)
+    setPaletteSearchFocus(next === 'instruments')
     if (next !== 'shape') setPenMode(false)
     if (next === 'mask') setStatus('Mask — paint to conceal, Alt to reveal · [ ] size')
     if (next === 'frame') setStatus('Frame — drag to draw (Shift square, Alt from center), or click a layer to frame it')
@@ -6485,6 +6500,11 @@ function App() {
             onScatter={() => scatterSelected()}
             onScramble={() => void scrambleCanvas()}
             scrambleDisabled={scrambleSourceObjects().length === 0}
+            autoFocusSearch={paletteSearchFocus}
+            openGroups={paletteOpenGroups}
+            onToggleGroup={togglePaletteGroup}
+            forceOpenGroups={walkthroughStep === 'xerox' ? ['print'] : undefined}
+            onClose={() => setEditorTool('move')}
             onApplyPosterStyle={applyPosterStyle}
             onTypeLegibilityChange={setTypeLegibility}
             onTypeIntensityChange={setTypeIntensity}
