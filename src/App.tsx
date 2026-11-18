@@ -13,6 +13,7 @@ import {
   Polygon,
   Rect,
   StaticCanvas,
+  cache as fabricCache,
   Textbox,
   Group as FabricGroup,
   filters,
@@ -5519,12 +5520,15 @@ function App() {
       return false
     } finally {
       void probe.dispose()
+      // The probe measured its text before library web fonts load; don't let the real load reuse those widths.
+      for (const family of collectFontFamilies(json)) fabricCache.clearFontCache(family)
     }
   }
 
   /**
-   * Open a `.carson` file: check it, ask about unsaved work exactly as opening a
-   * stored poster does, store it as a new project, install its fonts, open it.
+   * Open a `.carson` file: check it (installing its fonts, then test-reviving its
+   * canvas), ask about unsaved work exactly as opening a stored poster does, store
+   * it as a new project, open it.
    */
   async function openProjectFile(file: File) {
     setProjectFileError(null)
@@ -5540,6 +5544,18 @@ function App() {
       return
     }
     const contents: ProjectFile = parsed.file
+    // Fonts first, so nothing measures the poster's text in a stand-in face.
+    const installedFonts: string[] = []
+    const failedFonts: string[] = []
+    for (const font of contents.fonts) {
+      try {
+        await installUploadedFont({ family: font.family, fileName: font.fileName, mimeType: font.mimeType, bytes: base64ToBytes(font.data) })
+        fabricCache.clearFontCache(font.family)
+        installedFonts.push(font.family)
+      } catch {
+        failedFonts.push(font.family)
+      }
+    }
     if (!(await canvasJsonRevives(contents.project.canvas))) {
       reportProjectFileError('This poster file is damaged or incomplete, so it can’t be opened.')
       return
@@ -5562,15 +5578,7 @@ function App() {
       reportProjectFileError('Couldn’t keep this poster in the browser. Storage may be full or unavailable.')
       return
     }
-    const failedFonts: string[] = []
-    for (const font of contents.fonts) {
-      try {
-        await installUploadedFont({ family: font.family, fileName: font.fileName, mimeType: font.mimeType, bytes: base64ToBytes(font.data) })
-        setCustomFonts((current) => [...new Set([...current, font.family])])
-      } catch {
-        failedFonts.push(font.family)
-      }
-    }
+    setCustomFonts((current) => [...new Set([...current, ...installedFonts])])
     const opened = `Opened “${project.name}” from ${file.name}`
     applyEditorIntent({
       kind: 'project',
