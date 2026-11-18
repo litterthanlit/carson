@@ -1,4 +1,4 @@
-import { useCallback, useState, type RefObject } from 'react'
+import { useCallback, useState, type ReactNode, type RefObject } from 'react'
 import {
   AlignLeft,
   Blend,
@@ -28,6 +28,7 @@ import type { DocumentMeta } from '../lib/document'
 import type { ShortcutGroup } from '../lib/commands'
 import type { PressRun } from '../lib/press'
 import type { StoredAsset } from '../lib/assets'
+import type { ResolutionStore } from '../lib/resolutionStore'
 import { formatProjectTimestamp } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
 import type { GridOverlay, LayoutGuide } from '../lib/grid'
@@ -129,6 +130,10 @@ export type InspectorPanelProps = {
   onZoomToLayer: (id: string) => void
   selectedIsText: boolean
   selectedIsImage: boolean
+  /** Crop, Replace and resolution for a selected photo layer. */
+  photoControls?: ReactNode
+  /** Image layers' effective resolution, for the Layers panel's low-resolution marks. */
+  resolutionStore?: ResolutionStore
   selectedIsPath: boolean
   canBooleanUnion: boolean
   canBooleanSubtract: boolean
@@ -336,6 +341,8 @@ export function InspectorPanel({
   onZoomToLayer,
   selectedIsText,
   selectedIsImage,
+  photoControls,
+  resolutionStore,
   selectedIsPath,
   canBooleanUnion,
   canBooleanSubtract,
@@ -1146,6 +1153,7 @@ export function InspectorPanel({
                     onBlur={() => onFinalizeActive('Renamed layer')}
                   />
                 </label>
+                {photoControls}
                 {selected.adjustment && onAdjustmentChange ? (
                   <AdjustmentPanel
                     adjustment={selected.adjustment}
@@ -2301,6 +2309,7 @@ export function InspectorPanel({
             onZoomToLayer={onZoomToLayer}
             collapsedIds={collapsedLayerIds}
             onToggleCollapsed={toggleLayerCollapsed}
+            resolutionStore={resolutionStore}
           />
           <div className="layers-footer" role="toolbar" aria-label="Layer actions">
             {onAddAdjustment ? (

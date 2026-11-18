@@ -40,6 +40,8 @@
   --accent-border: #0e63c7;
   --accent-border-hover: #1f74d4;
   --accent-text: #cfe3ff;
+  /* Cautions that are not errors (a low-resolution photo): amber, readable on the panels. */
+  --warning: #f2b544;
   /* Hover washes and hairlines that sit on top of any chrome colour. */
   --wash-faint: rgb(255 255 255 / 0.03);
   --wash: rgb(255 255 255 / 0.05);
@@ -168,6 +170,7 @@ body {
   --accent-border: #0f58bb;
   --accent-border-hover: #0b4a9e;
   --accent-text: #0b3d7a;
+  --warning: #8a4b00;
   --wash-faint: rgb(0 0 0 / 0.02);
   --wash: rgb(0 0 0 / 0.035);
   --wash-strong: rgb(0 0 0 / 0.06);

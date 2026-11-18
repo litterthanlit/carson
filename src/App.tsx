@@ -43,6 +43,14 @@ import { StrokeSession, bumpPaintVersion, createPaintLayer, isPaintLayer, poster
 import { storePixels } from './lib/pixelStore'
 import { WarpOverlay } from './components/WarpOverlay'
 import { WarpBar } from './components/WarpBar'
+import { CropBar } from './components/CropBar'
+import { CropOverlay } from './components/CropOverlay'
+import { PhotoControls } from './components/PhotoControls'
+import { usePhotoTools } from './hooks/usePhotoTools'
+import { effectiveResolution, resolutionUnits, type EffectiveResolution } from './lib/imageResolution'
+import { createResolutionStore } from './lib/resolutionStore'
+import { cropBlocker, isPhotoLayer, measurePhoto, readCrop, replaceBlocker, sourceSize } from './lib/photoLayer'
+import { isFullCrop, type CropRect } from './lib/cropGeometry'
 import { CanvasContextMenu, type ContextMenuItem } from './components/CanvasContextMenu'
 import { MESH_SIZE, identityDistort, identityMesh, isIdentityWarp, warpPoint, type Warp } from './lib/warp'
 import { readWarp } from './lib/warpRender'
@@ -296,6 +304,7 @@ import {
   flattenLayerTree,
   isLayerGroup,
   topLevelLayer,
+  walkObjectTree,
 } from './lib/layerGroups'
 import {
   applySlotOverrides,
@@ -777,6 +786,96 @@ function App() {
   penStrokeColorRef.current = penStrokeColor
   penStrokeWidthRef.current = penStrokeWidth
 
+  // Effective resolution of image layers, outside React state so scaling can update it every frame.
+  const [resolutionStore] = useState(createResolutionStore)
+  const resolutionUnitsRef = useRef(resolutionUnits(poster, printDpi))
+  resolutionUnitsRef.current = resolutionUnits(poster, printDpi)
+
+  function photoResolution(object: FabricObject, crop?: CropRect): EffectiveResolution | null {
+    if (!isPhotoLayer(object)) return null
+    // Mid-crop the layer shows its whole image; what counts is the frame.
+    const session = cropSessionRef.current
+    const shown = crop ?? (session?.image === object ? session.rect : undefined)
+    return effectiveResolution({ ...measurePhoto(object, shown), units: resolutionUnitsRef.current })
+  }
+
+  function measureResolution(object: FabricObject, crop?: CropRect) {
+    const id = String(readObjectProp(object, 'id') ?? '')
+    if (id) resolutionStore.set(id, photoResolution(object, crop))
+  }
+  const measureResolutionRef = useRef(measureResolution)
+  measureResolutionRef.current = measureResolution
+
+  function measureAllResolutions() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const entries: [string, EffectiveResolution][] = []
+    walkObjectTree(canvas.getObjects(), (object) => {
+      const id = String(readObjectProp(object, 'id') ?? '')
+      const resolution = id ? photoResolution(object) : null
+      if (resolution) entries.push([id, resolution])
+    })
+    resolutionStore.replaceAll(entries)
+  }
+
+  /** A photo's crop or pixels changed: its effects re-render from the new source. */
+  function afterPhotoChange(image: FabricImage) {
+    invalidateLayerThumbnail(String(readObjectProp(image, 'id') ?? ''))
+    measureResolution(image)
+    // Only a layer with effects: re-rendering an empty stack resets the layer's opacity.
+    if (readTreatments(image).length) void refreshTreatmentStack(image)
+    canvasRef.current?.requestRenderAll()
+    syncSelected()
+    scheduleSyncLayers()
+  }
+
+  const replaceInputRef = useRef<HTMLInputElement | null>(null)
+  const replaceTargetRef = useRef<string | null>(null)
+  const photoTools = usePhotoTools({
+    canvasRef,
+    activeObject: () => activeObject(),
+    findObjectById: (id) => findObjectById(id),
+    setStatus,
+    commitObjectPatch: (id, label, before, after) => commitObjectPatchHistoryRef.current(id, label, before, after),
+    commitHistory,
+    afterPhotoChange: (image) => afterPhotoChange(image),
+    restoreCanvasSelection: () => restoreCanvasSelectionRef.current(),
+    onCropPreview: (image, crop) => measureResolution(image, crop),
+    persistAsset: (file) => persistAssetFromFile(file),
+  })
+  const { cropSession, cropSessionRef } = photoTools
+  const photoToolsRef = useRef(photoTools)
+  photoToolsRef.current = photoTools
+
+  /** Pick a picture to swap into the selected image layer. */
+  function chooseReplacementImage() {
+    const object = activeObject()
+    if (!isPhotoLayer(object)) {
+      setStatus('Select one image layer to replace its picture')
+      return
+    }
+    const blocked = replaceBlocker(object)
+    if (blocked) {
+      setStatus(blocked)
+      return
+    }
+    replaceTargetRef.current = String(readObjectProp(object, 'id') ?? '')
+    // A task later, still inside the gesture's activation (as Open from file does).
+    window.setTimeout(() => replaceInputRef.current?.click(), 0)
+  }
+
+  // A crop belongs to its layer: selecting something else cancels it.
+  useEffect(() => {
+    const session = cropSessionRef.current
+    if (session && selected?.id !== session.objectId) photoTools.finishCrop(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id])
+
+  useEffect(() => {
+    measureAllResolutions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poster, printDpi])
+
   const { registerCanvasEvents } = useCanvasEvents({
     guidesRef,
     displayScaleRef,
@@ -927,6 +1026,20 @@ function App() {
     })
     canvasRef.current = canvas
     registerCanvasEvents(canvas)
+    // Image resolution follows a scale live, for the Layers panel's low-resolution mark.
+    const remeasure = (target: FabricObject | undefined) => {
+      if (!target) return
+      for (const object of target.type === 'activeselection' ? (target as ActiveSelection).getObjects() : [target]) {
+        measureResolutionRef.current(object)
+      }
+    }
+    canvas.on('object:scaling', (event) => remeasure(event.target))
+    canvas.on('object:modified', (event) => remeasure(event.target))
+    // Double-click a photo with the Move tool to crop it.
+    canvas.on('mouse:dblclick', (event) => {
+      if (editorToolRef.current !== 'move' || !isPhotoLayer(event.target)) return
+      photoToolsRef.current.startCrop(event.target)
+    })
     detailOverlayRef.current = installDetailOverlay(canvas, visibleDetailViewport)
 
     const intent = editorIntentRef.current ?? { kind: 'seed' as const }
@@ -975,6 +1088,7 @@ function App() {
 
     return () => {
       cancelled = true
+      if (photoToolsRef.current.cropSessionRef.current) photoToolsRef.current.finishCrop(false)
       detailOverlayRef.current?.dispose()
       detailOverlayRef.current = null
       canvas.dispose()
@@ -1266,6 +1380,12 @@ function App() {
           }
         }
         event.preventDefault()
+        return
+      }
+
+      // A crop owns the keyboard until it is applied or cancelled.
+      if (inEditor && photoToolsRef.current.cropSessionRef.current) {
+        photoToolsRef.current.handleCropKey(event, typing)
         return
       }
 
@@ -1715,6 +1835,7 @@ function App() {
         parentId: row.parentId,
       })),
     )
+    measureAllResolutions()
   }
 
   function syncSelected() {
@@ -2102,6 +2223,8 @@ function App() {
       item('bring-front', 'Bring to front'),
       item('send-back', 'Send to back'),
     ]
+    // Unavailable crops stay clickable: running one says why in the status line.
+    if (isPhotoLayer(activeObject())) items.push({ separator: true }, item('crop-image', 'Crop'), item('replace-image', 'Replace image…'))
     if (canGroupLayers) items.push({ separator: true }, item('group-layers', 'Group'))
     if (canUngroupLayers) items.push({ separator: true }, item('ungroup-layers', 'Ungroup'))
     items.push({ separator: true }, item('delete-layer', 'Delete'))
@@ -3901,6 +4024,11 @@ function App() {
   }
 
   async function handleUserUndo() {
+    // Mid-crop, Undo backs out of the crop rather than undoing what came before it.
+    if (cropSessionRef.current) {
+      photoTools.finishCrop(false)
+      return
+    }
     clearBlendPreview({ render: false })
     await undoAsync()
     noteWalkthrough('undo')
@@ -5891,6 +6019,15 @@ function App() {
   }
 
   const selectedIsImage = selected?.kind === 'image' || selected?.kind === 'fragment'
+  const activePhoto = (() => {
+    const object = selected ? activeObject() : null
+    if (!isPhotoLayer(object)) return null
+    return {
+      id: String(readObjectProp(object, 'id') ?? ''),
+      cropped: !cropSession && !isFullCrop(readCrop(object), sourceSize(object)),
+      cropBlocked: cropBlocker(object),
+    }
+  })()
   const selectedIsText = selected?.kind === 'text'
 
   const selectedObject = selected ? findObjectById(selected.id) : null
@@ -6262,6 +6399,37 @@ function App() {
       disabled: !selected,
       run: () => tearSelectedEdges(),
     },
+    {
+      id: 'crop-image',
+      label: 'Crop image',
+      keywords: ['crop', 'trim', 'reframe', 'photo', 'image', 'picture'],
+      scope: 'selection',
+      // Enabled for any selection, so the palette can say why a group or other layer can't be cropped.
+      disabled: !selected || Boolean(cropSession),
+      // C only when one image layer (or a group holding one, to say why not) is selected and no crop is open.
+      when: () => {
+        const object = activeObject()
+        if (cropSessionRef.current || !object) return false
+        return isPhotoLayer(object) || (isLayerGroup(object) && object.getObjects().some((child) => isPhotoLayer(child)))
+      },
+      run: () => photoTools.startCrop(null, { focusBar: true }),
+    },
+    {
+      id: 'reset-image-crop',
+      label: 'Reset crop',
+      keywords: ['crop', 'uncrop', 'reset', 'whole', 'photo', 'image'],
+      scope: 'selection',
+      disabled: !activePhoto?.cropped || Boolean(cropSession),
+      run: () => photoTools.resetCrop(),
+    },
+    {
+      id: 'replace-image',
+      label: 'Replace image…',
+      keywords: ['replace', 'swap', 'relink', 'photo', 'image', 'picture'],
+      scope: 'selection',
+      disabled: !activePhoto || Boolean(cropSession),
+      run: () => chooseReplacementImage(),
+    },
     { id: 'paint-mask', label: 'Paint layer mask', keywords: ['mask', 'brush', 'eraser', 'alpha'], scope: 'selection', disabled: !selected, run: () => paintBrushMask() },
     { id: 'invert-mask', label: 'Invert layer mask', keywords: ['mask', 'invert'], scope: 'selection', disabled: !selected, run: () => invertSelectedMask() },
     { id: 'clear-mask', label: 'Remove layer mask', keywords: ['mask', 'clear', 'remove'], scope: 'selection', disabled: !selected, run: () => clearSelectedMask() },
@@ -6432,6 +6600,22 @@ function App() {
           if (file) void openProjectFile(file)
         }}
       />
+      {/* Opened by Replace image… (Properties, the layer menu and the command). */}
+      <input
+        ref={replaceInputRef}
+        className="visually-hidden"
+        type="file"
+        accept="image/*"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid="replace-image-input"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          const targetId = replaceTargetRef.current
+          if (file && targetId) void photoTools.replaceImage(file, targetId)
+        }}
+      />
       <Suspense fallback={null}>
         {contextMenu ? (
           <CanvasContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenuItems()} onClose={closeContextMenu} />
@@ -6580,6 +6764,7 @@ function App() {
           void handleUserUndo()
         }}
         onRedo={() => {
+          if (cropSessionRef.current) return
           clearBlendPreview({ render: false })
           redo()
         }}
@@ -6738,7 +6923,14 @@ function App() {
             />
           }
           toolBar={
-            warpEdit ? (
+            cropSession ? (
+              <CropBar
+                session={cropSession}
+                autoFocus={photoTools.cropBarFocus}
+                onApply={() => photoTools.finishCrop(true)}
+                onCancel={() => photoTools.finishCrop(false)}
+              />
+            ) : warpEdit ? (
               <WarpBar
                 warp={warpEdit.warp}
                 onMode={(type) => updateWarp(convertWarp(warpEdit.warp, type))}
@@ -6773,6 +6965,9 @@ function App() {
           }
           hud={
             <>
+            {cropSession ? (
+              <CropOverlay session={cropSession} posterWidth={poster.width} posterHeight={poster.height} displayScale={displayScale} />
+            ) : null}
             {warpEdit
               ? (() => {
                   const object = findObjectById(warpEdit.objectId)
@@ -6825,7 +7020,7 @@ function App() {
               onLayerViaCopy={() => void liftSelectionToLayer(false)}
               onLayerViaCut={() => void liftSelectionToLayer(true)}
             />
-            {selected && editorTool !== 'select' && editorTool !== 'brush' && editorTool !== 'frame' && !warpEdit ? (
+            {selected && editorTool !== 'select' && editorTool !== 'brush' && editorTool !== 'frame' && !warpEdit && !cropSession ? (
               <LiveSelectionHud
                 canvasRef={canvasRef}
                 selected={selected}
@@ -6965,6 +7160,21 @@ function App() {
           onZoomToLayer={zoomToLayer}
           selectedIsText={selectedIsText}
           selectedIsImage={selectedIsImage}
+          resolutionStore={resolutionStore}
+          photoControls={
+            activePhoto ? (
+              <PhotoControls
+                layerId={activePhoto.id}
+                resolutionStore={resolutionStore}
+                cropped={activePhoto.cropped}
+                cropBlocked={activePhoto.cropBlocked}
+                cropping={Boolean(cropSession)}
+                onCrop={() => photoTools.startCrop(null, { focusBar: true })}
+                onResetCrop={() => photoTools.resetCrop()}
+                onReplace={chooseReplacementImage}
+              />
+            ) : null
+          }
           selectedIsPath={selectedIsPath}
           canBooleanUnion={canBooleanUnion}
           canBooleanSubtract={canBooleanSubtract}
