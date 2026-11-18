@@ -12,7 +12,8 @@
  * validates the envelope and the fields the app reads, and hands `canvas` on as
  * opaque data for the same revive path a project loaded from IndexedDB takes.
  */
-import { z } from 'zod'
+// zod/mini: the same validation at a fraction of the bundle cost of the classic API.
+import * as z from 'zod/mini'
 import type { PosterPresetId } from './editorModel'
 import type { StoredProject } from './storage'
 
@@ -107,18 +108,18 @@ function resolveMedia<T>(value: T, media: readonly string[]): T {
 
 const PRESET_IDS = ['a3', 'a2', 'instagram', 'square', 'custom'] as const satisfies readonly PosterPresetId[]
 
-const finite = z.number().refine(Number.isFinite)
-const positive = finite.refine((value) => value > 0)
+const positive = z.number().check(z.refine((value) => Number.isFinite(value) && value > 0))
 const canvasSchema = z.record(z.string(), z.unknown())
+const records = z.array(z.record(z.string(), z.unknown()))
 
 const presetSchema = z.looseObject({
-  id: z.enum(PRESET_IDS).catch('custom'),
+  id: z.catch(z.enum(PRESET_IDS), 'custom'),
   name: z.string(),
   width: positive,
   height: positive,
-  dpi: positive.optional(),
-  widthMm: positive.optional(),
-  heightMm: positive.optional(),
+  dpi: z.optional(positive),
+  widthMm: z.optional(positive),
+  heightMm: z.optional(positive),
 })
 
 const artboardSchema = z.looseObject({
@@ -126,8 +127,8 @@ const artboardSchema = z.looseObject({
   name: z.string(),
   preset: presetSchema,
   canvas: canvasSchema,
-  posterTreatments: z.array(z.record(z.string(), z.unknown())).optional(),
-  press: z.unknown().optional(),
+  posterTreatments: z.optional(records),
+  press: z.optional(z.unknown()),
 })
 
 const variantSchema = z.looseObject({
@@ -135,57 +136,55 @@ const variantSchema = z.looseObject({
   name: z.string(),
   savedAt: z.string(),
   canvas: canvasSchema,
-  thumbnail: z.string().optional(),
+  thumbnail: z.optional(z.string()),
 })
 
 const componentSchema = z.looseObject({
   id: z.string(),
   name: z.string(),
   canvas: canvasSchema,
-  thumbnail: z.string().optional(),
-  kind: z.enum(['object', 'stack']).optional(),
+  thumbnail: z.optional(z.string()),
+  kind: z.optional(z.enum(['object', 'stack'])),
 })
-
-const records = z.array(z.record(z.string(), z.unknown()))
 
 const documentSchema = z.looseObject({
   dpi: positive,
-  bleedMm: finite.refine((value) => value >= 0),
+  bleedMm: z.number().check(z.refine((value) => Number.isFinite(value) && value >= 0)),
   palette: z.array(z.string()),
-  artboards: z.array(artboardSchema).min(1),
+  artboards: z.array(artboardSchema).check(z.minLength(1)),
   activeArtboardId: z.string(),
   variants: z.array(variantSchema),
   components: z.array(componentSchema),
-  instruments: records.optional(),
-  gestures: records.optional(),
-  characterStyles: records.optional(),
-  paragraphStyles: records.optional(),
+  instruments: z.optional(records),
+  gestures: z.optional(records),
+  characterStyles: z.optional(records),
+  paragraphStyles: z.optional(records),
 })
 
 const projectSchema = z.looseObject({
   name: z.string(),
   savedAt: z.string(),
-  thumbnail: z.string().optional(),
+  thumbnail: z.optional(z.string()),
   preset: presetSchema,
   canvas: canvasSchema,
-  document: documentSchema.optional(),
+  document: z.optional(documentSchema),
 })
 
 const fontSchema = z.object({
-  family: z.string().trim().min(1).max(200),
-  fileName: z.string().max(500),
-  mimeType: z.string().max(200),
-  data: z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/),
+  family: z.string().check(z.trim(), z.minLength(1), z.maxLength(200)),
+  fileName: z.string().check(z.maxLength(500)),
+  mimeType: z.string().check(z.maxLength(200)),
+  data: z.string().check(z.regex(/^[A-Za-z0-9+/]*={0,2}$/)),
 })
 
 const envelopeSchema = z.object({
   format: z.literal(PROJECT_FILE_FORMAT),
-  version: z.number().int().positive(),
+  version: z.number().check(z.refine((value) => Number.isInteger(value) && value > 0)),
   savedAt: z.string(),
-  app: z.string().optional(),
+  app: z.optional(z.string()),
   project: projectSchema,
-  fonts: z.array(fontSchema).optional(),
-  media: z.array(z.string()).optional(),
+  fonts: z.optional(z.array(fontSchema)),
+  media: z.optional(z.array(z.string())),
 })
 
 // ── Write ────────────────────────────────────────────────────────────────────
@@ -266,6 +265,11 @@ export function parseProjectFile(input: string | Uint8Array | ArrayBuffer): Pars
 
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i
 
+/** Is this a poster file, judged by its name (dropped files often have no type)? */
+export function isProjectFileName(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith(PROJECT_FILE_EXTENSION)
+}
+
 /** `<poster name>.carson`, safe on every desktop file system. */
 export function projectFileName(posterName: string): string {
   const cleaned = posterName
@@ -289,7 +293,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-export function base64ToBytes(data: string): Uint8Array {
+export function base64ToBytes(data: string): Uint8Array<ArrayBuffer> {
   const binary = atob(data)
   const bytes = new Uint8Array(binary.length)
   for (let at = 0; at < binary.length; at += 1) bytes[at] = binary.charCodeAt(at)
