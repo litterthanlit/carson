@@ -2039,7 +2039,11 @@ function App() {
     return objects.map((object) => String(readObjectProp(object, 'id') ?? ''))
   }
 
-  function addText(position?: { left: number; top: number }, spec: Partial<AgentTextSpec> = {}) {
+  function addText(
+    position?: { left: number; top: number },
+    spec: Partial<AgentTextSpec> = {},
+    options: { edit?: boolean } = {},
+  ) {
     const canvas = canvasRef.current
     if (!canvas) return
     const { text: content = 'NEW TYPE', name = 'Text layer', ...style } = spec
@@ -2059,9 +2063,15 @@ function App() {
     canvas.add(text)
     canvas.setActiveObject(text)
     commitHistory('Added text')
+    if (options.edit) {
+      // Click-to-type: the placeholder is fully selected so the first keystroke replaces it.
+      text.enterEditing()
+      text.selectAll()
+      canvas.requestRenderAll()
+    }
   }
 
-  addTextRef.current = addText
+  addTextRef.current = (point) => addText(point, {}, { edit: true })
 
   function addShape() {
     const canvas = canvasRef.current
