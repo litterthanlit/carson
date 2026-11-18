@@ -31,12 +31,14 @@ export function CompsGalleryModal({
       >
         <div className="comps-gallery-header">
           <div>
-            <h2 id="comps-gallery-title">Comps</h2>
-            <p className="hint">Named looks from Fork. Restore, compare, or merge into the canvas.</p>
+            <h2 id="comps-gallery-title">
+              Versions <span className="heading-sub">Comps</span>
+            </h2>
+            <p className="hint">Named looks saved with New version. Restore, compare, or merge into the canvas.</p>
           </div>
           <div className="button-row">
             <button type="button" className="primary-button" onClick={onFork}>
-              Fork current
+              New version
             </button>
             <button type="button" onClick={onClose}>
               Close
@@ -44,7 +46,7 @@ export function CompsGalleryModal({
           </div>
         </div>
         {variants.length === 0 ? (
-          <p className="comps-gallery-empty">No comps yet. Fork with Cmd+B to keep this look.</p>
+          <p className="comps-gallery-empty">No versions yet. Press Cmd+B (New version) to keep this look.</p>
         ) : (
           <ul className="comps-gallery-grid">
             {variants.map((variant) => (

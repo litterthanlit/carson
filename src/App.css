@@ -649,6 +649,11 @@ textarea:focus-visible {
   color: var(--accent);
 }
 
+.heading-sub {
+  font: 400 10px/1.2 var(--font);
+  color: var(--text-faint);
+}
+
 .inspector-column {
   display: flex;
   flex-direction: column;
@@ -1732,16 +1737,28 @@ input[type='color'] {
 }
 
 .inspector-tabs button {
-  padding: 0;
-  height: 32px;
-  min-height: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 1px;
+  height: 42px;
+  min-height: 42px;
   width: 100%;
-  font-size: 11px;
+  min-width: 0;
+  font-size: 10px;
+  line-height: 1;
   border-radius: 0;
   background: transparent;
   border: 0;
   border-bottom: 2px solid transparent;
   color: var(--text-muted);
+}
+
+.inspector-tabs button span {
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .inspector-tabs button.active {

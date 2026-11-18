@@ -16,8 +16,8 @@ export type WalkthroughCopy = {
 const COPY: Record<WalkthroughStep, Omit<WalkthroughCopy, 'index' | 'total'>> = {
   scatter: {
     title: 'Scatter the headline',
-    body: 'Instruments is open. Hit Scatter and watch the type jump — the seed is the leash.',
-    hint: 'Scatter in Instruments',
+    body: 'Effects is open. Hit Scatter and watch the type jump — the seed is the leash.',
+    hint: 'Scatter in Effects',
     status: 'Scatter the headline',
   },
   xerox: {

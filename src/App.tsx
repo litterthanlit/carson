@@ -3191,8 +3191,8 @@ function App() {
     const thumbnail = await createThumbnail(preview, 120)
     setDocumentMeta(forkVariant(documentMeta, snapshot, name, thumbnail))
     setInspectorTab('layout')
-    setStatus(`Forked ${name} — open Comps to compare`)
-    commitHistory(`Forked ${name}`)
+    setStatus(`Saved ${name} as a new version — open Versions to compare`)
+    commitHistory(`New version ${name}`)
   }
 
   async function restoreVariant(variantId: string) {
@@ -4706,7 +4706,7 @@ function App() {
     if (!canvas) return
     const targets = scrambleSourceObjects()
     if (targets.length === 0) {
-      setStatus('Add a layer before scrambling')
+      setStatus('Add a layer before shuffling')
       return
     }
 
@@ -4748,9 +4748,9 @@ function App() {
     canvas.requestRenderAll()
     syncLayers()
     syncSelected()
-    trackChaos('Scramble', seed, [], (next) => scrambleCanvas(next))
-    commitHistory(`Scrambled into ${result.label} #${seed}`)
-    setStatus(`Scrambled into ${result.label} #${seed} — press R for another structure`)
+    trackChaos('Shuffle layout', seed, [], (next) => scrambleCanvas(next))
+    commitHistory(`Shuffled into ${result.label} #${seed}`)
+    setStatus(`Shuffled into ${result.label} #${seed} — press R for another structure`)
   }
 
   async function badCropAccident(seed = newSeed()) {
@@ -5977,6 +5977,8 @@ function App() {
     })),
     { id: 'distort', label: 'Distort / perspective', keywords: ['perspective', 'distort', 'transform', 'corner', 'skew', 'free transform'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('distort') },
     { id: 'warp', label: 'Warp', keywords: ['warp', 'mesh', 'bend', 'transform', 'puppet'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('mesh') },
+    { id: 'effects-palette', label: 'Effects palette', keywords: ['effects', 'instruments', 'wand', 'palette', 'tool'], scope: 'any', run: () => keyActionsRef.current.instrumentsTool() },
+    { id: 'history-strip', label: 'Toggle History', keywords: ['history', 'trail', 'filmstrip', 'strip', 'steps', 'spatial undo'], scope: 'any', run: () => setTrailCollapsed((value) => !value) },
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => applyXeroxToSelected() },
@@ -6060,7 +6062,7 @@ function App() {
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
     {
       id: 'scramble',
-      label: 'Scramble layout',
+      label: 'Shuffle layout',
       keywords: ['scramble', 'shuffle', 'rearrange', 'structure', 'layout', 'riff'],
       scope: 'canvas',
       disabled: scrambleSourceObjects().length === 0,
@@ -6093,8 +6095,8 @@ function App() {
       disabled: screen !== 'editor',
       run: () => duplicatePosterAction(),
     },
-    { id: 'fork', label: 'Fork variation', keywords: ['variant', 'branch', 'comp'], scope: 'canvas', run: () => forkVariation() },
-    { id: 'comps-gallery', label: 'Open comps gallery', keywords: ['variant', 'gallery', 'compare', 'trail'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
+    { id: 'fork', label: 'New version', keywords: ['fork', 'fork variation', 'variant', 'variation', 'branch', 'comp', 'save look', 'duplicate look'], scope: 'canvas', run: () => forkVariation() },
+    { id: 'comps-gallery', label: 'Open versions', keywords: ['versions gallery', 'comps', 'comps gallery', 'variant', 'gallery', 'compare', 'restore'], scope: 'canvas', run: () => setCompsGalleryOpen(true) },
     { id: 'clip', label: 'Clip to shape', keywords: ['mask', 'clip'], scope: 'selection', disabled: !selected, run: () => clipSelectionToShape() },
     {
       id: 'weave',

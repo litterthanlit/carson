@@ -169,7 +169,13 @@ export function InstrumentsPalette({
   onOpenTextureGallery,
 }: InstrumentsPaletteProps) {
   return (
-    <aside className="instruments-palette rail glass-panel" aria-label="Instruments">
+    <aside className="instruments-palette rail glass-panel" aria-label="Effects">
+      <div className="panel-section">
+        <h2 className="effects-title">
+          Effects <span className="heading-sub">Instruments</span>
+        </h2>
+      </div>
+
       <div className="panel-section">
         <h2>Performance</h2>
         <p className="performance-chain" role="status" aria-label="Recorded plays">
@@ -253,7 +259,7 @@ export function InstrumentsPalette({
             onClick={onScramble}
             disabled={scrambleDisabled}
           >
-            <Shuffle size={16} /> Scramble <ScopeAll />
+            <Shuffle size={16} /> Shuffle layout <ScopeAll />
           </button>
           <button
             type="button"

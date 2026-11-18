@@ -39,12 +39,12 @@ export function TensionDial({ value, onChange, onCommit }: TensionDialProps) {
   }
 
   return (
-    <div className="tension-dial" title="Tension — scales instrument intensity across the poster">
+    <div className="tension-dial" title="Looseness (Tension) — how hard effects hit and how loosely layouts snap to the grid">
       <div
         ref={rootRef}
         className="tension-knob"
         role="slider"
-        aria-label="Tension"
+        aria-label="Looseness"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(value)}
@@ -96,7 +96,7 @@ export function TensionDial({ value, onChange, onCommit }: TensionDialProps) {
         </svg>
       </div>
       <div className="tension-copy">
-        <span className="tension-name">Tension</span>
+        <span className="tension-name">Looseness</span>
         <span className="tension-label">{label}</span>
       </div>
     </div>
