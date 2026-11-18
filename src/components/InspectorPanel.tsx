@@ -1748,8 +1748,8 @@ export function InspectorPanel({
             </div>
           </div>
 
-          <div className="panel-section">
-            <h2>Shortcuts</h2>
+          <details className="panel-section shortcuts-disclosure">
+            <summary>Shortcuts</summary>
             <ul className="shortcut-list">
               <li>
                 <kbd>Cmd+Z</kbd> Undo · <kbd>Cmd+Shift+Z</kbd> Redo
@@ -1797,7 +1797,7 @@ export function InspectorPanel({
                 <kbd>Space+Drag</kbd> Pan · <kbd>Cmd+Drag</kbd> No snapping
               </li>
             </ul>
-          </div>
+          </details>
         </>
       ) : null}
 
