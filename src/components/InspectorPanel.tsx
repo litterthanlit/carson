@@ -1877,7 +1877,13 @@ export function InspectorPanel({
                 <kbd>Cmd+Z</kbd> Undo · <kbd>Cmd+Shift+Z</kbd> Redo
               </li>
               <li>
-                <kbd>Cmd+D</kbd> Duplicate · <kbd>Delete</kbd> Remove
+                <kbd>Cmd+D</kbd> / <kbd>Cmd+J</kbd> Duplicate · <kbd>Alt</kbd>-drag Duplicate · <kbd>Delete</kbd> Remove
+              </li>
+              <li>
+                <kbd>Cmd+C</kbd> Copy · <kbd>Cmd+X</kbd> Cut · <kbd>Cmd+V</kbd> Paste · <kbd>Cmd+A</kbd> Select all
+              </li>
+              <li>
+                <kbd>Cmd+]</kbd> / <kbd>Cmd+[</kbd> Forward / backward · <kbd>Shift</kbd> to front / back · Right-click for the layer menu
               </li>
               <li>
                 <kbd>Cmd+K</kbd> Commands · <kbd>Cmd+B</kbd> Fork variant · <kbd>Cmd+Shift+B</kbd> Comps gallery · <kbd>Cmd+F</kbd> Filter gallery
@@ -1889,7 +1895,7 @@ export function InspectorPanel({
                 <kbd>Arrows</kbd> Nudge · <kbd>Shift+Arrows</kbd> Nudge ×10
               </li>
               <li>
-                <kbd>V</kbd> Move · <kbd>T</kbd> Text · <kbd>S</kbd> Shape · <kbd>F</kbd> Frame · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
+                <kbd>V</kbd> Move · <kbd>T</kbd> Text (click, then type) · <kbd>S</kbd> Shape · <kbd>F</kbd> Frame · <kbd>M</kbd> Mask · <kbd>I</kbd> Instruments
               </li>
               <li>
                 Mask: drag conceal · <kbd>Alt</kbd>-drag reveal · <kbd>[</kbd> <kbd>]</kbd> brush size

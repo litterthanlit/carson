@@ -41,6 +41,7 @@ import { StrokeSession, bumpPaintVersion, createPaintLayer, isPaintLayer, poster
 import { storePixels } from './lib/pixelStore'
 import { WarpOverlay } from './components/WarpOverlay'
 import { WarpBar } from './components/WarpBar'
+import { CanvasContextMenu, type ContextMenuItem } from './components/CanvasContextMenu'
 import { MESH_SIZE, identityDistort, identityMesh, isIdentityWarp, warpPoint, type Warp } from './lib/warp'
 import { readWarp } from './lib/warpRender'
 import { AdjustmentLayer, readAdjustment } from './lib/adjustmentLayer'
@@ -359,6 +360,9 @@ type EditorIntent =
 
 type EditorScreen = 'home' | 'editor'
 
+/** A detached copy of a layer, kept for duplicate and the in-app clipboard. */
+type LayerClone = { object: FabricObject; kind: LayerKind; name: string; linkedId: string | null }
+
 /** Point the canvas at the active poster's press (or none); returns the run's signature. */
 function bindPressForDocument(
   canvas: Canvas,
@@ -490,6 +494,12 @@ function App() {
   const [pixelSelection, setPixelSelection] = useState<PixelSelection | null>(null)
   const pixelSelectionRef = useRef<PixelSelection | null>(null)
   pixelSelectionRef.current = pixelSelection
+  const layerClipboardRef = useRef<{ clones: LayerClone[]; pastes: number } | null>(null)
+  const [hasLayerClipboard, setHasLayerClipboard] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; onLayer: boolean } | null>(null)
+  const contextMenuHandlerRef = useRef<(event: MouseEvent) => void>(() => {})
+  const pasteImageRef = useRef<(file: File) => void>(() => {})
+  const duplicateForAltDragRef = useRef<(sources: FabricObject[]) => Promise<() => void>>(async () => () => {})
   const [pathEditMode, setPathEditMode] = useState(false)
   const [pathAddPointMode, setPathAddPointMode] = useState(false)
   const [pathGeometryTick, setPathGeometryTick] = useState(0)
@@ -746,6 +756,7 @@ function App() {
     onTextSelectionChange: setTextSelection,
     editorToolRef,
     onPlaceText: (point) => addTextRef.current(point),
+    onAltDragDuplicate: (sources) => duplicateForAltDragRef.current(sources),
     onMaskPaint: (phase, point, reveal) => maskPaintRef.current(phase, point, reveal),
   })
 
@@ -1065,6 +1076,14 @@ function App() {
     openPoster: () => openOpenPosterDialog(),
     export: () => void exportPoster(),
     duplicate: () => void duplicateSelected(),
+    copy: () => void copySelected(),
+    cut: () => void cutSelected(),
+    paste: () => void pasteLayers(),
+    selectAll: selectAllLayers,
+    bringForward: () => moveLayer('forward'),
+    sendBackward: () => moveLayer('backward'),
+    bringToFront: () => moveLayer('front'),
+    sendToBack: () => moveLayer('back'),
     delete: deleteSelected,
     deselect: () => {
       canvasRef.current?.discardActiveObject()
@@ -1260,6 +1279,27 @@ function App() {
           event.preventDefault()
           if (event.shiftKey) actions.selectionViaCut()
           else actions.selectionViaCopy()
+        } else if (key === 'j' && !isTypingContext(event.target)) {
+          event.preventDefault()
+          actions.duplicate()
+        } else if ((key === 'c' || key === 'x') && !event.shiftKey && !event.altKey && !isTypingContext(event.target)) {
+          // Leave native copy alone while the page has a text selection (e.g. inspector copy).
+          if (window.getSelection()?.toString()) return
+          if (!canvasRef.current?.getActiveObject()) return
+          event.preventDefault()
+          if (key === 'c') actions.copy()
+          else actions.cut()
+        } else if (key === 'a' && !event.shiftKey && !isTypingContext(event.target)) {
+          event.preventDefault()
+          actions.selectAll()
+        } else if ((event.code === 'BracketRight' || event.code === 'BracketLeft') && !isTypingContext(event.target)) {
+          event.preventDefault()
+          const forward = event.code === 'BracketRight'
+          if (event.shiftKey) {
+            if (forward) actions.bringToFront()
+            else actions.sendToBack()
+          } else if (forward) actions.bringForward()
+          else actions.sendBackward()
         } else if (key === 'i' && event.shiftKey && pixelSelectionRef.current) {
           event.preventDefault()
           actions.selectionInvert()
@@ -1388,11 +1428,36 @@ function App() {
       }
     }
 
+    // Paste goes through the paste event (not Cmd+V) so a system clipboard image can win.
+    const onPaste = (event: ClipboardEvent) => {
+      if (screenRef.current !== 'editor') return
+      if (document.querySelector('[aria-modal="true"]') || isTypingContext(event.target)) return
+      const image = Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith('image/'))
+      if (image) {
+        event.preventDefault()
+        pasteImageRef.current(image)
+      } else if (layerClipboardRef.current) {
+        event.preventDefault()
+        keyActionsRef.current.paste?.()
+      }
+    }
+
+    const onContextMenu = (event: MouseEvent) => {
+      if (screenRef.current !== 'editor') return
+      if (!(event.target as HTMLElement | null)?.closest?.('.canvas-container')) return
+      if (document.querySelector('[aria-modal="true"]')) return
+      contextMenuHandlerRef.current(event)
+    }
+
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('paste', onPaste)
+    window.addEventListener('contextmenu', onContextMenu, true)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('paste', onPaste)
+      window.removeEventListener('contextmenu', onContextMenu, true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -2072,6 +2137,61 @@ function App() {
   }
 
   addTextRef.current = (point) => addText(point, {}, { edit: true })
+  pasteImageRef.current = (file) => void handleImageFile(file)
+
+  contextMenuHandlerRef.current = (event) => {
+    const canvas = canvasRef.current
+    if (!canvas || canvas.isDrawingMode || penMode) return
+    const editing = canvas.getActiveObject() as (FabricObject & { isEditing?: boolean }) | undefined
+    if (editing?.isEditing) return
+    event.preventDefault()
+    const target = canvas.findTarget(event).target
+    const active = canvas.getActiveObject()
+    if (target && target.selectable !== false) {
+      const inSelection = active?.type === 'activeselection' ? canvas.getActiveObjects().includes(target) : false
+      if (target !== active && !inSelection) {
+        canvas.setActiveObject(topLevelLayer(target))
+        canvas.requestRenderAll()
+        syncSelected()
+      }
+    } else if (active) {
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      syncSelected()
+    }
+    setContextMenu({ x: event.clientX, y: event.clientY, onLayer: Boolean(canvas.getActiveObject()) })
+  }
+
+  function closeContextMenu() {
+    setContextMenu(null)
+    scrollRef.current?.focus({ preventScroll: true })
+  }
+
+  function contextMenuItems(): ContextMenuItem[] {
+    const mac = /Mac/i.test(navigator.platform)
+    const keys = (key: string) => (mac ? `⌘${key}` : `Ctrl+${key}`)
+    const shifted = (key: string) => (mac ? `⇧⌘${key}` : `Ctrl+Shift+${key}`)
+    const paste: ContextMenuItem = { label: 'Paste', shortcut: keys('V'), disabled: !hasLayerClipboard, run: keyActionsRef.current.paste! }
+    if (!contextMenu?.onLayer) {
+      return [paste, { label: 'Select all', shortcut: keys('A'), run: selectAllLayers }]
+    }
+    const actions = keyActionsRef.current
+    const items: ContextMenuItem[] = [
+      { label: 'Cut', shortcut: keys('X'), run: actions.cut! },
+      { label: 'Copy', shortcut: keys('C'), run: actions.copy! },
+      paste,
+      { label: 'Duplicate', shortcut: keys('J'), run: actions.duplicate! },
+      { separator: true },
+      { label: 'Bring forward', shortcut: keys(']'), run: actions.bringForward! },
+      { label: 'Send backward', shortcut: keys('['), run: actions.sendBackward! },
+      { label: 'Bring to front', shortcut: shifted(']'), run: actions.bringToFront! },
+      { label: 'Send to back', shortcut: shifted('['), run: actions.sendToBack! },
+    ]
+    if (canGroupLayers) items.push({ separator: true }, { label: 'Group', shortcut: keys('G'), run: actions.group! })
+    if (canUngroupLayers) items.push({ separator: true }, { label: 'Ungroup', shortcut: shifted('G'), run: actions.ungroup! })
+    items.push({ separator: true }, { label: 'Delete', shortcut: 'Del', run: actions.delete! })
+    return items
+  }
 
   function addShape() {
     const canvas = canvasRef.current
@@ -3869,22 +3989,119 @@ function App() {
     noteWalkthrough('undo')
   }
 
-  async function duplicateSelected() {
+  /** Clones the selected layers at their absolute poster positions, bottom layer first. */
+  async function cloneSelectedLayers(): Promise<LayerClone[]> {
     const canvas = canvasRef.current
-    const object = activeObject()
-    if (!canvas || !object) return
-    const clone = await object.clone()
-    clone.set({
-      left: (object.left ?? 0) + 28,
-      top: (object.top ?? 0) + 28,
-    })
-    const linkedId = readComponentId(object)
-    retargetObjectIds(clone, nextIdForKind)
-    tagObject(clone, (readObjectProp(object, 'kind') as LayerKind) ?? 'shape', `${readObjectProp(object, 'name') ?? 'Layer'} copy`)
-    if (linkedId) writeComponentId(clone, linkedId)
-    canvas.add(clone)
-    canvas.setActiveObject(clone)
-    commitHistory('Duplicated layer')
+    const active = activeObject()
+    if (!canvas || !active) return []
+    const stack = canvas.getObjects()
+    const sources = (active.type === 'activeselection' ? canvas.getActiveObjects() : [active]).sort(
+      (a, b) => stack.indexOf(a) - stack.indexOf(b),
+    )
+    const clones: LayerClone[] = []
+    for (const source of sources) {
+      const object = await source.clone()
+      // Children of a multi-selection carry selection-relative coordinates.
+      if (source.group) util.applyTransformToObject(object, source.calcTransformMatrix())
+      clones.push({
+        object,
+        kind: (readObjectProp(source, 'kind') as LayerKind) ?? 'shape',
+        name: String(readObjectProp(source, 'name') ?? 'Layer'),
+        linkedId: readComponentId(source),
+      })
+    }
+    return clones
+  }
+
+  function placeLayerClones(clones: LayerClone[], offset: number, nameSuffix: string, label: string) {
+    const canvas = canvasRef.current
+    if (!canvas || clones.length === 0) return
+    canvas.discardActiveObject()
+    for (const { object, kind, name, linkedId } of clones) {
+      object.set({ left: (object.left ?? 0) + offset, top: (object.top ?? 0) + offset })
+      retargetObjectIds(object, nextIdForKind)
+      tagObject(object, kind, `${name}${nameSuffix}`)
+      if (linkedId) writeComponentId(object, linkedId)
+      canvas.add(object)
+    }
+    const objects = clones.map((clone) => clone.object)
+    canvas.setActiveObject(objects.length > 1 ? new ActiveSelection(objects, { canvas }) : objects[0]!)
+    commitHistory(label)
+  }
+
+  async function duplicateSelected() {
+    const clones = await cloneSelectedLayers()
+    placeLayerClones(clones, 28, ' copy', clones.length > 1 ? `Duplicated ${clones.length} layers` : 'Duplicated layer')
+  }
+
+  async function copySelected() {
+    const clones = await cloneSelectedLayers()
+    if (clones.length === 0) return false
+    layerClipboardRef.current = { clones, pastes: 0 }
+    setHasLayerClipboard(true)
+    setStatus(clones.length > 1 ? `Copied ${clones.length} layers` : 'Copied layer')
+    return true
+  }
+
+  async function cutSelected() {
+    if (await copySelected()) deleteSelected()
+  }
+
+  async function pasteLayers() {
+    const clipboard = layerClipboardRef.current
+    if (!clipboard) return
+    clipboard.pastes += 1
+    const clones: LayerClone[] = []
+    for (const entry of clipboard.clones) clones.push({ ...entry, object: await entry.object.clone() })
+    placeLayerClones(clones, 28 * clipboard.pastes, '', clones.length > 1 ? `Pasted ${clones.length} layers` : 'Pasted layer')
+  }
+
+  // Alt-drag: the dragged layers become the copies ("… copy") and fresh clones of the
+  // originals stay behind, so the pointer's drag session never has to change target.
+  duplicateForAltDragRef.current = async (sources) => {
+    const canvas = canvasRef.current
+    if (!canvas) return () => {}
+    // clone() snapshots the object synchronously, before the drag moves it.
+    const pending = sources.map((source) => ({
+      source,
+      matrix: source.calcTransformMatrix(),
+      name: String(readObjectProp(source, 'name') ?? 'Layer'),
+      kind: (readObjectProp(source, 'kind') as LayerKind) ?? 'shape',
+      linkedId: readComponentId(source),
+      clone: source.clone(),
+    }))
+    const added: FabricObject[] = []
+    const renamed: Array<{ source: FabricObject; name: string }> = []
+    for (const entry of pending.sort((a, b) => canvas.getObjects().indexOf(a.source) - canvas.getObjects().indexOf(b.source))) {
+      const clone = await entry.clone
+      if (entry.source.group) util.applyTransformToObject(clone, entry.matrix)
+      retargetObjectIds(clone, nextIdForKind)
+      tagObject(clone, entry.kind, entry.name)
+      if (entry.linkedId) writeComponentId(clone, entry.linkedId)
+      canvas.insertAt(canvas.getObjects().indexOf(entry.source), clone)
+      entry.source.set({ name: `${entry.name} copy` } as Partial<FabricObject>)
+      added.push(clone)
+      renamed.push({ source: entry.source, name: entry.name })
+    }
+    canvas.requestRenderAll()
+    return () => {
+      added.forEach((clone) => canvas.remove(clone))
+      renamed.forEach(({ source, name }) => source.set({ name } as Partial<FabricObject>))
+      canvas.requestRenderAll()
+      syncLayers()
+    }
+  }
+
+  function selectAllLayers() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const objects = getSelectableLayerObjects().reverse()
+    if (objects.length === 0) return
+    canvas.discardActiveObject()
+    canvas.setActiveObject(objects.length > 1 ? new ActiveSelection(objects, { canvas }) : objects[0]!)
+    canvas.requestRenderAll()
+    syncSelected()
+    setStatus(objects.length > 1 ? `Selected ${objects.length} layers` : 'Selected layer')
   }
 
   function deleteSelected() {
@@ -3897,17 +4114,35 @@ function App() {
     commitHistory(objects.length > 1 ? `Deleted ${objects.length} layers` : 'Deleted layer')
   }
 
-  function moveLayer(direction: 'front' | 'back') {
+  function moveLayer(direction: 'front' | 'back' | 'forward' | 'backward') {
     const canvas = canvasRef.current
     const object = activeObject()
     if (!canvas || !object) return
     const before = captureLayerOrder(canvas)
-    if (direction === 'front') canvas.bringObjectToFront(object)
-    else canvas.sendObjectToBack(object)
-    commitLayerOrderChange(
-      direction === 'front' ? 'Moved layer to front' : 'Moved layer to back',
-      before,
-    )
+    const selection = new Set(object.type === 'activeselection' ? canvas.getActiveObjects() : [object])
+    const ordered = canvas.getObjects().filter((item) => selection.has(item))
+    if (direction === 'front') ordered.forEach((item) => canvas.bringObjectToFront(item))
+    else if (direction === 'back') [...ordered].reverse().forEach((item) => canvas.sendObjectToBack(item))
+    else if (direction === 'forward') {
+      // Step each layer past its neighbour, but not past another selected layer.
+      ;[...ordered].reverse().forEach((item) => {
+        const live = canvas.getObjects()
+        if (!selection.has(live[live.indexOf(item) + 1] as FabricObject)) canvas.bringObjectForward(item)
+      })
+    } else {
+      ordered.forEach((item) => {
+        const live = canvas.getObjects()
+        if (!selection.has(live[live.indexOf(item) - 1] as FabricObject)) canvas.sendObjectBackwards(item)
+      })
+    }
+    canvas.requestRenderAll()
+    const labels = {
+      front: 'Moved layer to front',
+      back: 'Moved layer to back',
+      forward: 'Brought layer forward',
+      backward: 'Sent layer backward',
+    }
+    commitLayerOrderChange(labels[direction], before)
   }
 
   function getSelectableLayerObjects(): FabricObject[] {
@@ -5814,6 +6049,14 @@ function App() {
       disabled: !selected,
       run: () => applyGestureToSelection(gesture),
     })),
+    { id: 'copy-layer', label: 'Copy layer', keywords: ['copy', 'clipboard'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.copy?.() },
+    { id: 'cut-layer', label: 'Cut layer', keywords: ['cut', 'clipboard'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.cut?.() },
+    { id: 'paste-layer', label: 'Paste layer', keywords: ['paste', 'clipboard'], scope: 'canvas', disabled: !hasLayerClipboard, run: () => keyActionsRef.current.paste?.() },
+    { id: 'select-all', label: 'Select all layers', keywords: ['select', 'all'], scope: 'canvas', run: () => keyActionsRef.current.selectAll?.() },
+    { id: 'bring-forward', label: 'Bring layer forward', keywords: ['order', 'arrange', 'stack', 'raise'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.bringForward?.() },
+    { id: 'send-backward', label: 'Send layer backward', keywords: ['order', 'arrange', 'stack', 'lower'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.sendBackward?.() },
+    { id: 'bring-front', label: 'Bring layer to front', keywords: ['order', 'arrange', 'stack', 'top'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.bringToFront?.() },
+    { id: 'send-back', label: 'Send layer to back', keywords: ['order', 'arrange', 'stack', 'bottom'], scope: 'selection', disabled: !selected, run: () => keyActionsRef.current.sendToBack?.() },
     { id: 'scatter', label: 'Scatter', keywords: ['scatter', 'chaos'], scope: 'selection', disabled: !selected, run: () => scatterSelected() },
     {
       id: 'scramble',
@@ -6029,6 +6272,9 @@ function App() {
   return (
     <main className={screen === 'home' ? 'home-root' : 'editor-shell'} data-tour={walkthroughStep ?? undefined}>
       <Suspense fallback={null}>
+        {contextMenu ? (
+          <CanvasContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenuItems()} onClose={closeContextMenu} />
+        ) : null}
         {commandOpen ? <CommandPalette open commands={commands} onClose={() => setCommandOpen(false)} /> : null}
         {onboardingOpen ? (
           <OnboardingModal
