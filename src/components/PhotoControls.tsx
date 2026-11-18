@@ -44,13 +44,13 @@ export function PhotoControls({ layerId, resolutionStore, cropped, cropBlocked, 
           <Crop size={14} aria-hidden />
           Crop
         </button>
-        <button type="button" title="Show the whole image again" onClick={onResetCrop} disabled={cropping || !cropped || Boolean(cropBlocked)}>
+        <button type="button" title="Reset crop: show the whole image again" aria-label="Reset crop" onClick={onResetCrop} disabled={cropping || !cropped || Boolean(cropBlocked)}>
           <RotateCcw size={14} aria-hidden />
-          Reset crop
+          Reset
         </button>
-        <button type="button" title="Swap in another picture, keeping this layer's place, size and effects" onClick={onReplace} disabled={cropping}>
+        <button type="button" title="Swap in another picture, keeping this layer's place, size and effects" aria-label="Replace image" onClick={onReplace} disabled={cropping}>
           <ImageUp size={14} aria-hidden />
-          Replace image…
+          Replace…
         </button>
       </div>
       {cropBlocked ? (

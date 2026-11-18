@@ -1,9 +1,8 @@
 import { useCallback, useState, type ReactNode, type RefObject } from 'react'
 import {
-  AlignLeft,
+  Library,
   Blend,
   BookmarkPlus,
-  BringToFront,
   Contrast,
   Copy,
   ChevronDown,
@@ -13,14 +12,14 @@ import {
   Eye,
   EyeOff,
   Grid3x3,
-  Image as ImageIcon,
   Pipette,
   Printer,
-  SendToBack,
   SlidersHorizontal,
   Trash2,
   Group,
   Ungroup,
+  ArrowUpToLine,
+  ArrowDownToLine,
 } from 'lucide-react'
 import type { FabricObject } from 'fabric'
 import type { PosterPresetId } from '../lib/editorModel'
@@ -592,7 +591,7 @@ export function InspectorPanel({
           [
             ['inspect', 'Properties', 'Properties (Inspect)', SlidersHorizontal],
             ['treatments', 'Applied', 'Applied effects (Treatments)', Blend],
-            ['assets', 'Assets', 'Assets', ImageIcon],
+            ['assets', 'Assets', 'Assets', Library],
             ['layout', 'Layout', 'Layout', Grid3x3],
             ['print', 'Print', 'Print', Printer],
           ] as const
@@ -1097,20 +1096,42 @@ export function InspectorPanel({
         <>
           {!selected ? inspectProjectSection : null}
           <div className="panel-section">
-            <div className="panel-title">
-              <h2>Selection</h2>
-              <AlignLeft size={15} />
-            </div>
             {!selected ? (
-              <p className="empty">Select a layer to edit it.</p>
+              <p className="empty">Select a layer to edit its properties.</p>
             ) : (
               <div className="control-stack">
-                <div className="property-heading">
-                  <div className="property-title-row">
-                    <h3>{selected.name}</h3>
-                    <span className="property-badge">{selected.kind}</span>
-                  </div>
+                <div className="property-title-row">
+                  <input
+                    className="layer-name-input"
+                    aria-label="Layer name"
+                    value={selected.name}
+                    onChange={(event) => onUpdateActive({ name: event.target.value })}
+                    onBlur={() => onFinalizeActive('Renamed layer')}
+                  />
+                  <span className="property-badge">{selected.kind}</span>
                 </div>
+                {selected.adjustment ? null : (
+                  <div className="layers-props" role="group" aria-label="Blend mode and opacity">
+                    <div className="layers-blend" title="Blend mode">
+                      <BlendModePicker
+                        value={selected.blendMode ?? 'source-over'}
+                        onPreview={onPreviewBlendMode}
+                        onChange={onApplyBlendMode}
+                      />
+                    </div>
+                    <Slider
+                      variant="field"
+                      label="Opacity"
+                      defaultValue={100}
+                      value={Math.round(selected.opacity * 100)}
+                      min={5}
+                      max={100}
+                      format={formatPercent}
+                      onChange={(value) => onUpdateActive({ opacity: value / 100 })}
+                      onCommit={() => onFinalizeActive('Changed opacity')}
+                    />
+                  </div>
+                )}
                 {selected.componentId ? (
                   <div className="instance-card">
                     <p className="property-kicker">Component instance</p>
@@ -1145,14 +1166,6 @@ export function InspectorPanel({
                     ) : null}
                   </div>
                 ) : null}
-                <label>
-                  Name
-                  <input
-                    value={selected.name}
-                    onChange={(event) => onUpdateActive({ name: event.target.value })}
-                    onBlur={() => onFinalizeActive('Renamed layer')}
-                  />
-                </label>
                 {photoControls}
                 {selected.adjustment && onAdjustmentChange ? (
                   <AdjustmentPanel
@@ -1383,112 +1396,7 @@ export function InspectorPanel({
                     />
                   </PropertySection>
                 ) : null}
-                <PropertySection id="transform" title="Transform">
-                  <div className="split-inputs">
-                    <label>
-                      X
-                      <input
-                        type="number"
-                        value={selected.left}
-                        onChange={(event) => onUpdateActive({ left: Number(event.target.value) })}
-                        onBlur={() => onFinalizeActive('Moved layer')}
-                      />
-                    </label>
-                    <label>
-                      Y
-                      <input
-                        type="number"
-                        value={selected.top}
-                        onChange={(event) => onUpdateActive({ top: Number(event.target.value) })}
-                        onBlur={() => onFinalizeActive('Moved layer')}
-                      />
-                    </label>
-                  </div>
-                  <Slider
-                    label="Rotate"
-                    defaultValue={0}
-                    value={selected.angle}
-                    min={-180}
-                    max={180}
-                    format={formatDegrees}
-                    onChange={(value) => onUpdateActive({ angle: value })}
-                    onCommit={() => onFinalizeActive('Rotated layer')}
-                  />
-                  <Slider
-                    label="Stretch X"
-                    defaultValue={100}
-                    value={Math.round(selected.scaleX * 100)}
-                    min={20}
-                    max={320}
-                    format={formatPercent}
-                    onChange={(value) => onUpdateActive({ scaleX: value / 100 })}
-                    onCommit={() => onFinalizeActive('Stretched layer')}
-                  />
-                  <Slider
-                    label="Stretch Y"
-                    defaultValue={100}
-                    value={Math.round(selected.scaleY * 100)}
-                    min={20}
-                    max={320}
-                    format={formatPercent}
-                    onChange={(value) => onUpdateActive({ scaleY: value / 100 })}
-                    onCommit={() => onFinalizeActive('Stretched layer')}
-                  />
-                  <Slider
-                    label="Skew X"
-                    defaultValue={0}
-                    value={selected.skewX ?? 0}
-                    min={-45}
-                    max={45}
-                    format={formatDegrees}
-                    onChange={(value) => onUpdateActive({ skewX: value })}
-                    onCommit={() => onFinalizeActive('Skewed layer')}
-                  />
-                  {selectedLayerIds.length <= 1 && onStartWarp ? (
-                    <div className="button-row">
-                      <button type="button" title="Drag four corners for perspective (⌘K: Distort)" onClick={() => onStartWarp('distort')}>
-                        Distort
-                      </button>
-                      <button type="button" title="Bend the layer with a 4×4 mesh" onClick={() => onStartWarp('mesh')}>
-                        Warp
-                      </button>
-                      {selected.warp && onRemoveWarp ? (
-                        <button type="button" title="Back to the unwarped layer" onClick={onRemoveWarp}>
-                          Remove warp
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <div className="button-row">
-                    <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
-                      <BringToFront size={16} />
-                      Front
-                    </button>
-                    <button type="button" title="Send the layer to the back" onClick={() => onMoveLayer('back')}>
-                      <SendToBack size={16} />
-                      Back
-                    </button>
-                  </div>
-                </PropertySection>
-                <PropertySection id="appearance" title="Appearance">
-                  <label className="font-picker-label">
-                    Blend
-                    <BlendModePicker
-                      value={selected.blendMode ?? 'source-over'}
-                      onPreview={onPreviewBlendMode}
-                      onChange={onApplyBlendMode}
-                    />
-                  </label>
-                  <Slider
-                    label="Opacity"
-                    defaultValue={100}
-                    value={Math.round(selected.opacity * 100)}
-                    min={5}
-                    max={100}
-                    format={formatPercent}
-                    onChange={(value) => onUpdateActive({ opacity: value / 100 })}
-                    onCommit={() => onFinalizeActive('Changed opacity')}
-                  />
+                <PropertySection id="appearance" title="Fill & stroke">
                   <label>
                     Color
                     <span className="color-row">
@@ -1581,6 +1489,83 @@ export function InspectorPanel({
                     </div>
                   ) : null}
                 </PropertySection>
+                <PropertySection id="transform" title="Transform">
+                  <div className="split-inputs">
+                    <label>
+                      X
+                      <input
+                        type="number"
+                        value={selected.left}
+                        onChange={(event) => onUpdateActive({ left: Number(event.target.value) })}
+                        onBlur={() => onFinalizeActive('Moved layer')}
+                      />
+                    </label>
+                    <label>
+                      Y
+                      <input
+                        type="number"
+                        value={selected.top}
+                        onChange={(event) => onUpdateActive({ top: Number(event.target.value) })}
+                        onBlur={() => onFinalizeActive('Moved layer')}
+                      />
+                    </label>
+                  </div>
+                  <Slider
+                    label="Rotate"
+                    defaultValue={0}
+                    value={selected.angle}
+                    min={-180}
+                    max={180}
+                    format={formatDegrees}
+                    onChange={(value) => onUpdateActive({ angle: value })}
+                    onCommit={() => onFinalizeActive('Rotated layer')}
+                  />
+                  <Slider
+                    label="Stretch X"
+                    defaultValue={100}
+                    value={Math.round(selected.scaleX * 100)}
+                    min={20}
+                    max={320}
+                    format={formatPercent}
+                    onChange={(value) => onUpdateActive({ scaleX: value / 100 })}
+                    onCommit={() => onFinalizeActive('Stretched layer')}
+                  />
+                  <Slider
+                    label="Stretch Y"
+                    defaultValue={100}
+                    value={Math.round(selected.scaleY * 100)}
+                    min={20}
+                    max={320}
+                    format={formatPercent}
+                    onChange={(value) => onUpdateActive({ scaleY: value / 100 })}
+                    onCommit={() => onFinalizeActive('Stretched layer')}
+                  />
+                  <Slider
+                    label="Skew X"
+                    defaultValue={0}
+                    value={selected.skewX ?? 0}
+                    min={-45}
+                    max={45}
+                    format={formatDegrees}
+                    onChange={(value) => onUpdateActive({ skewX: value })}
+                    onCommit={() => onFinalizeActive('Skewed layer')}
+                  />
+                  {selectedLayerIds.length <= 1 && onStartWarp ? (
+                    <div className="button-row">
+                      <button type="button" title="Drag four corners for perspective (⌘K: Distort)" onClick={() => onStartWarp('distort')}>
+                        Distort
+                      </button>
+                      <button type="button" title="Bend the layer with a 4×4 mesh" onClick={() => onStartWarp('mesh')}>
+                        Warp
+                      </button>
+                      {selected.warp && onRemoveWarp ? (
+                        <button type="button" title="Back to the unwarped layer" onClick={onRemoveWarp}>
+                          Remove warp
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </PropertySection>
                 {selectedIsPath || canBooleanUnion || canBooleanSubtract ? (
                   <PropertySection id="path" title="Path">
                   {canBooleanUnion || canBooleanSubtract ? (
@@ -1656,7 +1641,7 @@ export function InspectorPanel({
                   </PropertySection>
                 ) : null}
                 {selectedLayerIds.length <= 1 ? (
-                  <PropertySection id="effects" title="Effects" defaultOpen={false} summary={effectsSummary}>
+                  <PropertySection id="effects" title="Layer styles" defaultOpen={false} summary={effectsSummary}>
                     <LayerStylePanel
                       style={selected.layerStyle ?? null}
                       onChange={onLayerStyleChange}
@@ -1665,6 +1650,27 @@ export function InspectorPanel({
                     />
                   </PropertySection>
                 ) : null}
+                <PropertySection id="filters" title="Filters" defaultOpen={false}>
+                  {selectedIsImage ? (
+                    <div className="preset-row effect-grid">
+                      {(['grayscale', 'contrast', 'threshold', 'blur', 'noise', 'clear'] as const).map((effect) => (
+                        <button
+                          key={effect}
+                          type="button"
+                          title={effect === 'clear' ? 'Remove all image filters' : `Toggle ${effect} on this image`}
+                          onClick={() => onApplyImageEffect(effect)}
+                        >
+                          {effect}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="button-row">
+                    <button type="button" title="Motion blur, stylize and film looks, with a live preview" onClick={onOpenFilterGallery}>
+                      Filter gallery…
+                    </button>
+                  </div>
+                </PropertySection>
                 <PropertySection id="mask" title="Mask" defaultOpen={false} summary={maskSummary}>
                   <p className="hint">
                     {hasMaskContent(layerMask)
@@ -1718,48 +1724,8 @@ export function InspectorPanel({
                   </div>
                 </PropertySection>
                 </>)}
-                {selected.adjustment ? (
-                  <div className="button-row">
-                    <button type="button" title="Bring the layer to the front" onClick={() => onMoveLayer('front')}>
-                      <BringToFront size={16} />
-                      Front
-                    </button>
-                    <button type="button" title="Send the layer to the back" onClick={() => onMoveLayer('back')}>
-                      <SendToBack size={16} />
-                      Back
-                    </button>
-                  </div>
-                ) : null}
               </div>
             )}
-          </div>
-
-          {selected ? inspectProjectSection : null}
-
-          <div className="panel-section">
-            <h2>Image effects</h2>
-            <p className="hint">Quick toggles, or open the Filter Gallery for motion blur, stylize, and film looks.</p>
-            <div className="preset-row effect-grid">
-              {(['grayscale', 'contrast', 'threshold', 'blur', 'noise', 'clear'] as const).map((effect) => (
-                <button
-                  key={effect}
-                  type="button"
-                  title={effect === 'clear' ? 'Remove all image effects' : `Toggle ${effect} on the selected image`}
-                  onClick={() => onApplyImageEffect(effect)}
-                  disabled={!selectedIsImage}
-                >
-                  {effect} {effect === 'clear' ? null : <ScopeSel />}
-                </button>
-              ))}
-              <button
-                type="button"
-                title="Open the Filter Gallery for directional blurs and stacked looks"
-                onClick={onOpenFilterGallery}
-                disabled={!selected}
-              >
-                Filter gallery <ScopeSel />
-              </button>
-            </div>
           </div>
 
           <details className="panel-section shortcuts-disclosure">
@@ -2266,33 +2232,6 @@ export function InspectorPanel({
             </span>
           </div>
           <div id="layers-dock-body" className="layers-dock-body" hidden={!layersOpen}>
-          <div className={selected ? 'layers-props' : 'layers-props is-disabled'}>
-            <div className="layers-blend" title="Blend mode">
-              {selected ? (
-                <BlendModePicker
-                  value={selected.blendMode ?? 'source-over'}
-                  onPreview={onPreviewBlendMode}
-                  onChange={onApplyBlendMode}
-                />
-              ) : (
-                <button type="button" className="layers-blend-placeholder" disabled>
-                  Normal
-                </button>
-              )}
-            </div>
-            <Slider
-              variant="field"
-              label="Opacity"
-              defaultValue={100}
-              disabled={!selected}
-              value={selected ? Math.round(selected.opacity * 100) : 100}
-              min={5}
-              max={100}
-              format={formatPercent}
-              onChange={(value) => onUpdateActive({ opacity: value / 100 })}
-              onCommit={() => onFinalizeActive('Changed opacity')}
-            />
-          </div>
           <LayersPanel
             layers={layers}
             selectedIds={selectedLayerIds}
@@ -2334,6 +2273,26 @@ export function InspectorPanel({
                 </select>
               </label>
             ) : null}
+            <button
+              type="button"
+              className="layers-footer-button"
+              title="Bring to front"
+              aria-label="Bring to front"
+              disabled={!selected}
+              onClick={() => onMoveLayer('front')}
+            >
+              <ArrowUpToLine size={15} />
+            </button>
+            <button
+              type="button"
+              className="layers-footer-button"
+              title="Send to back"
+              aria-label="Send to back"
+              disabled={!selected}
+              onClick={() => onMoveLayer('back')}
+            >
+              <ArrowDownToLine size={15} />
+            </button>
             <button
               type="button"
               className="layers-footer-button"

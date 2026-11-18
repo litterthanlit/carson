@@ -85,7 +85,7 @@ export const DEFAULT_KEYMAP: Keymap = {
 export const SHORTCUT_SECTIONS: { title: string; ids: string[] }[] = [
   {
     title: 'Tools',
-    ids: ['move-tool', 'text-tool', 'shape-tool', 'frame-tool', 'select-tool', 'brush-tool', 'eraser-tool', 'mask-tool', 'pen-tool', 'effects-palette'],
+    ids: ['move-tool', 'select-tool', 'text-tool', 'shape-tool', 'frame-tool', 'pen-tool', 'brush-tool', 'eraser-tool', 'mask-tool', 'effects-palette'],
   },
   {
     title: 'Edit',

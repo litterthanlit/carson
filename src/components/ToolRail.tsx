@@ -1,6 +1,5 @@
 import { memo, useEffect, useRef, useState, type RefObject } from 'react'
 import {
-  Brush,
   Eraser as EraserIcon,
   Paintbrush,
   Circle,
@@ -24,6 +23,16 @@ import {
 } from 'lucide-react'
 import type { EditorTool, PenKind } from '../types/editor'
 import type { SelectionMode } from '../lib/selection'
+
+/** The mask glyph Photoshop and Figma use: a sheet with a hole in it. Lucide has no equivalent. */
+function MaskIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="12" cy="12" r="4" />
+    </svg>
+  )
+}
 
 type Flyout = 'shape' | 'select' | 'brush' | 'mask' | null
 
@@ -104,6 +113,48 @@ export const ToolRail = memo(function ToolRail({
       >
         <MousePointer2 size={16} />
       </button>
+      {onSelectModeChange ? (
+        <div className="tool-rail-flyout-wrap">
+          <button
+            type="button"
+            className={tool === 'select' ? 'active' : undefined}
+            title="Select (L) — marquee or lasso a region, then mask it or lift it to a new layer"
+            aria-label="Select tool"
+            aria-pressed={tool === 'select'}
+            aria-expanded={flyout === 'select'}
+            onClick={() => {
+              onToolChange('select')
+              setFlyout((current) => (current === 'select' ? null : 'select'))
+            }}
+          >
+            <SelectIcon size={16} />
+          </button>
+          {flyout === 'select' ? (
+            <div className="tool-flyout" role="menu" aria-label="Selection tools">
+              {(
+                [
+                  ['rect', 'Rectangle marquee', SquareDashed],
+                  ['ellipse', 'Ellipse marquee', CircleDashed],
+                  ['lasso', 'Lasso', Lasso],
+                ] as const
+              ).map(([mode, label, Icon]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selectMode === mode}
+                  onClick={() => {
+                    onSelectModeChange(mode)
+                    selectTool('select')
+                  }}
+                >
+                  <Icon size={14} /> {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <span className="tool-rail-rule" aria-hidden="true" />
       <button
         type="button"
@@ -199,48 +250,6 @@ export const ToolRail = memo(function ToolRail({
         <ImagePlus size={16} />
       </button>
       <span className="tool-rail-rule" aria-hidden="true" />
-      {onSelectModeChange ? (
-        <div className="tool-rail-flyout-wrap">
-          <button
-            type="button"
-            className={tool === 'select' ? 'active' : undefined}
-            title="Select (L) — marquee or lasso a region, then mask it or lift it to a new layer"
-            aria-label="Select tool"
-            aria-pressed={tool === 'select'}
-            aria-expanded={flyout === 'select'}
-            onClick={() => {
-              onToolChange('select')
-              setFlyout((current) => (current === 'select' ? null : 'select'))
-            }}
-          >
-            <SelectIcon size={16} />
-          </button>
-          {flyout === 'select' ? (
-            <div className="tool-flyout" role="menu" aria-label="Selection tools">
-              {(
-                [
-                  ['rect', 'Rectangle marquee', SquareDashed],
-                  ['ellipse', 'Ellipse marquee', CircleDashed],
-                  ['lasso', 'Lasso', Lasso],
-                ] as const
-              ).map(([mode, label, Icon]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={selectMode === mode}
-                  onClick={() => {
-                    onSelectModeChange(mode)
-                    selectTool('select')
-                  }}
-                >
-                  <Icon size={14} /> {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
       {onBrushModeChange ? (
         <div className="tool-rail-flyout-wrap">
           <button
@@ -282,7 +291,7 @@ export const ToolRail = memo(function ToolRail({
             setFlyout((current) => (current === 'mask' ? null : 'mask'))
           }}
         >
-          <Brush size={16} />
+          <MaskIcon />
         </button>
         {flyout === 'mask' ? (
           <div className="tool-flyout" role="menu" aria-label="Mask tools">

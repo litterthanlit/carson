@@ -4338,6 +4338,18 @@ label:has(> input[type='radio']) {
   border-bottom: 1px solid var(--border);
 }
 
+/* In Properties the strip sits inside the padded control stack. */
+.control-stack > .layers-props {
+  padding: 0;
+  border-bottom: 0;
+}
+
+.layer-name-input {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
 .layers-props.is-disabled {
   opacity: 0.55;
 }
