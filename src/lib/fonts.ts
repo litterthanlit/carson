@@ -222,8 +222,8 @@ export async function ensureLibraryFonts(families: Iterable<string>) {
 }
 
 /**
- * Font files the designer uploaded this session, by family. Uploads live only in
- * memory (they are not in IndexedDB), so this is what a poster file embeds.
+ * Font files installed this session from an upload, a poster file or the font
+ * store (`fontStore.ts`, which keeps them across reloads), by family.
  */
 export type UploadedFont = { family: string; fileName: string; mimeType: string; bytes: Uint8Array<ArrayBuffer> }
 
