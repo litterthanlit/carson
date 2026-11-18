@@ -1723,7 +1723,7 @@ input[type='color'] {
 
 .inspector-tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -4027,12 +4027,70 @@ label:has(> input[type='radio']) {
    Photoshop anatomy, quieter chrome: blend + opacity strip on top, a dense
    single-line list (eye · thumb · name · lock), and an icon footer pinned
    to the bottom of the panel. */
-.layers-section {
+/* Docked under the tabbed inspector: the two regions split ~60/40 and scroll on their own. */
+.inspector-column .inspector {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 40px - 34px);
+  overflow: hidden;
+}
+
+.inspector-tabs {
+  flex: none;
+}
+
+.inspector-scroll {
+  flex: 3 1 0;
+  min-height: 120px;
+  overflow: auto;
+}
+
+.layers-dock {
+  flex: 2 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   padding: 0;
-  border-bottom: 0;
+  border-top: 1px solid var(--border-strong);
+  background: var(--panel);
+}
+
+.layers-dock.is-collapsed {
+  flex: none;
+}
+
+.layers-dock-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.layers-dock-body[hidden] {
+  display: none;
+}
+
+.layers-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.layers-toggle h2 {
+  margin: 0;
+  cursor: pointer;
+}
+
+.layers-toggle-caret {
+  transition: transform 120ms ease;
+}
+
+.layers-toggle[aria-expanded='false'] .layers-toggle-caret {
+  transform: rotate(-90deg);
 }
 
 .layers-header {
@@ -4099,6 +4157,7 @@ label:has(> input[type='radio']) {
 
 .layer-list {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 4px 0;
@@ -4687,4 +4746,19 @@ input[type='checkbox']:disabled {
   height: 1px;
   margin: 4px 2px;
   background: var(--border);
+}
+
+@media (max-width: 920px) {
+  .inspector-column .inspector {
+    display: block;
+    overflow: visible;
+  }
+
+  .inspector-scroll {
+    overflow: visible;
+  }
+
+  .layers-dock {
+    max-height: 420px;
+  }
 }
