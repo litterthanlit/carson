@@ -12,6 +12,8 @@ import {
   Point,
   Polygon,
   Rect,
+  StaticCanvas,
+  cache as fabricCache,
   Textbox,
   Group as FabricGroup,
   filters,
@@ -41,6 +43,14 @@ import { StrokeSession, bumpPaintVersion, createPaintLayer, isPaintLayer, poster
 import { storePixels } from './lib/pixelStore'
 import { WarpOverlay } from './components/WarpOverlay'
 import { WarpBar } from './components/WarpBar'
+import { CropBar } from './components/CropBar'
+import { CropOverlay } from './components/CropOverlay'
+import { PhotoControls } from './components/PhotoControls'
+import { usePhotoTools } from './hooks/usePhotoTools'
+import { effectiveResolution, resolutionUnits, type EffectiveResolution } from './lib/imageResolution'
+import { createResolutionStore } from './lib/resolutionStore'
+import { cropBlocker, isPhotoLayer, measurePhoto, readCrop, replaceBlocker, sourceSize } from './lib/photoLayer'
+import { isFullCrop, type CropRect } from './lib/cropGeometry'
 import { CanvasContextMenu, type ContextMenuItem } from './components/CanvasContextMenu'
 import { MESH_SIZE, identityDistort, identityMesh, isIdentityWarp, warpPoint, type Warp } from './lib/warp'
 import { readWarp } from './lib/warpRender'
@@ -107,7 +117,28 @@ import {
 } from './lib/press'
 import { renderInkMap, type InkMapOverlay } from './lib/inkMap'
 import { followSourceLive, isCompanionPoseStale, POSE_FOLLOWING_TREATMENTS } from './lib/companionFollow'
-import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
+import {
+  collectFontFamilies,
+  ensureLibraryFonts,
+  fontsMissingFromSession,
+  installUploadedFont,
+  loadGoogleFont,
+  markLibraryLoaded,
+  type UploadedFont,
+} from './lib/fonts'
+import { fontForFile, persistFont, restoreStoredFonts, uploadFontFile } from './lib/fontStore'
+import {
+  PROJECT_FILE_EXTENSION,
+  PROJECT_FILE_MIME,
+  base64ToBytes,
+  bytesToBase64,
+  parseProjectFile,
+  projectFileName,
+  serializeProjectFile,
+  type EmbeddedFont,
+  type ProjectFile,
+} from './lib/projectFile'
+import { chooseSaveTarget } from './lib/saveFile'
 import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
 import { alignObjects, buildLayoutGrid, clampGridOverlay, distributeObjects, gridTensionScale, layoutSnapLines, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
@@ -115,6 +146,7 @@ import { PLATE_CHANNELS, PLATE_LABELS, plateChannel, plateRasterScale, plateToDa
 import {
   ACCENTS,
   BLEND_MODES,
+  FONT_STACKS,
   HISTORY_PROPS,
   ONBOARDING_KEY,
   ZOOM_LEVELS,
@@ -240,7 +272,7 @@ import { InstrumentsPalette } from './components/InstrumentsPalette'
 import { LiveSelectionHud } from './components/LiveSelectionHud'
 import { ToolRail } from './components/ToolRail'
 import { hasUnsavedWork, type ReplaceReason } from './lib/newPoster'
-import { saveAsNameError, uniqueCopyName } from './lib/fileIdentity'
+import { saveAsNameError, uniqueCopyName, uniqueImportName } from './lib/fileIdentity'
 import { HomeScreen } from './components/HomeScreen'
 import { NewPosterDialog } from './components/NewPosterDialog'
 import { OpenPosterDialog } from './components/OpenPosterDialog'
@@ -272,6 +304,7 @@ import {
   flattenLayerTree,
   isLayerGroup,
   topLevelLayer,
+  walkObjectTree,
 } from './lib/layerGroups'
 import {
   applySlotOverrides,
@@ -359,7 +392,7 @@ type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 type EditorIntent =
   | { kind: 'seed'; walkthrough?: boolean }
   | { kind: 'blank'; preset: PosterPreset; image?: File }
-  | { kind: 'project'; project: StoredProject }
+  | { kind: 'project'; project: StoredProject; status?: string }
   | { kind: 'autosave'; project: StoredProject }
 
 type EditorScreen = 'home' | 'editor'
@@ -538,6 +571,9 @@ function App() {
   const [trailCollapsed, setTrailCollapsed] = useState(false)
   const [compsGalleryOpen, setCompsGalleryOpen] = useState(false)
   const fontInputRef = useRef<HTMLInputElement | null>(null)
+  const projectFileInputRef = useRef<HTMLInputElement | null>(null)
+  /** Why the last "Open from file" failed, shown on Home and in the Open poster dialog. */
+  const [projectFileError, setProjectFileError] = useState<string | null>(null)
   const commitHistoryRef = useRef<(message: string) => void>(() => {})
   const commitTreatmentHistoryRef = useRef<
     (objectId: string, label: string, before: string, after: string) => void
@@ -750,6 +786,96 @@ function App() {
   penStrokeColorRef.current = penStrokeColor
   penStrokeWidthRef.current = penStrokeWidth
 
+  // Effective resolution of image layers, outside React state so scaling can update it every frame.
+  const [resolutionStore] = useState(createResolutionStore)
+  const resolutionUnitsRef = useRef(resolutionUnits(poster, printDpi))
+  resolutionUnitsRef.current = resolutionUnits(poster, printDpi)
+
+  function photoResolution(object: FabricObject, crop?: CropRect): EffectiveResolution | null {
+    if (!isPhotoLayer(object)) return null
+    // Mid-crop the layer shows its whole image; what counts is the frame.
+    const session = cropSessionRef.current
+    const shown = crop ?? (session?.image === object ? session.rect : undefined)
+    return effectiveResolution({ ...measurePhoto(object, shown), units: resolutionUnitsRef.current })
+  }
+
+  function measureResolution(object: FabricObject, crop?: CropRect) {
+    const id = String(readObjectProp(object, 'id') ?? '')
+    if (id) resolutionStore.set(id, photoResolution(object, crop))
+  }
+  const measureResolutionRef = useRef(measureResolution)
+  measureResolutionRef.current = measureResolution
+
+  function measureAllResolutions() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const entries: [string, EffectiveResolution][] = []
+    walkObjectTree(canvas.getObjects(), (object) => {
+      const id = String(readObjectProp(object, 'id') ?? '')
+      const resolution = id ? photoResolution(object) : null
+      if (resolution) entries.push([id, resolution])
+    })
+    resolutionStore.replaceAll(entries)
+  }
+
+  /** A photo's crop or pixels changed: its effects re-render from the new source. */
+  function afterPhotoChange(image: FabricImage) {
+    invalidateLayerThumbnail(String(readObjectProp(image, 'id') ?? ''))
+    measureResolution(image)
+    // Only a layer with effects: re-rendering an empty stack resets the layer's opacity.
+    if (readTreatments(image).length) void refreshTreatmentStack(image)
+    canvasRef.current?.requestRenderAll()
+    syncSelected()
+    scheduleSyncLayers()
+  }
+
+  const replaceInputRef = useRef<HTMLInputElement | null>(null)
+  const replaceTargetRef = useRef<string | null>(null)
+  const photoTools = usePhotoTools({
+    canvasRef,
+    activeObject: () => activeObject(),
+    findObjectById: (id) => findObjectById(id),
+    setStatus,
+    commitObjectPatch: (id, label, before, after) => commitObjectPatchHistoryRef.current(id, label, before, after),
+    commitHistory,
+    afterPhotoChange: (image) => afterPhotoChange(image),
+    restoreCanvasSelection: () => restoreCanvasSelectionRef.current(),
+    onCropPreview: (image, crop) => measureResolution(image, crop),
+    persistAsset: (file) => persistAssetFromFile(file),
+  })
+  const { cropSession, cropSessionRef } = photoTools
+  const photoToolsRef = useRef(photoTools)
+  photoToolsRef.current = photoTools
+
+  /** Pick a picture to swap into the selected image layer. */
+  function chooseReplacementImage() {
+    const object = activeObject()
+    if (!isPhotoLayer(object)) {
+      setStatus('Select one image layer to replace its picture')
+      return
+    }
+    const blocked = replaceBlocker(object)
+    if (blocked) {
+      setStatus(blocked)
+      return
+    }
+    replaceTargetRef.current = String(readObjectProp(object, 'id') ?? '')
+    // A task later, still inside the gesture's activation (as Open from file does).
+    window.setTimeout(() => replaceInputRef.current?.click(), 0)
+  }
+
+  // A crop belongs to its layer: selecting something else cancels it.
+  useEffect(() => {
+    const session = cropSessionRef.current
+    if (session && selected?.id !== session.objectId) photoTools.finishCrop(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id])
+
+  useEffect(() => {
+    measureAllResolutions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poster, printDpi])
+
   const { registerCanvasEvents } = useCanvasEvents({
     guidesRef,
     displayScaleRef,
@@ -843,6 +969,10 @@ function App() {
 
   useEffect(() => {
     markLibraryLoaded()
+    void restoreStoredFonts().then(({ families, failed }) => {
+      if (families.length) setCustomFonts((current) => [...new Set([...current, ...families])])
+      if (failed.length) setStatus(`Couldn’t reinstall the uploaded font ${failed.map((family) => `“${family}”`).join(', ')}`)
+    })
     void initializeStorage()
     void refreshAssets()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -896,15 +1026,34 @@ function App() {
     })
     canvasRef.current = canvas
     registerCanvasEvents(canvas)
+    // Image resolution follows a scale live, for the Layers panel's low-resolution mark.
+    const remeasure = (target: FabricObject | undefined) => {
+      if (!target) return
+      for (const object of target.type === 'activeselection' ? (target as ActiveSelection).getObjects() : [target]) {
+        measureResolutionRef.current(object)
+      }
+    }
+    canvas.on('object:scaling', (event) => remeasure(event.target))
+    canvas.on('object:modified', (event) => remeasure(event.target))
+    // Double-click a photo with the Move tool to crop it.
+    canvas.on('mouse:dblclick', (event) => {
+      if (editorToolRef.current !== 'move' || !isPhotoLayer(event.target)) return
+      photoToolsRef.current.startCrop(event.target)
+    })
     detailOverlayRef.current = installDetailOverlay(canvas, visibleDetailViewport)
 
     const intent = editorIntentRef.current ?? { kind: 'seed' as const }
     let cancelled = false
     void (async () => {
       try {
+        // Stored uploaded fonts go in before anything on this canvas is measured.
+        await restoreStoredFonts()
         if (intent.kind === 'project' || intent.kind === 'autosave') {
           if (cancelled) return
-          await loadProject(intent.project, { keepId: intent.kind === 'project' })
+          await loadProject(intent.project, {
+            keepId: intent.kind === 'project',
+            status: intent.kind === 'project' ? intent.status : undefined,
+          })
           markSavedClean(true)
           return
         }
@@ -939,6 +1088,7 @@ function App() {
 
     return () => {
       cancelled = true
+      if (photoToolsRef.current.cropSessionRef.current) photoToolsRef.current.finishCrop(false)
       detailOverlayRef.current?.dispose()
       detailOverlayRef.current = null
       canvas.dispose()
@@ -1230,6 +1380,12 @@ function App() {
           }
         }
         event.preventDefault()
+        return
+      }
+
+      // A crop owns the keyboard until it is applied or cancelled.
+      if (inEditor && photoToolsRef.current.cropSessionRef.current) {
+        photoToolsRef.current.handleCropKey(event, typing)
         return
       }
 
@@ -1679,6 +1835,7 @@ function App() {
         parentId: row.parentId,
       })),
     )
+    measureAllResolutions()
   }
 
   function syncSelected() {
@@ -2066,6 +2223,8 @@ function App() {
       item('bring-front', 'Bring to front'),
       item('send-back', 'Send to back'),
     ]
+    // Unavailable crops stay clickable: running one says why in the status line.
+    if (isPhotoLayer(activeObject())) items.push({ separator: true }, item('crop-image', 'Crop'), item('replace-image', 'Replace image…'))
     if (canGroupLayers) items.push({ separator: true }, item('group-layers', 'Group'))
     if (canUngroupLayers) items.push({ separator: true }, item('ungroup-layers', 'Ungroup'))
     items.push({ separator: true }, item('delete-layer', 'Delete'))
@@ -3655,6 +3814,7 @@ function App() {
 
   function openOpenPosterDialog() {
     setCommandOpen(false)
+    setProjectFileError(null)
     setNewDialogOpen(false)
     setSaveAsOpen(false)
     setOpenDialogOpen(true)
@@ -3864,6 +4024,11 @@ function App() {
   }
 
   async function handleUserUndo() {
+    // Mid-crop, Undo backs out of the crop rather than undoing what came before it.
+    if (cropSessionRef.current) {
+      photoTools.finishCrop(false)
+      return
+    }
     clearBlendPreview({ render: false })
     await undoAsync()
     noteWalkthrough('undo')
@@ -5329,23 +5494,27 @@ function App() {
     commitHistory(`Applied ${style} preset`)
   }
 
+  /** The poster as it is on screen now, in the shape a save stores. */
+  async function snapshotCurrentPoster(canvas: Canvas, name: string): Promise<Omit<StoredProject, 'id'>> {
+    const now = new Date().toISOString()
+    const thumbnail = await captureOpenPosterThumbnail()
+    await preparePaintSources(canvas.getObjects() as never)
+    return {
+      name,
+      savedAt: now,
+      lastUsedAt: now,
+      thumbnail,
+      preset: poster,
+      canvas: serializeCanvasForSave(),
+      document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
+    }
+  }
+
   async function persistCurrentPoster(id: string, name: string): Promise<boolean> {
     const canvas = canvasRef.current
     if (!canvas) return false
     try {
-      const now = new Date().toISOString()
-      const thumbnail = await captureOpenPosterThumbnail()
-      await preparePaintSources(canvas.getObjects() as never)
-      await persistProject({
-        id,
-        name,
-        savedAt: now,
-        lastUsedAt: now,
-        thumbnail,
-        preset: poster,
-        canvas: serializeCanvasForSave(),
-        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
-      })
+      await persistProject({ ...(await snapshotCurrentPoster(canvas, name)), id })
       return true
     } catch {
       setStatus('Save failed — storage may be full or unavailable')
@@ -5426,7 +5595,148 @@ function App() {
     }
   }
 
-  async function loadProject(project: StoredProject, options: { keepId: boolean } = { keepId: true }) {
+  /**
+   * Download the poster as it is on screen — unsaved edits included — as one
+   * `.carson` file with the uploaded fonts it sets in. The open stored project is unchanged.
+   */
+  async function saveProjectFileAction() {
+    const canvas = canvasRef.current
+    if (screenRef.current !== 'editor' || !canvas) return
+    const name = projectName.trim() || 'Untitled poster'
+    const fileName = projectFileName(name)
+    try {
+      const target = await chooseSaveTarget(fileName, {
+        description: 'Carson poster',
+        accept: { [PROJECT_FILE_MIME]: [PROJECT_FILE_EXTENSION] },
+      })
+      if (!target) {
+        setStatus('Save to file cancelled')
+        return
+      }
+      setStatus(`Saving “${fileName}”…`)
+      const project = await snapshotCurrentPoster(canvas, name)
+      const families = collectFontFamilies([project.canvas, project.document])
+      const fonts: EmbeddedFont[] = []
+      for (const family of families) {
+        const font = await fontForFile(family)
+        if (font) fonts.push({ family, fileName: font.fileName, mimeType: font.mimeType, data: bytesToBase64(font.bytes) })
+      }
+      const text = serializeProjectFile({ project, fonts, app: 'Carson' })
+      await target.write(new Blob([text], { type: PROJECT_FILE_MIME }))
+      const embedded = new Set(fonts.map((font) => font.family))
+      const missing = fontsMissingFromSession(families, FONT_STACKS).filter((family) => !embedded.has(family))
+      setStatus(
+        missing.length
+          ? `Saved “${fileName}”, but ${missing.map((family) => `“${family}”`).join(', ')} isn’t in it: upload the font again and save to file once more to carry it along`
+          : `Saved “${fileName}” to your computer`,
+      )
+    } catch {
+      setStatus('Couldn’t save the poster file')
+    }
+  }
+
+  function chooseProjectFile() {
+    setProjectFileError(null)
+    // A task later, still inside the gesture's activation window: opened straight from an Enter
+    // keydown on a File menu item (which closes the menu), Chromium never shows the picker.
+    window.setTimeout(() => projectFileInputRef.current?.click(), 0)
+  }
+
+  function reportProjectFileError(message: string) {
+    setProjectFileError(message)
+    setStatus(message)
+  }
+
+  /** Would this canvas JSON revive? Checked on a scratch canvas so a bad file never replaces the open poster. */
+  async function canvasJsonRevives(json: Record<string, unknown>) {
+    const probe = new StaticCanvas(document.createElement('canvas'), { renderOnAddRemove: false })
+    try {
+      await probe.loadFromJSON(json)
+      return true
+    } catch {
+      return false
+    } finally {
+      void probe.dispose()
+      // The probe measured its text before library web fonts load; don't let the real load reuse those widths.
+      for (const family of collectFontFamilies(json)) fabricCache.clearFontCache(family)
+    }
+  }
+
+  /**
+   * Open a `.carson` file: check it (installing its fonts, then test-reviving its
+   * canvas), ask about unsaved work exactly as opening a stored poster does, store
+   * it as a new project, open it.
+   */
+  async function openProjectFile(file: File) {
+    setProjectFileError(null)
+    setStatus(`Opening ${file.name}…`)
+    let parsed: ReturnType<typeof parseProjectFile>
+    try {
+      parsed = parseProjectFile(await file.arrayBuffer())
+    } catch {
+      reportProjectFileError('Couldn’t read that file.')
+      return
+    }
+    if (!parsed.ok) {
+      reportProjectFileError(parsed.error.message)
+      return
+    }
+    const contents: ProjectFile = parsed.file
+    // Fonts first, so nothing measures the poster's text in a stand-in face: the stored
+    // ones (which the file's own fonts then override), then the file's.
+    await restoreStoredFonts()
+    const installedFonts: UploadedFont[] = []
+    const failedFonts: string[] = []
+    for (const embedded of contents.fonts) {
+      const font = { family: embedded.family, fileName: embedded.fileName, mimeType: embedded.mimeType, bytes: base64ToBytes(embedded.data) }
+      try {
+        await installUploadedFont(font)
+        fabricCache.clearFontCache(font.family)
+        installedFonts.push(font)
+      } catch {
+        failedFonts.push(font.family)
+      }
+    }
+    if (!(await canvasJsonRevives(contents.project.canvas))) {
+      reportProjectFileError('This poster file is damaged or incomplete, so it can’t be opened.')
+      return
+    }
+    const allowed = await confirmIfDirty('open')
+    if (!allowed) {
+      setStatus(`Didn’t open ${file.name}`)
+      return
+    }
+    let project: StoredProject
+    try {
+      const existing = await listProjects()
+      const now = new Date().toISOString()
+      project = {
+        ...contents.project,
+        id: newProjectId(),
+        name: uniqueImportName(contents.project.name, existing.map((item) => item.name)),
+        lastUsedAt: now,
+      }
+      await persistProject(project)
+      setSavedProjects(await listProjects())
+    } catch {
+      reportProjectFileError('Couldn’t keep this poster in the browser. Storage may be full or unavailable.')
+      return
+    }
+    // Keep the file's fonts too, so the poster still sets right after a reload.
+    let fontNotice: string | null = null
+    for (const font of installedFonts) fontNotice = (await persistFont(font)) ?? fontNotice
+    setCustomFonts((current) => [...new Set([...current, ...installedFonts.map((font) => font.family)])])
+    const opened = `Opened “${project.name}” from ${file.name}${fontNotice ? `. ${fontNotice}` : ''}`
+    applyEditorIntent({
+      kind: 'project',
+      project,
+      status: failedFonts.length
+        ? `${opened}. The font ${failedFonts.map((family) => `“${family}”`).join(', ')} in the file couldn’t be installed.`
+        : opened,
+    })
+  }
+
+  async function loadProject(project: StoredProject, options: { keepId: boolean; status?: string } = { keepId: true }) {
     const canvas = canvasRef.current
     if (!canvas) return
     posterInitRef.current = true
@@ -5458,7 +5768,7 @@ function App() {
     captureStyleBaseline()
     syncSelected()
     syncLayers()
-    setStatus(`Loaded ${project.name}`)
+    setStatus(options.status ?? `Loaded ${project.name}`)
     markSavedClean(true)
     if (options.keepId) {
       try {
@@ -5709,6 +6019,15 @@ function App() {
   }
 
   const selectedIsImage = selected?.kind === 'image' || selected?.kind === 'fragment'
+  const activePhoto = (() => {
+    const object = selected ? activeObject() : null
+    if (!isPhotoLayer(object)) return null
+    return {
+      id: String(readObjectProp(object, 'id') ?? ''),
+      cropped: !cropSession && !isFullCrop(readCrop(object), sourceSize(object)),
+      cropBlocked: cropBlocker(object),
+    }
+  })()
   const selectedIsText = selected?.kind === 'text'
 
   const selectedObject = selected ? findObjectById(selected.id) : null
@@ -5845,6 +6164,24 @@ function App() {
   const commands: CommandAction[] = [
     { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
     { id: 'open-poster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
+    {
+      id: 'save-project-file',
+      label: 'Save to file…',
+      keywords: ['save', 'file', 'export', 'backup', 'download', 'disk', 'carson', 'share'],
+      scope: 'canvas',
+      disabled: screen !== 'editor',
+      run: () => saveProjectFileAction(),
+    },
+    {
+      id: 'open-project-file',
+      label: 'Open from file…',
+      keywords: ['open', 'file', 'import', 'load', 'backup', 'disk', 'carson', 'upload'],
+      scope: 'any',
+      run: () => {
+        setCommandOpen(false)
+        chooseProjectFile()
+      },
+    },
     ...(['dropShadow', 'outerGlow', 'outline'] as const).map((kind) => {
       const label = kind === 'dropShadow' ? 'Drop shadow' : kind === 'outerGlow' ? 'Outer glow' : 'Outline'
       const on = Boolean(selected?.layerStyle?.[kind])
@@ -6062,6 +6399,37 @@ function App() {
       disabled: !selected,
       run: () => tearSelectedEdges(),
     },
+    {
+      id: 'crop-image',
+      label: 'Crop image',
+      keywords: ['crop', 'trim', 'reframe', 'photo', 'image', 'picture'],
+      scope: 'selection',
+      // Enabled for any selection, so the palette can say why a group or other layer can't be cropped.
+      disabled: !selected || Boolean(cropSession),
+      // C only when one image layer (or a group holding one, to say why not) is selected and no crop is open.
+      when: () => {
+        const object = activeObject()
+        if (cropSessionRef.current || !object) return false
+        return isPhotoLayer(object) || (isLayerGroup(object) && object.getObjects().some((child) => isPhotoLayer(child)))
+      },
+      run: () => photoTools.startCrop(null, { focusBar: true }),
+    },
+    {
+      id: 'reset-image-crop',
+      label: 'Reset crop',
+      keywords: ['crop', 'uncrop', 'reset', 'whole', 'photo', 'image'],
+      scope: 'selection',
+      disabled: !activePhoto?.cropped || Boolean(cropSession),
+      run: () => photoTools.resetCrop(),
+    },
+    {
+      id: 'replace-image',
+      label: 'Replace image…',
+      keywords: ['replace', 'swap', 'relink', 'photo', 'image', 'picture'],
+      scope: 'selection',
+      disabled: !activePhoto || Boolean(cropSession),
+      run: () => chooseReplacementImage(),
+    },
     { id: 'paint-mask', label: 'Paint layer mask', keywords: ['mask', 'brush', 'eraser', 'alpha'], scope: 'selection', disabled: !selected, run: () => paintBrushMask() },
     { id: 'invert-mask', label: 'Invert layer mask', keywords: ['mask', 'invert'], scope: 'selection', disabled: !selected, run: () => invertSelectedMask() },
     { id: 'clear-mask', label: 'Remove layer mask', keywords: ['mask', 'clear', 'remove'], scope: 'selection', disabled: !selected, run: () => clearSelectedMask() },
@@ -6217,6 +6585,37 @@ function App() {
 
   return (
     <main className={screen === 'home' ? 'home-root' : 'editor-shell'} data-tour={walkthroughStep ?? undefined}>
+      {/* Opened through the "Open from file…" buttons and command, which are the keyboard route to it. */}
+      <input
+        ref={projectFileInputRef}
+        className="visually-hidden"
+        type="file"
+        accept={`${PROJECT_FILE_EXTENSION},${PROJECT_FILE_MIME}`}
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid="project-file-input"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          if (file) void openProjectFile(file)
+        }}
+      />
+      {/* Opened by Replace image… (Properties, the layer menu and the command). */}
+      <input
+        ref={replaceInputRef}
+        className="visually-hidden"
+        type="file"
+        accept="image/*"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid="replace-image-input"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          const targetId = replaceTargetRef.current
+          if (file && targetId) void photoTools.replaceImage(file, targetId)
+        }}
+      />
       <Suspense fallback={null}>
         {contextMenu ? (
           <CanvasContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenuItems()} onClose={closeContextMenu} />
@@ -6246,7 +6645,12 @@ function App() {
             storageError={storageError}
             projects={savedProjects}
             onOpen={(project) => void requestOpenProject(project)}
-            onClose={() => setOpenDialogOpen(false)}
+            onOpenFromFile={chooseProjectFile}
+            fileError={projectFileError}
+            onClose={() => {
+              setProjectFileError(null)
+              setOpenDialogOpen(false)
+            }}
           />
         ) : null}
         {saveAsOpen ? (
@@ -6339,6 +6743,9 @@ function App() {
           onStartPreset={(presetId) => void requestNewPoster(applyPosterPreset(presetId))}
           onStartFromImage={(file) => void startFromImage(file)}
           onOpenPoster={openOpenPosterDialog}
+          onOpenFromFile={chooseProjectFile}
+          onOpenProjectFile={(file) => void openProjectFile(file)}
+          fileError={projectFileError}
         />
       ) : (
         <>
@@ -6357,6 +6764,7 @@ function App() {
           void handleUserUndo()
         }}
         onRedo={() => {
+          if (cropSessionRef.current) return
           clearBlendPreview({ render: false })
           redo()
         }}
@@ -6364,6 +6772,8 @@ function App() {
         isDirty={isDirty}
         onDuplicatePoster={() => void duplicatePosterAction()}
         onSaveAs={openSaveAsDialog}
+        onSaveToFile={() => void saveProjectFileAction()}
+        onOpenFromFile={chooseProjectFile}
         onOpenCommands={handleOpenCommands}
         onScramble={() => void scrambleCanvas()}
         scrambleDisabled={scrambleSourceObjects().length === 0}
@@ -6513,7 +6923,14 @@ function App() {
             />
           }
           toolBar={
-            warpEdit ? (
+            cropSession ? (
+              <CropBar
+                session={cropSession}
+                autoFocus={photoTools.cropBarFocus}
+                onApply={() => photoTools.finishCrop(true)}
+                onCancel={() => photoTools.finishCrop(false)}
+              />
+            ) : warpEdit ? (
               <WarpBar
                 warp={warpEdit.warp}
                 onMode={(type) => updateWarp(convertWarp(warpEdit.warp, type))}
@@ -6548,6 +6965,9 @@ function App() {
           }
           hud={
             <>
+            {cropSession ? (
+              <CropOverlay session={cropSession} posterWidth={poster.width} posterHeight={poster.height} displayScale={displayScale} />
+            ) : null}
             {warpEdit
               ? (() => {
                   const object = findObjectById(warpEdit.objectId)
@@ -6600,7 +7020,7 @@ function App() {
               onLayerViaCopy={() => void liftSelectionToLayer(false)}
               onLayerViaCut={() => void liftSelectionToLayer(true)}
             />
-            {selected && editorTool !== 'select' && editorTool !== 'brush' && editorTool !== 'frame' && !warpEdit ? (
+            {selected && editorTool !== 'select' && editorTool !== 'brush' && editorTool !== 'frame' && !warpEdit && !cropSession ? (
               <LiveSelectionHud
                 canvasRef={canvasRef}
                 selected={selected}
@@ -6634,6 +7054,7 @@ function App() {
             if (asset) void insertAsset(asset)
           }}
           onComponentDrop={(componentId) => void placeComponentInstance(componentId)}
+          onProjectFileDrop={(file) => void openProjectFile(file)}
           trailFrames={trailFrames}
           trailOpIds={trailOpIds}
           trailCursor={trailCursor}
@@ -6739,6 +7160,21 @@ function App() {
           onZoomToLayer={zoomToLayer}
           selectedIsText={selectedIsText}
           selectedIsImage={selectedIsImage}
+          resolutionStore={resolutionStore}
+          photoControls={
+            activePhoto ? (
+              <PhotoControls
+                layerId={activePhoto.id}
+                resolutionStore={resolutionStore}
+                cropped={activePhoto.cropped}
+                cropBlocked={activePhoto.cropBlocked}
+                cropping={Boolean(cropSession)}
+                onCrop={() => photoTools.startCrop(null, { focusBar: true })}
+                onResetCrop={() => photoTools.resetCrop()}
+                onReplace={chooseReplacementImage}
+              />
+            ) : null
+          }
           selectedIsPath={selectedIsPath}
           canBooleanUnion={canBooleanUnion}
           canBooleanSubtract={canBooleanSubtract}
@@ -6753,11 +7189,15 @@ function App() {
           customFonts={customFonts}
           fontInputRef={fontInputRef}
           onFontFileChange={(file) => {
-            void loadFontFile(file).then((family) => {
-              setCustomFonts((current) => [...new Set([...current, family])])
-              updateActive({ fontFamily: family })
-              finalizeActive(`Loaded font ${family}`)
-            })
+            void uploadFontFile(file).then(
+              ({ family, notice }) => {
+                setCustomFonts((current) => [...new Set([...current, family])])
+                updateActive({ fontFamily: family })
+                finalizeActive(`Loaded font ${family}`)
+                setStatus(notice ? `Loaded font ${family}. ${notice}` : `Loaded font ${family}`)
+              },
+              () => setStatus(`Couldn’t load ${file.name} as a font`),
+            )
           }}
           fontStretch={fontStretch}
           onFontStretchChange={setFontStretch}

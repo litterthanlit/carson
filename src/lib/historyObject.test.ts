@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { Path, Rect } from 'fabric'
+import { FabricImage, Path, Rect } from 'fabric'
 import { applyObjectPatch, captureObjectPatch, capturePathEditPatch } from './historyObject'
 import { readLayerMask, writeLayerMask } from './layerMask'
 import { FrameHandles } from './frameHandles'
 
 describe('historyObject', () => {
+  it('carries a photo’s crop, so one undo step restores it', () => {
+    // A stand-in element: the patch only reads the image's size and crop.
+    const element = { width: 400, height: 300 } as HTMLCanvasElement
+    const image = new FabricImage(element, { left: 5, top: 6 })
+    const before = captureObjectPatch(image)
+    image.set({ cropX: 50, cropY: 40, width: 200, height: 100, left: 55, top: 46 })
+    const after = captureObjectPatch(image)
+    expect(JSON.parse(after).crop).toEqual({ x: 50, y: 40, width: 200, height: 100 })
+    applyObjectPatch(image, before)
+    expect([image.cropX, image.cropY, image.width, image.height, image.left, image.top]).toEqual([0, 0, 400, 300, 5, 6])
+    applyObjectPatch(image, after)
+    expect([image.cropX, image.cropY, image.width, image.height]).toEqual([50, 40, 200, 100])
+  })
+
   it('round-trips object patches', () => {
     const object = new Rect({
       left: 10,

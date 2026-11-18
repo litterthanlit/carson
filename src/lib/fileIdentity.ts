@@ -35,3 +35,13 @@ export function saveAsNameError(name: string, existingNames: readonly string[]):
   }
   return undefined
 }
+
+/** The name a poster opened from a file is stored under: its own, or numbered so nothing is overwritten. */
+export function uniqueImportName(baseName: string, existingNames: readonly string[]): string {
+  const names = new Set(existingNames)
+  const base = baseName.trim() || 'Untitled poster'
+  if (!names.has(base)) return base
+  let suffix = 2
+  while (names.has(`${base} (${suffix})`)) suffix += 1
+  return `${base} (${suffix})`
+}

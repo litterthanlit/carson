@@ -1,5 +1,6 @@
-import { memo, useEffect, useRef, useState, type ComponentType } from 'react'
+import { memo, useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react'
 import {
+  AlertTriangle,
   Brush,
   ChevronRight,
   Eye,
@@ -15,6 +16,7 @@ import {
   type LucideProps,
 } from 'lucide-react'
 import { effectiveCollapsedIds, groupIdsWithChildren, visibleLayerRows } from '../lib/layerTreeView'
+import type { ResolutionStore } from '../lib/resolutionStore'
 
 export type LayerRow = {
   id: string
@@ -43,9 +45,14 @@ type LayersPanelProps = {
   onZoomToLayer: (id: string) => void
   collapsedIds?: ReadonlySet<string>
   onToggleCollapsed?: (id: string) => void
+  /** Image layers' effective resolution; low ones get a warning icon, updated live while they scale. */
+  resolutionStore?: ResolutionStore
 }
 
 const NO_COLLAPSED: ReadonlySet<string> = new Set()
+const NO_LOW_RES: ReadonlySet<string> = new Set()
+const subscribeNothing = () => () => {}
+const noLowRes = () => NO_LOW_RES
 
 const KIND_ICONS: Record<string, ComponentType<LucideProps>> = {
   text: Type,
@@ -75,7 +82,10 @@ export const LayersPanel = memo(function LayersPanel({
   onZoomToLayer,
   collapsedIds = NO_COLLAPSED,
   onToggleCollapsed,
+  resolutionStore,
 }: LayersPanelProps) {
+  // Changes only when a layer crosses the threshold, so scaling doesn't re-render the list each frame.
+  const lowResIds = useSyncExternalStore(resolutionStore?.subscribe ?? subscribeNothing, resolutionStore?.lowIds ?? noLowRes)
   // Paint-to-toggle visibility, like Photoshop: press an eye and drag down the column.
   const [paintVisibility, setPaintVisibilityState] = useState<boolean | null>(null)
   const paintingRef = useRef(false)
@@ -266,6 +276,12 @@ export const LayersPanel = memo(function LayersPanel({
                 <span className="visually-hidden">, {layer.kind}{layer.visible ? '' : ', hidden'}{layer.locked ? ', locked' : ''}</span>
               </button>
             )}
+
+            {lowResIds.has(layer.id) ? (
+              <span className="layer-lowres" role="img" aria-label="Low resolution for its size" title="Low resolution for its size: may look soft. See Properties.">
+                <AlertTriangle size={12} aria-hidden />
+              </span>
+            ) : null}
 
             <button
               type="button"

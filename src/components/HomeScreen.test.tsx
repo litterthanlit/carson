@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HomeScreen } from './HomeScreen'
@@ -141,5 +141,41 @@ describe('HomeScreen start cards', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement
     await user.upload(input, file)
     expect(onStartFromImage).toHaveBeenCalledWith(file)
+  })
+
+  it('opens a poster file from its button or a drop, and says why one failed', async () => {
+    const user = userEvent.setup()
+    const onOpenFromFile = vi.fn()
+    const onOpenProjectFile = vi.fn()
+    const onStartFromImage = vi.fn()
+    render(
+      <HomeScreen
+        loading={false}
+        storageError={false}
+        projects={[]}
+        recovered={undefined}
+        onOpenProject={vi.fn()}
+        onRecoverSession={vi.fn()}
+        onNewPoster={vi.fn()}
+        onStartFromWreck={vi.fn()}
+        onStartFromImage={onStartFromImage}
+        onOpenFromFile={onOpenFromFile}
+        onOpenProjectFile={onOpenProjectFile}
+        fileError="That file isn’t a Carson poster."
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Open from file…' }))
+    expect(onOpenFromFile).toHaveBeenCalledOnce()
+    expect(screen.getByRole('alert').textContent).toBe('That file isn’t a Carson poster.')
+
+    const poster = new File(['{}'], 'Night bus.carson', { type: '' })
+    const photo = new File(['x'], 'photo.png', { type: 'image/png' })
+    const home = screen.getByRole('region', { name: 'Home' })
+    fireEvent.drop(home, { dataTransfer: { types: ['Files'], files: [photo, poster] } })
+    expect(onOpenProjectFile).toHaveBeenCalledWith(poster)
+    expect(onStartFromImage).not.toHaveBeenCalled()
+    fireEvent.drop(home, { dataTransfer: { types: ['Files'], files: [photo] } })
+    expect(onStartFromImage).toHaveBeenCalledWith(photo)
   })
 })

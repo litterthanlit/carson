@@ -221,14 +221,42 @@ export async function ensureLibraryFonts(families: Iterable<string>) {
   await Promise.all([...new Set(families)].filter(isLibraryFont).map((family) => loadGoogleFont(family)))
 }
 
-export async function loadFontFile(file: File): Promise<string> {
-  const family = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ')
-  const url = URL.createObjectURL(file)
-  const face = new FontFace(family, `url(${url})`)
+/**
+ * Font files installed this session from an upload, a poster file or the font
+ * store (`fontStore.ts`, which keeps them across reloads), by family.
+ */
+export type UploadedFont = { family: string; fileName: string; mimeType: string; bytes: Uint8Array<ArrayBuffer> }
+
+const uploadedFonts = new Map<string, UploadedFont>()
+
+export function uploadedFont(family: string): UploadedFont | undefined {
+  return uploadedFonts.get(family)
+}
+
+/** Install font bytes under `family` and remember them for poster files. */
+export async function installUploadedFont(font: UploadedFont): Promise<void> {
+  const face = new FontFace(font.family, font.bytes)
   await face.load()
   document.fonts.add(face)
-  loadedFamilies.add(family)
+  loadedFamilies.add(font.family)
+  uploadedFonts.set(font.family, font)
+}
+
+export async function loadFontFile(file: File): Promise<string> {
+  const family = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ')
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  await installUploadedFont({ family, fileName: file.name, mimeType: file.type, bytes })
   return family
+}
+
+/**
+ * Families a poster sets in that the app cannot load by itself: not in the
+ * library, not a common system face, not uploaded this session.
+ */
+export function fontsMissingFromSession(families: Iterable<string>, systemFonts: readonly string[]): string[] {
+  return [...new Set(families)].filter(
+    (family) => !isLibraryFont(family) && !systemFonts.includes(family) && !uploadedFonts.has(family),
+  )
 }
 
 export function allFontFamilies(systemFonts: string[], customFonts: string[]) {

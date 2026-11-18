@@ -4,7 +4,9 @@ import {
   Command,
   Copy,
   Download,
+  FileDown,
   FilePlus2,
+  FileUp,
   Files,
   FolderOpen,
   House,
@@ -33,6 +35,8 @@ type TopBarProps = {
   isDirty?: boolean
   onDuplicatePoster: () => void
   onSaveAs: () => void
+  onSaveToFile: () => void
+  onOpenFromFile: () => void
   onOpenCommands: () => void
   onScramble: () => void
   scrambleDisabled?: boolean
@@ -186,6 +190,8 @@ export const TopBar = memo(function TopBar({
   isDirty = false,
   onDuplicatePoster,
   onSaveAs,
+  onSaveToFile,
+  onOpenFromFile,
   onOpenCommands,
   onScramble,
   scrambleDisabled,
@@ -197,7 +203,9 @@ export const TopBar = memo(function TopBar({
   const fileItems: FileItem[] = [
     { label: 'New poster', shortcut: '⌘N', keys: 'Meta+N', icon: FilePlus2, run: onNewPoster },
     { label: 'Open poster', shortcut: '⌘O', keys: 'Meta+O', icon: FolderOpen, run: onOpenPoster },
+    { label: 'Open from file…', icon: FileUp, run: onOpenFromFile },
     { label: 'Save as', shortcut: '⇧⌘S', keys: 'Meta+Shift+S', icon: Files, run: onSaveAs },
+    { label: 'Save to file…', icon: FileDown, run: onSaveToFile },
     { label: 'Duplicate poster', icon: Copy, run: onDuplicatePoster },
     { label: 'Home', icon: House, run: onHome },
   ]

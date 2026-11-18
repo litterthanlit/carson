@@ -148,7 +148,16 @@ export function copyMachineSourceSignature(source: FabricObject): string {
     scaleY: source.scaleY ?? 1,
     angle: source.angle ?? 0,
     fill: record.fill ?? '',
+    // A photo's crop and pixels: re-cropping or replacing it must not reuse the old bake.
+    ...(source instanceof FabricImage ? { crop: [source.cropX ?? 0, source.cropY ?? 0], image: imageFingerprint(source) } : {}),
   })
+}
+
+/** Cheap identity for an image's pixels: its source's length and two samples of it. */
+function imageFingerprint(image: FabricImage): string {
+  const src = image.getSrc()
+  const middle = Math.floor(src.length / 2)
+  return `${src.length}:${src.slice(middle, middle + 32)}:${src.slice(-48)}`
 }
 
 export function clearCopyMachineBakeCache() {

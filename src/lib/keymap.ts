@@ -45,6 +45,7 @@ export const DEFAULT_KEYMAP: Keymap = {
   'send-back': [{ code: 'BracketLeft', mod: true, shift: true }],
   'group-layers': [{ key: 'g', mod: true }],
   'ungroup-layers': [{ key: 'g', mod: true, shift: true }],
+  'crop-image': [{ key: 'c' }],
 
   // Tools
   'move-tool': [{ key: 'v' }],
@@ -84,7 +85,7 @@ export const DEFAULT_KEYMAP: Keymap = {
 export const SHORTCUT_SECTIONS: { title: string; ids: string[] }[] = [
   {
     title: 'Tools',
-    ids: ['move-tool', 'text-tool', 'shape-tool', 'frame-tool', 'select-tool', 'brush-tool', 'eraser-tool', 'mask-tool', 'pen-tool', 'effects-palette'],
+    ids: ['move-tool', 'select-tool', 'text-tool', 'shape-tool', 'frame-tool', 'pen-tool', 'brush-tool', 'eraser-tool', 'mask-tool', 'effects-palette'],
   },
   {
     title: 'Edit',
@@ -92,7 +93,7 @@ export const SHORTCUT_SECTIONS: { title: string; ids: string[] }[] = [
   },
   {
     title: 'Layer',
-    ids: ['bring-forward', 'send-backward', 'bring-front', 'send-back', 'group-layers', 'ungroup-layers'],
+    ids: ['bring-forward', 'send-backward', 'bring-front', 'send-back', 'group-layers', 'ungroup-layers', 'crop-image'],
   },
   {
     title: 'Play',

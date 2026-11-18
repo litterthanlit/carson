@@ -39,4 +39,23 @@ describe('OpenPosterDialog', () => {
     render(<OpenPosterDialog open storageError projects={[]} onOpen={vi.fn()} onClose={vi.fn()} />)
     expect(screen.getByRole('alert')).toBeTruthy()
   })
+
+  it('opens a poster file from the dialog and shows why one failed', async () => {
+    const user = userEvent.setup()
+    const onOpenFromFile = vi.fn()
+    render(
+      <OpenPosterDialog
+        open
+        projects={[]}
+        onOpen={vi.fn()}
+        onOpenFromFile={onOpenFromFile}
+        fileError="This poster file is damaged or incomplete, so it can’t be opened."
+        onClose={vi.fn()}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Open from file…' }))
+    expect(onOpenFromFile).toHaveBeenCalledOnce()
+    expect(screen.getByRole('alert').textContent).toMatch(/damaged or incomplete/)
+  })
 })
+

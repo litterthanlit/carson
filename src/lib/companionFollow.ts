@@ -44,7 +44,11 @@ function poseOf(object: FabricObject): Pose {
 
 export function companionPoseStamp(object: FabricObject): string {
   const pose = poseOf(object)
-  return [pose.left.toFixed(2), pose.top.toFixed(2), pose.angle.toFixed(2), pose.scaleX.toFixed(4), pose.scaleY.toFixed(4)].join(',')
+  const stamp = [pose.left.toFixed(2), pose.top.toFixed(2), pose.angle.toFixed(2), pose.scaleX.toFixed(4), pose.scaleY.toFixed(4)]
+  // A photo's crop changes what its companions copy, even when its pose stays (an undone crop, say).
+  const crop = record(object)
+  if (typeof crop.cropX === 'number') stamp.push(`crop:${crop.cropX},${crop.cropY},${object.width},${object.height}`)
+  return stamp.join(',')
 }
 
 export function hasPoseFollowingTreatments(object: FabricObject): boolean {

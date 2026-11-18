@@ -1,10 +1,11 @@
 import { useRef, useState, type DragEvent } from 'react'
-import { FolderOpen, ImagePlus, Plus } from 'lucide-react'
+import { FileUp, FolderOpen, ImagePlus, Plus } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { formatProjectTimestamp, posterAspectRatio } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
 import { ThemeToggle } from './ThemeToggle'
 import { buildCarsonPoster, CARSON_PAPER, type CarsonTextSpec } from '../lib/carsonPoster'
+import { isProjectFileName } from '../lib/projectFile'
 
 export type HomeStartPreset = 'a3' | 'instagram' | 'square'
 
@@ -22,6 +23,12 @@ type HomeScreenProps = {
   /** Start a poster sized to an image, with the image placed full bleed. */
   onStartFromImage?: (file: File) => void
   onOpenPoster?: () => void
+  /** Pick a `.carson` file from the computer. */
+  onOpenFromFile?: () => void
+  /** Open a `.carson` file dropped on Home. */
+  onOpenProjectFile?: (file: File) => void
+  /** Why the last file couldn't be opened. */
+  fileError?: string | null
 }
 
 const START_PRESETS: { id: HomeStartPreset; title: string; meta: string; ratio: string }[] = [
@@ -158,12 +165,16 @@ export function HomeScreen({
   onStartPreset,
   onStartFromImage,
   onOpenPoster,
+  onOpenFromFile,
+  onOpenProjectFile,
+  fileError,
 }: HomeScreenProps) {
   const empty = !loading && !recovered && projects.length === 0
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const dragDepth = useRef(0)
   const [dropActive, setDropActive] = useState(false)
 
+  const acceptsDrops = Boolean(onStartFromImage || onOpenProjectFile)
   const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files')
 
   const handleDrop = (event: DragEvent) => {
@@ -171,7 +182,13 @@ export function HomeScreen({
     event.preventDefault()
     dragDepth.current = 0
     setDropActive(false)
-    const file = Array.from(event.dataTransfer.files).find((item) => item.type.startsWith('image/'))
+    const files = Array.from(event.dataTransfer.files)
+    const posterFile = files.find((item) => isProjectFileName(item.name))
+    if (posterFile && onOpenProjectFile) {
+      onOpenProjectFile(posterFile)
+      return
+    }
+    const file = files.find((item) => item.type.startsWith('image/'))
     if (file) onStartFromImage?.(file)
   }
 
@@ -179,12 +196,12 @@ export function HomeScreen({
     <div
       className="home-shell"
       onDragEnter={(event) => {
-        if (!onStartFromImage || !hasFiles(event)) return
+        if (!acceptsDrops || !hasFiles(event)) return
         dragDepth.current += 1
         setDropActive(true)
       }}
       onDragOver={(event) => {
-        if (onStartFromImage && hasFiles(event)) event.preventDefault()
+        if (acceptsDrops && hasFiles(event)) event.preventDefault()
       }}
       onDragLeave={() => {
         dragDepth.current = Math.max(0, dragDepth.current - 1)
@@ -208,6 +225,12 @@ export function HomeScreen({
               <span className="home-button-label">Open poster</span>
             </button>
           ) : null}
+          {onOpenFromFile ? (
+            <button type="button" className="home-ghost-button" onClick={onOpenFromFile} title="Open a .carson poster file from your computer">
+              <FileUp size={14} aria-hidden />
+              <span className="home-button-label">Open from file…</span>
+            </button>
+          ) : null}
           <button type="button" className="primary-button" onClick={onNewPoster} title="Pick any size (⌘N)">
             <Plus size={14} aria-hidden />
             New poster
@@ -216,6 +239,11 @@ export function HomeScreen({
       </header>
 
       <section className="home-body" aria-label="Home">
+        {fileError ? (
+          <p className="home-status home-file-error" role="alert">
+            {fileError}
+          </p>
+        ) : null}
         <div className="home-hero">
           <h2 className="home-display">Make a mess on&nbsp;purpose.</h2>
           <p className="home-lede">
@@ -350,7 +378,7 @@ export function HomeScreen({
       {dropActive ? (
         <div className="home-drop-overlay" aria-hidden="true">
           <ImagePlus size={28} />
-          <strong>Drop to start a poster from this image</strong>
+          <strong>Drop a photo to start a poster, or a .carson file to open it</strong>
         </div>
       ) : null}
     </div>

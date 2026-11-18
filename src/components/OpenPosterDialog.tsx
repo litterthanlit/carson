@@ -7,6 +7,10 @@ type OpenPosterDialogProps = {
   storageError?: boolean
   projects: StoredProject[]
   onOpen: (project: StoredProject) => void
+  /** Pick a `.carson` file from the computer. */
+  onOpenFromFile?: () => void
+  /** Why the last file couldn't be opened. */
+  fileError?: string | null
   onClose: () => void
 }
 
@@ -16,6 +20,8 @@ export function OpenPosterDialog({
   storageError = false,
   projects,
   onOpen,
+  onOpenFromFile,
+  fileError,
   onClose,
 }: OpenPosterDialogProps) {
   if (!open) return null
@@ -63,7 +69,17 @@ export function OpenPosterDialog({
             ))}
           </ul>
         )}
+        {fileError ? (
+          <p className="hint" role="alert">
+            {fileError}
+          </p>
+        ) : null}
         <div className="button-row">
+          {onOpenFromFile ? (
+            <button type="button" onClick={onOpenFromFile}>
+              Open from file…
+            </button>
+          ) : null}
           <button type="button" onClick={onClose}>
             Cancel
           </button>

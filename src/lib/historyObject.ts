@@ -1,7 +1,7 @@
 /**
  * Lightweight history payloads for object property and z-order edits (Horizon 2.1).
  */
-import type { Path as FabricPath } from 'fabric'
+import { FabricImage, type Path as FabricPath } from 'fabric'
 import type { Canvas, FabricObject } from 'fabric'
 import { applyLayerMask, readLayerMask, writeLayerMask, type LayerMask } from './layerMask'
 import { applyPathData, type PathData } from './pathEditing'
@@ -10,6 +10,7 @@ import { readLayerStyle, writeLayerStyle, type LayerStyle } from './layerStyles'
 import type { Adjustment } from './adjustments'
 import type { Warp } from './warp'
 import { isFrameHandles, type FrameSpec } from './frameHandles'
+import { isPaintLayer } from './paintLayer'
 
 export type ObjectPatch = {
   left: number
@@ -31,6 +32,13 @@ export type ObjectPatch = {
   frame?: FrameSpec
   /** A frame's line color (its fill) — the true color, never a soft-proof preview. */
   frameColor?: string
+  /** A photo's crop: the source pixels it shows (Fabric's cropX, cropY, width, height). */
+  crop?: { x: number; y: number; width: number; height: number }
+}
+
+/** Photos (not paint layers, whose size is the canvas's) carry their crop in a patch. */
+function carriesCrop(object: FabricObject): object is FabricImage {
+  return object instanceof FabricImage && !isPaintLayer(object)
 }
 
 export function captureObjectPatch(object: FabricObject): string {
@@ -56,6 +64,9 @@ export function captureObjectPatch(object: FabricObject): string {
     patch.frame = object.frame
     const color = readObjectProp(object, 'originalFill') ?? object.fill
     if (typeof color === 'string') patch.frameColor = color
+  }
+  if (carriesCrop(object)) {
+    patch.crop = { x: object.cropX ?? 0, y: object.cropY ?? 0, width: object.width ?? 0, height: object.height ?? 0 }
   }
   return JSON.stringify(patch)
 }
@@ -92,6 +103,9 @@ export function applyObjectPatch(object: FabricObject, patchJson: string): void 
     evented: patch.evented,
   } as Partial<FabricObject>)
   if (patch.adjustment) object.set({ adjustment: patch.adjustment } as Partial<FabricObject>)
+  if (patch.crop && carriesCrop(object)) {
+    object.set({ cropX: patch.crop.x, cropY: patch.crop.y, width: patch.crop.width, height: patch.crop.height, dirty: true })
+  }
   if (isFrameHandles(object)) {
     if (patch.frame) object.set({ frame: patch.frame, dirty: true } as Partial<FabricObject>)
     if (typeof patch.frameColor === 'string') {
