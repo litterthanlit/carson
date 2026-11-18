@@ -5534,6 +5534,7 @@ function App() {
    */
   async function openProjectFile(file: File) {
     setProjectFileError(null)
+    setStatus(`Opening ${file.name}…`)
     let parsed: ReturnType<typeof parseProjectFile>
     try {
       parsed = parseProjectFile(await file.arrayBuffer())
@@ -5563,7 +5564,10 @@ function App() {
       return
     }
     const allowed = await confirmIfDirty('open')
-    if (!allowed) return
+    if (!allowed) {
+      setStatus(`Didn’t open ${file.name}`)
+      return
+    }
     let project: StoredProject
     try {
       const existing = await listProjects()
