@@ -114,11 +114,11 @@ import {
   ensureLibraryFonts,
   fontsMissingFromSession,
   installUploadedFont,
-  loadFontFile,
   loadGoogleFont,
   markLibraryLoaded,
-  uploadedFont,
+  type UploadedFont,
 } from './lib/fonts'
+import { fontForFile, persistFont, restoreStoredFonts, uploadFontFile } from './lib/fontStore'
 import {
   PROJECT_FILE_EXTENSION,
   PROJECT_FILE_MIME,
@@ -870,6 +870,10 @@ function App() {
 
   useEffect(() => {
     markLibraryLoaded()
+    void restoreStoredFonts().then(({ families, failed }) => {
+      if (families.length) setCustomFonts((current) => [...new Set([...current, ...families])])
+      if (failed.length) setStatus(`Couldn’t reinstall the uploaded font ${failed.map((family) => `“${family}”`).join(', ')}`)
+    })
     void initializeStorage()
     void refreshAssets()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -929,6 +933,8 @@ function App() {
     let cancelled = false
     void (async () => {
       try {
+        // Stored uploaded fonts go in before anything on this canvas is measured.
+        await restoreStoredFonts()
         if (intent.kind === 'project' || intent.kind === 'autosave') {
           if (cancelled) return
           await loadProject(intent.project, {
@@ -5484,12 +5490,13 @@ function App() {
       const families = collectFontFamilies([project.canvas, project.document])
       const fonts: EmbeddedFont[] = []
       for (const family of families) {
-        const font = uploadedFont(family)
+        const font = await fontForFile(family)
         if (font) fonts.push({ family, fileName: font.fileName, mimeType: font.mimeType, data: bytesToBase64(font.bytes) })
       }
       const text = serializeProjectFile({ project, fonts, app: 'Carson' })
       await target.write(new Blob([text], { type: PROJECT_FILE_MIME }))
-      const missing = fontsMissingFromSession(families, FONT_STACKS)
+      const embedded = new Set(fonts.map((font) => font.family))
+      const missing = fontsMissingFromSession(families, FONT_STACKS).filter((family) => !embedded.has(family))
       setStatus(
         missing.length
           ? `Saved “${fileName}”, but ${missing.map((family) => `“${family}”`).join(', ')} isn’t in it: upload the font again and save to file once more to carry it along`
@@ -5547,14 +5554,17 @@ function App() {
       return
     }
     const contents: ProjectFile = parsed.file
-    // Fonts first, so nothing measures the poster's text in a stand-in face.
-    const installedFonts: string[] = []
+    // Fonts first, so nothing measures the poster's text in a stand-in face: the stored
+    // ones (which the file's own fonts then override), then the file's.
+    await restoreStoredFonts()
+    const installedFonts: UploadedFont[] = []
     const failedFonts: string[] = []
-    for (const font of contents.fonts) {
+    for (const embedded of contents.fonts) {
+      const font = { family: embedded.family, fileName: embedded.fileName, mimeType: embedded.mimeType, bytes: base64ToBytes(embedded.data) }
       try {
-        await installUploadedFont({ family: font.family, fileName: font.fileName, mimeType: font.mimeType, bytes: base64ToBytes(font.data) })
+        await installUploadedFont(font)
         fabricCache.clearFontCache(font.family)
-        installedFonts.push(font.family)
+        installedFonts.push(font)
       } catch {
         failedFonts.push(font.family)
       }
@@ -5584,8 +5594,11 @@ function App() {
       reportProjectFileError('Couldn’t keep this poster in the browser. Storage may be full or unavailable.')
       return
     }
-    setCustomFonts((current) => [...new Set([...current, ...installedFonts])])
-    const opened = `Opened “${project.name}” from ${file.name}`
+    // Keep the file's fonts too, so the poster still sets right after a reload.
+    let fontNotice: string | null = null
+    for (const font of installedFonts) fontNotice = (await persistFont(font)) ?? fontNotice
+    setCustomFonts((current) => [...new Set([...current, ...installedFonts.map((font) => font.family)])])
+    const opened = `Opened “${project.name}” from ${file.name}${fontNotice ? `. ${fontNotice}` : ''}`
     applyEditorIntent({
       kind: 'project',
       project,
@@ -6966,11 +6979,15 @@ function App() {
           customFonts={customFonts}
           fontInputRef={fontInputRef}
           onFontFileChange={(file) => {
-            void loadFontFile(file).then((family) => {
-              setCustomFonts((current) => [...new Set([...current, family])])
-              updateActive({ fontFamily: family })
-              finalizeActive(`Loaded font ${family}`)
-            })
+            void uploadFontFile(file).then(
+              ({ family, notice }) => {
+                setCustomFonts((current) => [...new Set([...current, family])])
+                updateActive({ fontFamily: family })
+                finalizeActive(`Loaded font ${family}`)
+                setStatus(notice ? `Loaded font ${family}. ${notice}` : `Loaded font ${family}`)
+              },
+              () => setStatus(`Couldn’t load ${file.name} as a font`),
+            )
           }}
           fontStretch={fontStretch}
           onFontStretchChange={setFontStretch}
