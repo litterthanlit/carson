@@ -300,6 +300,11 @@
   color: var(--text-muted);
 }
 
+.home-status.home-file-error {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .home-empty {
   display: grid;
   gap: 12px;

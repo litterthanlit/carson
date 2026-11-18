@@ -7,6 +7,7 @@ import type { PosterPreset, PosterPresetId } from '../lib/editorModel'
 import type { DocumentMeta } from '../lib/document'
 import { ExplorationTrail } from './ExplorationTrail'
 import type { TrailFrame } from '../lib/explorationTrail'
+import { isProjectFileName } from '../lib/projectFile'
 
 type EditorCanvasProps = {
   poster: PosterPreset
@@ -39,6 +40,8 @@ type EditorCanvasProps = {
   onPanMouseUp: () => void
   onAssetDrop: (assetId: string) => void
   onComponentDrop: (componentId: string) => void
+  /** A `.carson` file dropped on the canvas opens it (through the unsaved-work guard). */
+  onProjectFileDrop?: (file: File) => void
   trailFrames: TrailFrame[]
   trailOpIds: string[]
   trailCursor: number
@@ -84,6 +87,7 @@ export const EditorCanvas = memo(function EditorCanvas({
   onPanMouseUp,
   onAssetDrop,
   onComponentDrop,
+  onProjectFileDrop,
   trailFrames,
   trailOpIds,
   trailCursor,
@@ -105,6 +109,8 @@ export const EditorCanvas = memo(function EditorCanvas({
     if (assetId) onAssetDrop(assetId)
     const componentId = event.dataTransfer.getData('text/carson-component')
     if (componentId) onComponentDrop(componentId)
+    const posterFile = Array.from(event.dataTransfer.files ?? []).find((file) => isProjectFileName(file.name))
+    if (posterFile) onProjectFileDrop?.(posterFile)
   }
 
   return (

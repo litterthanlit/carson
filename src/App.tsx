@@ -12,6 +12,7 @@ import {
   Point,
   Polygon,
   Rect,
+  StaticCanvas,
   Textbox,
   Group as FabricGroup,
   filters,
@@ -107,7 +108,28 @@ import {
 } from './lib/press'
 import { renderInkMap, type InkMapOverlay } from './lib/inkMap'
 import { followSourceLive, isCompanionPoseStale, POSE_FOLLOWING_TREATMENTS } from './lib/companionFollow'
-import { collectFontFamilies, ensureLibraryFonts, loadFontFile, loadGoogleFont, markLibraryLoaded } from './lib/fonts'
+import {
+  collectFontFamilies,
+  ensureLibraryFonts,
+  fontsMissingFromSession,
+  installUploadedFont,
+  loadFontFile,
+  loadGoogleFont,
+  markLibraryLoaded,
+  uploadedFont,
+} from './lib/fonts'
+import {
+  PROJECT_FILE_EXTENSION,
+  PROJECT_FILE_MIME,
+  base64ToBytes,
+  bytesToBase64,
+  parseProjectFile,
+  projectFileName,
+  serializeProjectFile,
+  type EmbeddedFont,
+  type ProjectFile,
+} from './lib/projectFile'
+import { chooseSaveTarget } from './lib/saveFile'
 import { blendModeLabel, contrastRatio, resolveBlendPreview } from './lib/color'
 import { alignObjects, buildLayoutGrid, clampGridOverlay, distributeObjects, gridTensionScale, layoutSnapLines, newLayoutGuideId, type GridOverlay, type LayoutGuide } from './lib/grid'
 import { softProofHex } from './lib/cmykPreview'
@@ -115,6 +137,7 @@ import { PLATE_CHANNELS, PLATE_LABELS, plateChannel, plateRasterScale, plateToDa
 import {
   ACCENTS,
   BLEND_MODES,
+  FONT_STACKS,
   HISTORY_PROPS,
   ONBOARDING_KEY,
   ZOOM_LEVELS,
@@ -240,7 +263,7 @@ import { InstrumentsPalette } from './components/InstrumentsPalette'
 import { LiveSelectionHud } from './components/LiveSelectionHud'
 import { ToolRail } from './components/ToolRail'
 import { hasUnsavedWork, type ReplaceReason } from './lib/newPoster'
-import { saveAsNameError, uniqueCopyName } from './lib/fileIdentity'
+import { saveAsNameError, uniqueCopyName, uniqueImportName } from './lib/fileIdentity'
 import { HomeScreen } from './components/HomeScreen'
 import { NewPosterDialog } from './components/NewPosterDialog'
 import { OpenPosterDialog } from './components/OpenPosterDialog'
@@ -359,7 +382,7 @@ type EyeDropperConstructor = new () => { open: () => Promise<EyeDropperResult> }
 type EditorIntent =
   | { kind: 'seed'; walkthrough?: boolean }
   | { kind: 'blank'; preset: PosterPreset; image?: File }
-  | { kind: 'project'; project: StoredProject }
+  | { kind: 'project'; project: StoredProject; status?: string }
   | { kind: 'autosave'; project: StoredProject }
 
 type EditorScreen = 'home' | 'editor'
@@ -538,6 +561,9 @@ function App() {
   const [trailCollapsed, setTrailCollapsed] = useState(false)
   const [compsGalleryOpen, setCompsGalleryOpen] = useState(false)
   const fontInputRef = useRef<HTMLInputElement | null>(null)
+  const projectFileInputRef = useRef<HTMLInputElement | null>(null)
+  /** Why the last "Open from file" failed, shown on Home and in the Open poster dialog. */
+  const [projectFileError, setProjectFileError] = useState<string | null>(null)
   const commitHistoryRef = useRef<(message: string) => void>(() => {})
   const commitTreatmentHistoryRef = useRef<
     (objectId: string, label: string, before: string, after: string) => void
@@ -904,7 +930,10 @@ function App() {
       try {
         if (intent.kind === 'project' || intent.kind === 'autosave') {
           if (cancelled) return
-          await loadProject(intent.project, { keepId: intent.kind === 'project' })
+          await loadProject(intent.project, {
+            keepId: intent.kind === 'project',
+            status: intent.kind === 'project' ? intent.status : undefined,
+          })
           markSavedClean(true)
           return
         }
@@ -3655,6 +3684,7 @@ function App() {
 
   function openOpenPosterDialog() {
     setCommandOpen(false)
+    setProjectFileError(null)
     setNewDialogOpen(false)
     setSaveAsOpen(false)
     setOpenDialogOpen(true)
@@ -5329,23 +5359,27 @@ function App() {
     commitHistory(`Applied ${style} preset`)
   }
 
+  /** The poster as it is on screen now, in the shape a save stores. */
+  async function snapshotCurrentPoster(canvas: Canvas, name: string): Promise<Omit<StoredProject, 'id'>> {
+    const now = new Date().toISOString()
+    const thumbnail = await captureOpenPosterThumbnail()
+    await preparePaintSources(canvas.getObjects() as never)
+    return {
+      name,
+      savedAt: now,
+      lastUsedAt: now,
+      thumbnail,
+      preset: poster,
+      canvas: serializeCanvasForSave(),
+      document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
+    }
+  }
+
   async function persistCurrentPoster(id: string, name: string): Promise<boolean> {
     const canvas = canvasRef.current
     if (!canvas) return false
     try {
-      const now = new Date().toISOString()
-      const thumbnail = await captureOpenPosterThumbnail()
-      await preparePaintSources(canvas.getObjects() as never)
-      await persistProject({
-        id,
-        name,
-        savedAt: now,
-        lastUsedAt: now,
-        thumbnail,
-        preset: poster,
-        canvas: serializeCanvasForSave(),
-        document: documentMeta ? withPrintSettings(documentMeta, printDpi, bleedMm) : undefined,
-      })
+      await persistProject({ ...(await snapshotCurrentPoster(canvas, name)), id })
       return true
     } catch {
       setStatus('Save failed — storage may be full or unavailable')
@@ -5426,7 +5460,128 @@ function App() {
     }
   }
 
-  async function loadProject(project: StoredProject, options: { keepId: boolean } = { keepId: true }) {
+  /**
+   * Download the poster as it is on screen — unsaved edits included — as one
+   * `.carson` file with the uploaded fonts it sets in. The open stored project is unchanged.
+   */
+  async function saveProjectFileAction() {
+    const canvas = canvasRef.current
+    if (screenRef.current !== 'editor' || !canvas) return
+    const name = projectName.trim() || 'Untitled poster'
+    const fileName = projectFileName(name)
+    try {
+      const target = await chooseSaveTarget(fileName, {
+        description: 'Carson poster',
+        accept: { [PROJECT_FILE_MIME]: [PROJECT_FILE_EXTENSION] },
+      })
+      if (!target) {
+        setStatus('Save to file cancelled')
+        return
+      }
+      setStatus(`Saving “${fileName}”…`)
+      const project = await snapshotCurrentPoster(canvas, name)
+      const families = collectFontFamilies([project.canvas, project.document])
+      const fonts: EmbeddedFont[] = []
+      for (const family of families) {
+        const font = uploadedFont(family)
+        if (font) fonts.push({ family, fileName: font.fileName, mimeType: font.mimeType, data: bytesToBase64(font.bytes) })
+      }
+      const text = serializeProjectFile({ project, fonts, app: 'Carson' })
+      await target.write(new Blob([text], { type: PROJECT_FILE_MIME }))
+      const missing = fontsMissingFromSession(families, FONT_STACKS)
+      setStatus(
+        missing.length
+          ? `Saved “${fileName}”, but ${missing.map((family) => `“${family}”`).join(', ')} isn’t in it: upload the font again and save to file once more to carry it along`
+          : `Saved “${fileName}” to your computer`,
+      )
+    } catch {
+      setStatus('Couldn’t save the poster file')
+    }
+  }
+
+  function chooseProjectFile() {
+    setProjectFileError(null)
+    projectFileInputRef.current?.click()
+  }
+
+  function reportProjectFileError(message: string) {
+    setProjectFileError(message)
+    setStatus(message)
+  }
+
+  /** Would this canvas JSON revive? Checked on a scratch canvas so a bad file never replaces the open poster. */
+  async function canvasJsonRevives(json: Record<string, unknown>) {
+    const probe = new StaticCanvas(document.createElement('canvas'), { renderOnAddRemove: false })
+    try {
+      await probe.loadFromJSON(json)
+      return true
+    } catch {
+      return false
+    } finally {
+      void probe.dispose()
+    }
+  }
+
+  /**
+   * Open a `.carson` file: check it, ask about unsaved work exactly as opening a
+   * stored poster does, store it as a new project, install its fonts, open it.
+   */
+  async function openProjectFile(file: File) {
+    setProjectFileError(null)
+    let parsed: ReturnType<typeof parseProjectFile>
+    try {
+      parsed = parseProjectFile(await file.arrayBuffer())
+    } catch {
+      reportProjectFileError('Couldn’t read that file.')
+      return
+    }
+    if (!parsed.ok) {
+      reportProjectFileError(parsed.error.message)
+      return
+    }
+    const contents: ProjectFile = parsed.file
+    if (!(await canvasJsonRevives(contents.project.canvas))) {
+      reportProjectFileError('This poster file is damaged or incomplete, so it can’t be opened.')
+      return
+    }
+    const allowed = await confirmIfDirty('open')
+    if (!allowed) return
+    let project: StoredProject
+    try {
+      const existing = await listProjects()
+      const now = new Date().toISOString()
+      project = {
+        ...contents.project,
+        id: newProjectId(),
+        name: uniqueImportName(contents.project.name, existing.map((item) => item.name)),
+        lastUsedAt: now,
+      }
+      await persistProject(project)
+      setSavedProjects(await listProjects())
+    } catch {
+      reportProjectFileError('Couldn’t keep this poster in the browser. Storage may be full or unavailable.')
+      return
+    }
+    const failedFonts: string[] = []
+    for (const font of contents.fonts) {
+      try {
+        await installUploadedFont({ family: font.family, fileName: font.fileName, mimeType: font.mimeType, bytes: base64ToBytes(font.data) })
+        setCustomFonts((current) => [...new Set([...current, font.family])])
+      } catch {
+        failedFonts.push(font.family)
+      }
+    }
+    const opened = `Opened “${project.name}” from ${file.name}`
+    applyEditorIntent({
+      kind: 'project',
+      project,
+      status: failedFonts.length
+        ? `${opened}. The font ${failedFonts.map((family) => `“${family}”`).join(', ')} in the file couldn’t be installed.`
+        : opened,
+    })
+  }
+
+  async function loadProject(project: StoredProject, options: { keepId: boolean; status?: string } = { keepId: true }) {
     const canvas = canvasRef.current
     if (!canvas) return
     posterInitRef.current = true
@@ -5458,7 +5613,7 @@ function App() {
     captureStyleBaseline()
     syncSelected()
     syncLayers()
-    setStatus(`Loaded ${project.name}`)
+    setStatus(options.status ?? `Loaded ${project.name}`)
     markSavedClean(true)
     if (options.keepId) {
       try {
@@ -5845,6 +6000,24 @@ function App() {
   const commands: CommandAction[] = [
     { id: 'new-poster', label: 'New poster', keywords: ['new', 'document', 'file', 'blank', 'size'], scope: 'any', run: () => openNewPosterDialog() },
     { id: 'open-poster', label: 'Open poster', keywords: ['open', 'load', 'file', 'recent'], scope: 'any', run: () => openOpenPosterDialog() },
+    {
+      id: 'save-project-file',
+      label: 'Save to file…',
+      keywords: ['save', 'file', 'export', 'backup', 'download', 'disk', 'carson', 'share'],
+      scope: 'canvas',
+      disabled: screen !== 'editor',
+      run: () => saveProjectFileAction(),
+    },
+    {
+      id: 'open-project-file',
+      label: 'Open from file…',
+      keywords: ['open', 'file', 'import', 'load', 'backup', 'disk', 'carson', 'upload'],
+      scope: 'any',
+      run: () => {
+        setCommandOpen(false)
+        chooseProjectFile()
+      },
+    },
     ...(['dropShadow', 'outerGlow', 'outline'] as const).map((kind) => {
       const label = kind === 'dropShadow' ? 'Drop shadow' : kind === 'outerGlow' ? 'Outer glow' : 'Outline'
       const on = Boolean(selected?.layerStyle?.[kind])
@@ -6217,6 +6390,21 @@ function App() {
 
   return (
     <main className={screen === 'home' ? 'home-root' : 'editor-shell'} data-tour={walkthroughStep ?? undefined}>
+      {/* Opened through the "Open from file…" buttons and command, which are the keyboard route to it. */}
+      <input
+        ref={projectFileInputRef}
+        className="visually-hidden"
+        type="file"
+        accept={`${PROJECT_FILE_EXTENSION},${PROJECT_FILE_MIME}`}
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid="project-file-input"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          if (file) void openProjectFile(file)
+        }}
+      />
       <Suspense fallback={null}>
         {contextMenu ? (
           <CanvasContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenuItems()} onClose={closeContextMenu} />
@@ -6246,7 +6434,12 @@ function App() {
             storageError={storageError}
             projects={savedProjects}
             onOpen={(project) => void requestOpenProject(project)}
-            onClose={() => setOpenDialogOpen(false)}
+            onOpenFromFile={chooseProjectFile}
+            fileError={projectFileError}
+            onClose={() => {
+              setProjectFileError(null)
+              setOpenDialogOpen(false)
+            }}
           />
         ) : null}
         {saveAsOpen ? (
@@ -6339,6 +6532,9 @@ function App() {
           onStartPreset={(presetId) => void requestNewPoster(applyPosterPreset(presetId))}
           onStartFromImage={(file) => void startFromImage(file)}
           onOpenPoster={openOpenPosterDialog}
+          onOpenFromFile={chooseProjectFile}
+          onOpenProjectFile={(file) => void openProjectFile(file)}
+          fileError={projectFileError}
         />
       ) : (
         <>
@@ -6364,6 +6560,8 @@ function App() {
         isDirty={isDirty}
         onDuplicatePoster={() => void duplicatePosterAction()}
         onSaveAs={openSaveAsDialog}
+        onSaveToFile={() => void saveProjectFileAction()}
+        onOpenFromFile={chooseProjectFile}
         onOpenCommands={handleOpenCommands}
         onScramble={() => void scrambleCanvas()}
         scrambleDisabled={scrambleSourceObjects().length === 0}
@@ -6634,6 +6832,7 @@ function App() {
             if (asset) void insertAsset(asset)
           }}
           onComponentDrop={(componentId) => void placeComponentInstance(componentId)}
+          onProjectFileDrop={(file) => void openProjectFile(file)}
           trailFrames={trailFrames}
           trailOpIds={trailOpIds}
           trailCursor={trailCursor}
