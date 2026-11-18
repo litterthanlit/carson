@@ -5502,7 +5502,9 @@ function App() {
 
   function chooseProjectFile() {
     setProjectFileError(null)
-    projectFileInputRef.current?.click()
+    // A task later, still inside the gesture's activation window: opened straight from an Enter
+    // keydown on a File menu item (which closes the menu), Chromium never shows the picker.
+    window.setTimeout(() => projectFileInputRef.current?.click(), 0)
   }
 
   function reportProjectFileError(message: string) {
