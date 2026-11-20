@@ -124,13 +124,14 @@ describe('InstrumentsPalette', () => {
     render(<Harness />)
     const print = screen.getByRole('button', { name: /^Print/ })
     expect(print.getAttribute('aria-expanded')).toBe('false')
-    expect(print.textContent).toContain('9')
+    expect(print.textContent).toContain('10')
     expect(screen.queryByRole('button', { name: 'Ink bleed' })).toBeNull()
     expect(screen.queryByText('Generation')).toBeNull()
 
     fireEvent.click(print)
     expect(print.getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByRole('button', { name: 'Ink bleed' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Solvent transfer' })).toBeTruthy()
     expect(screen.getAllByText('Generation').length).toBeGreaterThan(0)
 
     fireEvent.click(print)
@@ -154,7 +155,7 @@ describe('InstrumentsPalette', () => {
       .getAllByRole('button')
       .map((button) => button.querySelector('.effect-name')?.textContent)
       .filter(Boolean)
-    expect(names).toEqual(expect.arrayContaining(['Copy machine', 'Run through copier', 'Copy → Scatter → Copy', 'Copy selected']))
+    expect(names).toEqual(expect.arrayContaining(['Copy machine', 'Run through copier', 'Copy → Scatter → Copy', 'Copy selected', 'Break copy']))
     expect(screen.queryByRole('button', { name: 'Scatter' })).toBeNull()
     expect(screen.queryByText('Start here')).toBeNull()
     expect(screen.getAllByText('Print').length).toBeGreaterThan(0)
@@ -185,10 +186,10 @@ describe('InstrumentsPalette', () => {
     expect(document.querySelector('.scope-badge')?.getAttribute('title')).toBeTruthy()
   })
 
-  it('reaches all 44 effects between the groups', () => {
+  it('reaches all 46 effects between the groups', () => {
     render(<Harness />)
     for (const toggle of screen.getAllByRole('button', { expanded: false })) fireEvent.click(toggle)
     const groups = document.querySelectorAll('.effects-group[data-group]:not([data-group="performance"]) .effect-button')
-    expect(groups).toHaveLength(44)
+    expect(groups).toHaveLength(46)
   })
 })

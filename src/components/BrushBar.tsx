@@ -1,5 +1,5 @@
 import { Eraser, Paintbrush } from 'lucide-react'
-import { DEFAULT_BRUSH, type BrushSettings } from '../lib/brush'
+import { BRUSH_TIPS, DEFAULT_BRUSH, type BrushSettings } from '../lib/brush'
 import { Slider } from './Slider'
 
 type BrushBarProps = {
@@ -65,6 +65,22 @@ export function BrushBar({ brush, maxSize, targetName, onChange }: BrushBarProps
           Eraser
         </button>
       </div>
+      {!brush.erase ? (
+        <div className="brush-mode" role="radiogroup" aria-label="Brush tip">
+          {BRUSH_TIPS.map((tip) => (
+            <button
+              key={tip.id}
+              type="button"
+              role="radio"
+              aria-checked={brush.tip === tip.id}
+              title={tip.title}
+              onClick={() => onChange({ tip: tip.id })}
+            >
+              {tip.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {!brush.erase ? (
         <label className="brush-color" title="Brush color">
           <input type="color" aria-label="Brush color" value={brush.color} onChange={(event) => onChange({ color: event.target.value })} />

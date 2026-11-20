@@ -53,6 +53,7 @@ export const HISTORY_PROPS = [
   'textAlign',
   'fontStyle',
   'underline',
+  'rawCopySource',
   'componentId',
   'componentSlotId',
   'componentOverrides',

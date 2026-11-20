@@ -7,7 +7,19 @@
  * segments so spacing is even no matter how fast the pointer moves.
  */
 
+export type BrushTip = 'round' | 'ink-blot' | 'solvent-rub' | 'smudge' | 'debris'
+
+export const BRUSH_TIPS: { id: BrushTip; label: string; title: string }[] = [
+  { id: 'round', label: 'Round', title: 'Smooth pressure-sensitive round brush' },
+  { id: 'ink-blot', label: 'Ink blot', title: 'Organic jagged solvent ink pool with fibrous stipple edges' },
+  { id: 'solvent-rub', label: 'Solvent rub', title: 'Directional combed dry-brush rubbed toner filaments' },
+  { id: 'smudge', label: 'Smudge', title: 'Pulls real ink out of layers beneath the cursor into dry-brush streaks' },
+  { id: 'debris', label: 'Debris', title: 'Stamps torn toner flakes, lint chunks, and scanner dust' },
+]
+
 export type BrushSettings = {
+  /** Physical brush tip. */
+  tip: BrushTip
   /** Diameter in poster px at full pressure. */
   size: number
   /** 0–1: edge falloff. 1 = crisp disc. */
@@ -27,13 +39,14 @@ export type BrushSettings = {
 }
 
 export const DEFAULT_BRUSH: BrushSettings = {
+  tip: 'round',
   size: 60,
   hardness: 0.7,
   opacity: 1,
   flow: 0.8,
   spacing: 0.12,
   smoothing: 0.35,
-  color: '#111111',
+  color: '#050505',
   erase: false,
   pressureSize: true,
   pressureOpacity: false,
@@ -41,7 +54,7 @@ export const DEFAULT_BRUSH: BrushSettings = {
 
 export type BrushSample = { x: number; y: number; pressure: number }
 
-export type Dab = { x: number; y: number; radius: number; alpha: number }
+export type Dab = { x: number; y: number; radius: number; alpha: number; angle?: number }
 
 /**
  * Normalize pointer pressure. Mice report 0.5 while pressed (or 0 on some
@@ -53,12 +66,12 @@ export function effectivePressure(pressure: number, pointerType: string): number
 }
 
 /** Map pressure to dab radius and alpha according to the brush's pressure settings. */
-export function dabFor(sample: BrushSample, brush: BrushSettings): Dab {
+export function dabFor(sample: BrushSample, brush: BrushSettings, angle?: number): Dab {
   // A gentle curve: light pressure still leaves a visible mark.
   const p = Math.pow(sample.pressure, 0.8)
   const radius = Math.max(0.5, (brush.size / 2) * (brush.pressureSize ? 0.15 + 0.85 * p : 1))
   const alpha = Math.min(1, Math.max(0, brush.flow * (brush.pressureOpacity ? p : 1)))
-  return { x: sample.x, y: sample.y, radius, alpha }
+  return angle === undefined ? { x: sample.x, y: sample.y, radius, alpha } : { x: sample.x, y: sample.y, radius, alpha, angle }
 }
 
 /** Lazy-mouse stabilizer: each output trails the previous toward the raw input. */
@@ -77,10 +90,20 @@ export type DabCursor = {
   last: BrushSample | null
   /** Distance travelled since the last dab, carried across segments. */
   carry: number
+  /** Last stroke direction in radians (used by directional tips). */
+  angle: number
 }
 
 export function newDabCursor(): DabCursor {
-  return { last: null, carry: 0 }
+  return { last: null, carry: 0, angle: 0 }
+}
+
+function tipSpacing(brush: BrushSettings): number {
+  if (brush.erase || brush.tip === 'round') return Math.max(0.02, brush.spacing)
+  if (brush.tip === 'debris') return Math.max(0.55, brush.spacing * 4)
+  if (brush.tip === 'ink-blot') return Math.max(0.22, brush.spacing * 1.6)
+  if (brush.tip === 'solvent-rub' || brush.tip === 'smudge') return Math.max(0.08, brush.spacing)
+  return Math.max(0.02, brush.spacing)
 }
 
 /**
@@ -91,7 +114,7 @@ export function dabsTo(cursor: DabCursor, next: BrushSample, brush: BrushSetting
   const dabs: Dab[] = []
   const from = cursor.last
   if (!from) {
-    dabs.push(dabFor(next, brush))
+    dabs.push(dabFor(next, brush, cursor.angle))
     cursor.last = next
     cursor.carry = 0
     return dabs
@@ -100,6 +123,9 @@ export function dabsTo(cursor: DabCursor, next: BrushSample, brush: BrushSetting
   const dy = next.y - from.y
   const length = Math.hypot(dx, dy)
   if (length === 0) return dabs
+  const angle = Math.atan2(dy, dx)
+  cursor.angle = angle
+  const spacing = tipSpacing(brush)
   let travelled = 0
   let carry = cursor.carry
   // Guard against pathological inputs producing millions of dabs.
@@ -107,7 +133,7 @@ export function dabsTo(cursor: DabCursor, next: BrushSample, brush: BrushSetting
     const t0 = travelled / length
     const pressure = from.pressure + (next.pressure - from.pressure) * t0
     const radius = dabFor({ x: 0, y: 0, pressure }, brush).radius
-    const step = Math.max(0.5, radius * 2 * Math.max(0.02, brush.spacing))
+    const step = Math.max(0.5, radius * 2 * spacing)
     const needed = step - carry
     if (travelled + needed > length) {
       carry += length - travelled
@@ -117,7 +143,11 @@ export function dabsTo(cursor: DabCursor, next: BrushSample, brush: BrushSetting
     carry = 0
     const t = travelled / length
     dabs.push(
-      dabFor({ x: from.x + dx * t, y: from.y + dy * t, pressure: from.pressure + (next.pressure - from.pressure) * t }, brush),
+      dabFor(
+        { x: from.x + dx * t, y: from.y + dy * t, pressure: from.pressure + (next.pressure - from.pressure) * t },
+        brush,
+        angle,
+      ),
     )
   }
   cursor.last = next
