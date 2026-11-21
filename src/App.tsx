@@ -36,8 +36,16 @@ import type { PixelSelection, SelectionMode } from './lib/selection'
 import { SelectionOverlay } from './components/SelectionOverlay'
 import { BrushOverlay, type BrushInputSample } from './components/BrushOverlay'
 import { BrushBar } from './components/BrushBar'
-import { DEFAULT_BRUSH, type BrushSettings } from './lib/brush'
-import { StrokeSession, bumpPaintVersion, createPaintLayer, isPaintLayer, posterToPaintPixel } from './lib/paintLayer'
+import { DEFAULT_BRUSH, type BrushSettings, type BrushTip } from './lib/brush'
+import {
+  StrokeSession,
+  bumpPaintVersion,
+  createPaintLayer,
+  isPaintLayer,
+  paintCanvasSize,
+  posterToPaintPixel,
+} from './lib/paintLayer'
+import { breakRayGunCopy, RAW_COPY_SOURCE_KEY } from './lib/breakCopy'
 import { storePixels } from './lib/pixelStore'
 import { WarpOverlay } from './components/WarpOverlay'
 import { WarpBar } from './components/WarpBar'
@@ -197,6 +205,7 @@ import { canvasElementToRgba, canvasToSvgMarkup, rasterizeCanvasTiled } from './
 import { legibilityToParam } from './lib/glyphBreakTreatment'
 import {
   COPY_MACHINE_DEFAULTS,
+  COPY_MACHINE_SOLVENT_TRANSFER,
   copyMachineLayerSeeds,
   copyMachineParamsToRecord,
 } from './lib/copyMachine'
@@ -2449,6 +2458,17 @@ function App() {
       strokeRef.current = null
       return
     }
+    let backdrop: HTMLCanvasElement | null = null
+    if (!settings.erase && settings.tip === 'smudge') {
+      const size = paintCanvasSize(poster.width, poster.height)
+      const multiplier = size.width / Math.max(1, poster.width)
+      backdrop = canvas.toCanvasElement(multiplier, {
+        left: 0,
+        top: 0,
+        width: poster.width,
+        height: poster.height,
+      })
+    }
     let layer = target && isPaintLayer(target) && !target.group ? target : null
     let createdLayer = false
     if (!layer) {
@@ -2461,7 +2481,7 @@ function App() {
       canvas.setActiveObject(layer)
       createdLayer = true
     }
-    const session = new StrokeSession(layer, settings)
+    const session = new StrokeSession(layer, settings, { backdrop })
     strokeRef.current = { session, createdLayer, maskFallback: false }
     const point = posterToPaintPixel(layer, sample.x, sample.y)
     session.addSamples([{ ...point, pressure: sample.pressure }])
@@ -2500,7 +2520,18 @@ function App() {
     bumpPaintVersion(layer)
     invalidateLayerThumbnail(objectId)
     canvas.requestRenderAll()
-    const label = brushRef.current.erase ? 'Erased paint' : 'Brush stroke'
+    const activeBrush = brushRef.current
+    const label = activeBrush.erase
+      ? 'Erased paint'
+      : activeBrush.tip === 'ink-blot'
+        ? 'Ink blot stroke'
+        : activeBrush.tip === 'solvent-rub'
+          ? 'Solvent rub stroke'
+          : activeBrush.tip === 'smudge'
+            ? 'Smudged toner'
+            : activeBrush.tip === 'debris'
+              ? 'Stamped debris'
+              : 'Brush stroke'
     if (stroke.createdLayer) {
       commitHistory('Painted on a new layer')
     } else if (result) {
@@ -4488,6 +4519,106 @@ function App() {
     await playLayerInstrument('ink-bleed', seed)
   }
 
+  /**
+   * Solvent & tape-transfer xerox: localized ink pools, combed dry-brush rubbed
+   * toner streaks, tape/fold seams, and scanner debris. Automatically aligns
+   * the rub/tape-strip axis to the selected layer's reading angle (so rotated
+   * -90° text gets vertical strip seams and a horizontal fold crease).
+   */
+  async function applySolventTransferToSelected(seed = newSeed()) {
+    const object = activeObject()
+    if (!object || object.type === 'activeselection') return
+    const angle = ((Math.round(object.angle ?? 0) % 360) + 360) % 360
+    const params = {
+      ...copyMachineParamsToRecord(COPY_MACHINE_SOLVENT_TRANSFER),
+      dragAngle: angle,
+    }
+    await applyTreatmentToSelection('copy-machine', params, 'solvent transfer', seed)
+  }
+
+  /** Run every visible layer through Solvent transfer with unified seeded randomness. */
+  async function applySolventTransferToPoster(seed = newSeed()) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const targets = listCopyMachinePosterTargets(canvas)
+    if (targets.length === 0) {
+      setStatus('Nothing to run through solvent transfer')
+      return
+    }
+    const seeds = copyMachineLayerSeeds(seed, targets.length)
+    const targetIds = targets.map((object) => String(readObjectProp(object, 'id') ?? ''))
+    for (const [index, object] of targets.entries()) {
+      const angle = ((Math.round(object.angle ?? 0) % 360) + 360) % 360
+      const params = {
+        ...copyMachineParamsToRecord(COPY_MACHINE_SOLVENT_TRANSFER),
+        dragAngle: angle,
+      }
+      captureTransformBaseline(object)
+      addTreatment(object, 'copy-machine', params, seeds[index])
+      object.set({ objectCaching: true } as Partial<FabricObject>)
+      await refreshTreatmentStack(object)
+    }
+    setInspectorTab('treatments')
+    trackChaos('Solvent transfer poster', seed, targetIds, (next) => applySolventTransferToPoster(next))
+    commitHistory(`Solvent transfer on poster #${seed}`)
+    setStatus(`Solvent transfer on ${targets.length} layer${targets.length === 1 ? '' : 's'}`)
+  }
+
+  /** Ray Gun copy breaker: strip word spaces, insert erratic mid-word hyphenated breaks, tighten leading. */
+  async function breakSelectedCopy(seed = newSeed()) {
+    const canvas = canvasRef.current
+    const active = activeObject()
+    if (
+      !canvas ||
+      !active ||
+      active.type === 'activeselection' ||
+      (active.type !== 'textbox' && active.type !== 'i-text' && active.type !== 'text')
+    ) {
+      return
+    }
+    const record = active as unknown as Record<string, unknown>
+    const currentText = String(record.text ?? '')
+    const currentNormalized = currentText.replace(/[-–]\r?\n/g, '').replace(/\s+/g, '').toUpperCase()
+    const storedRaw = typeof record[RAW_COPY_SOURCE_KEY] === 'string' ? String(record[RAW_COPY_SOURCE_KEY]) : ''
+    const storedNormalized = storedRaw.replace(/\s+/g, '').toUpperCase()
+    const sourceText = storedRaw && storedNormalized === currentNormalized ? storedRaw : currentText.replace(/[-–]\r?\n/g, '')
+    const broken = breakRayGunCopy(sourceText, seed)
+    active.set({
+      text: broken.text,
+      lineHeight: broken.lineHeight,
+      charSpacing: broken.charSpacing,
+      [RAW_COPY_SOURCE_KEY]: sourceText,
+    } as Partial<FabricObject>)
+    active.setCoords()
+    if (readTreatments(active).length > 0) {
+      await refreshTreatmentStack(active)
+    }
+    canvas.requestRenderAll()
+    syncSelected()
+    const id = String(readObjectProp(active, 'id') ?? '')
+    trackChaos('Break copy', seed, id ? [id] : [], (next) => {
+      void breakSelectedCopy(next)
+    })
+    commitHistory(`Broke copy #${seed}`)
+    setStatus('Broke copy — press R to re-roll breaks')
+  }
+
+  function selectBrushTip(tip: BrushTip) {
+    setBrush((current) => ({ ...current, erase: false, tip }))
+    handleToolChange('brush')
+    const label =
+      tip === 'ink-blot'
+        ? 'Ink blot brush'
+        : tip === 'solvent-rub'
+          ? 'Solvent rub brush'
+          : tip === 'smudge'
+            ? 'Toner smudge brush'
+            : tip === 'debris'
+              ? 'Debris brush'
+              : 'Round brush'
+    setStatus(`${label} ready`)
+  }
+
   async function applyCopyMachineToPoster(seed = newSeed()) {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -5888,6 +6019,57 @@ function App() {
       run: () => applyInkBleedToSelected(),
     },
     {
+      id: 'solvent-transfer',
+      label: 'Solvent transfer',
+      keywords: ['solvent', 'transfer', 'tape', 'smudge', 'blot', 'rub', 'ray gun', 'xerox', 'paste', 'grunge', 'seam'],
+      scope: 'selection',
+      disabled: !selected,
+      run: () => applySolventTransferToSelected(),
+    },
+    {
+      id: 'solvent-transfer-poster',
+      label: 'Solvent transfer all layers',
+      keywords: ['solvent', 'transfer', 'tape', 'smudge', 'blot', 'ray gun', 'poster', 'all layers'],
+      scope: 'canvas',
+      run: () => applySolventTransferToPoster(),
+    },
+    {
+      id: 'break-copy',
+      label: 'Break copy (Ray Gun)',
+      keywords: ['break copy', 'ray gun', 'smash', 'hyphen', 'no space', 'tight', 'column', 'text'],
+      scope: 'selection',
+      disabled: !selectedIsText,
+      run: () => breakSelectedCopy(),
+    },
+    {
+      id: 'brush-ink-blot',
+      label: 'Ink blot brush',
+      keywords: ['brush', 'ink', 'blot', 'pool', 'solvent', 'paint', 'ray gun'],
+      scope: 'any',
+      run: () => selectBrushTip('ink-blot'),
+    },
+    {
+      id: 'brush-solvent-rub',
+      label: 'Solvent rub brush',
+      keywords: ['brush', 'solvent', 'rub', 'dry brush', 'toner', 'streaks', 'smear'],
+      scope: 'any',
+      run: () => selectBrushTip('solvent-rub'),
+    },
+    {
+      id: 'brush-smudge',
+      label: 'Toner smudge brush',
+      keywords: ['brush', 'smudge', 'smear', 'drag', 'toner', 'ink', 'wet', 'ray gun'],
+      scope: 'any',
+      run: () => selectBrushTip('smudge'),
+    },
+    {
+      id: 'brush-debris',
+      label: 'Debris brush',
+      keywords: ['brush', 'debris', 'flecks', 'specks', 'dust', 'scanner', 'xerox', 'grunge'],
+      scope: 'any',
+      run: () => selectBrushTip('debris'),
+    },
+    {
       id: 'copy-machine-poster',
       label: 'Run through the copier',
       keywords: ['copy machine', 'photocopy', 'xerox warp', 'copier', 'poster', 'all layers'],
@@ -6450,11 +6632,13 @@ function App() {
             onTearCollage={() => void tearCollageSelected()}
             onAddCropMarks={addCropMarks}
             onBreakSelectedType={() => breakSelectedType()}
+            onBreakCopy={() => void breakSelectedCopy()}
             onLetterBreak={() => letterBreakSelected()}
             onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
             onApplyXerox={() => void applyXeroxToSelected()}
             onApplyCopyMachine={() => void applyCopyMachineToSelected()}
             onApplyInkBleed={() => void applyInkBleedToSelected()}
+            onApplySolventTransfer={() => void applySolventTransferToSelected()}
             onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
             onApplyCopyScatterCopyGesture={() => void applyCopyScatterCopyGesture()}
             onAddMisprintDuplicate={() => void addMisprintDuplicate()}

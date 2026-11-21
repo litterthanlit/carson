@@ -74,11 +74,13 @@ export type InstrumentsPaletteProps = {
   onTearCollage: () => void
   onAddCropMarks: () => void
   onBreakSelectedType: () => void
+  onBreakCopy?: () => void
   onLetterBreak: () => void
   onCloneTypeAsTexture: () => void
   onApplyXerox: () => void
   onApplyCopyMachine: () => void
   onApplyInkBleed: () => void
+  onApplySolventTransfer?: () => void
   onApplyCopyMachineToPoster: () => void
   onApplyCopyScatterCopyGesture: () => void
   onAddMisprintDuplicate: () => void
@@ -274,11 +276,13 @@ export function InstrumentsPalette({
   onTearCollage,
   onAddCropMarks,
   onBreakSelectedType,
+  onBreakCopy,
   onLetterBreak,
   onCloneTypeAsTexture,
   onApplyXerox,
   onApplyCopyMachine,
   onApplyInkBleed,
+  onApplySolventTransfer,
   onApplyCopyMachineToPoster,
   onApplyCopyScatterCopyGesture,
   onAddMisprintDuplicate,
@@ -332,12 +336,14 @@ export function InstrumentsPalette({
     { id: 'bw-red', section: 'energy', label: 'B/W red', title: 'Reset to black/white/red minimalism', icon: Circle, scope: 'all', keywords: ['poster style', 'black', 'white', 'red', 'minimal', 'reset'], onClick: () => onApplyPosterStyle('minimal') },
 
     { id: 'type-strip', section: 'type', label: 'Type strip', title: 'Repeat the selected text as printed strips', icon: Type, scope: 'sel', keywords: ['text', 'repeat', 'strips'], onClick: onAddTypeStrip, disabled: !selectedIsText },
+    { id: 'break-copy', section: 'type', label: 'Break copy', title: 'Smash words together with erratic Ray Gun mid-word hyphenation — stays editable', icon: Type, scope: 'sel', keywords: ['text', 'ray gun', 'smash', 'hyphen', 'no space', 'tight', 'column', 'break'], onClick: () => onBreakCopy?.(), disabled: !selectedIsText },
     { id: 'break-letters', section: 'type', label: 'Break letters', title: 'Break the selected text into loose letters', icon: Spline, scope: 'sel', keywords: ['text', 'split', 'loose'], onClick: onBreakSelectedType, disabled: !selectedIsText },
     { id: 'letter-break', section: 'type', label: 'Letter break', title: 'Cut each letter into its strokes and pull them apart', icon: Scissors, scope: 'sel', keywords: ['text', 'strokes', 'cut', 'fragment'], onClick: onLetterBreak, disabled: !selectedIsText },
     { id: 'bury-type', section: 'type', label: 'Bury type', title: 'Bury a ghost copy of the selected text', icon: Layers, scope: 'sel', keywords: ['text', 'ghost', 'copy', 'texture'], onClick: onCloneTypeAsTexture, disabled: !selectedIsText },
     { id: 'red-echo', section: 'type', label: 'Red echo type', title: 'Stamp three large red echo words across the poster', icon: Type, scope: 'all', keywords: ['text', 'red', 'echo', 'words'], onClick: onAddRedEchoType },
 
     { id: 'copy-machine', section: 'print', label: 'Copy machine', title: 'Photocopy warp — source stays editable', icon: Printer, scope: 'sel', keywords: ['copy', 'copier', 'photocopy', 'xerox', 'warp'], onClick: onApplyCopyMachine, disabled: !selected },
+    { id: 'solvent-transfer', section: 'print', label: 'Solvent transfer', title: 'Tape-rub & solvent xerox — localized ink pools, combed dry-brush smears, paste seams and debris', icon: Droplets, scope: 'sel', keywords: ['solvent', 'transfer', 'tape', 'smudge', 'blot', 'rub', 'ray gun', 'xerox', 'paste', 'grunge'], onClick: () => onApplySolventTransfer?.(), disabled: !selected },
     { id: 'ink-bleed', section: 'print', label: 'Ink bleed', title: 'Uneven ink — lines flood into blobs, starve to fragments, slur along the feed', icon: Droplet, scope: 'sel', keywords: ['ink', 'flood', 'blot', 'smear', 'copier'], onClick: onApplyInkBleed, disabled: !selected },
     { id: 'run-copier', section: 'print', label: 'Run through copier', title: 'Run every visible layer through the copier', icon: Copy, scope: 'all', keywords: ['copy', 'copier', 'photocopy', 'xerox', 'poster'], onClick: onApplyCopyMachineToPoster, disabled: layerCount === 0 },
     { id: 'copy-scatter-copy', section: 'print', label: 'Copy → Scatter → Copy', title: 'Copy Machine, then Scatter, then Copy Machine', icon: Repeat, scope: 'sel', keywords: ['copy', 'copier', 'gesture', 'chain', 'macro'], onClick: onApplyCopyScatterCopyGesture, disabled: !selected },

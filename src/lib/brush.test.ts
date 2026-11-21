@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BRUSH_TIPS,
   DEFAULT_BRUSH,
   dabBounds,
   dabFor,
@@ -47,6 +48,20 @@ describe('dab placement', () => {
     const cursor = newDabCursor()
     dabsTo(cursor, { x: 5, y: 5, pressure: 1 }, brush)
     expect(dabsTo(cursor, { x: 5, y: 5, pressure: 1 }, brush)).toHaveLength(0)
+  })
+
+  it('tracks stroke direction angle for directional print tips and widens spacing for debris', () => {
+    expect(BRUSH_TIPS.map((t) => t.id)).toEqual(['round', 'ink-blot', 'solvent-rub', 'smudge', 'debris'])
+    const rubCursor = newDabCursor()
+    dabsTo(rubCursor, { x: 0, y: 0, pressure: 1 }, { ...brush, tip: 'solvent-rub' })
+    const downDabs = dabsTo(rubCursor, { x: 0, y: 40, pressure: 1 }, { ...brush, tip: 'solvent-rub' })
+    expect(downDabs.length).toBeGreaterThan(0)
+    expect(downDabs[0].angle).toBeCloseTo(Math.PI / 2)
+
+    const debrisCursor = newDabCursor()
+    dabsTo(debrisCursor, { x: 0, y: 0, pressure: 1 }, { ...brush, tip: 'debris' })
+    const debrisDabs = dabsTo(debrisCursor, { x: 100, y: 0, pressure: 1 }, { ...brush, tip: 'debris' })
+    expect(debrisDabs.length).toBeLessThan(10)
   })
 })
 

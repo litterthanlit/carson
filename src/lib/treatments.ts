@@ -97,6 +97,7 @@ import {
   type LetterBreakTagger,
 } from './letterBreakTreatment'
 import { scaleTreatmentParams } from './instruments'
+import { solventTransferIsIdle } from './solventTransfer'
 
 export type TreatmentType =
   | 'xerox'
@@ -317,7 +318,7 @@ export function treatmentLabel(treatment: Treatment): string {
     case 'press-check':
       return 'Press Check'
     case 'copy-machine':
-      return `Copy·#${treatment.seed}`
+      return solventTransferIsIdle(treatment.params) ? `Copy·#${treatment.seed}` : `Solvent·#${treatment.seed}`
     case 'misprint':
       return `Misprint·${treatment.params.offset ?? 10}`
     case 'type-strips':

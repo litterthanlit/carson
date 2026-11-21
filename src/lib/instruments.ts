@@ -5,6 +5,7 @@
 import {
   COPY_MACHINE_DEFAULTS,
   COPY_MACHINE_INK_BLEED,
+  COPY_MACHINE_SOLVENT_TRANSFER,
   COPY_MACHINE_TENSION_KEYS,
   copyMachineParamsToRecord,
 } from './copyMachine'
@@ -23,6 +24,7 @@ export type InstrumentId =
   | 'xerox'
   | 'copy-machine'
   | 'ink-bleed'
+  | 'solvent-transfer'
   | 'misprint'
   | 'type-strips'
   | 'scatter'
@@ -94,6 +96,14 @@ export const INSTRUMENTS: Instrument[] = [
     name: 'Ink bleed',
     treatmentType: 'copy-machine',
     defaultParams: copyMachineParamsToRecord(COPY_MACHINE_INK_BLEED),
+    scope: 'layer',
+    tensionKeys: COPY_MACHINE_TENSION_KEYS,
+  },
+  {
+    id: 'solvent-transfer',
+    name: 'Solvent transfer',
+    treatmentType: 'copy-machine',
+    defaultParams: copyMachineParamsToRecord(COPY_MACHINE_SOLVENT_TRANSFER),
     scope: 'layer',
     tensionKeys: COPY_MACHINE_TENSION_KEYS,
   },

@@ -19,6 +19,7 @@
 import { applyInkLoad, inkLoadIsIdle } from './inkBleed'
 import type { SheetPatch } from './press'
 import { createSeededRandom } from './random'
+import { applySolventTransfer, solventTransferIsIdle } from './solventTransfer'
 
 export type CopyMachineParams = {
   // tonal (CM-1)
@@ -41,6 +42,14 @@ export type CopyMachineParams = {
   starve: number
   /** …and wet ink dragged along the feed. */
   slur: number
+  /** Solvent transfer (see solventTransfer): localized ink pools anchored on strokes… */
+  blot: number
+  /** …combed dry-brush rubbed-toner smear along the rub axis… */
+  smear: number
+  /** …paste-up tape strip seams, cross-sheet fold creases and wrinkles… */
+  seams: number
+  /** …and irregular scanner-glass toner flakes and margin scuffs. */
+  debris: number
   /** Copy of a copy: how many times the sheet went through the machine (1–8). */
   generations: number
   /** Reduce/enlarge per generation, in percent (100 = same size). */
@@ -64,6 +73,10 @@ export const COPY_MACHINE_DEFAULTS: CopyMachineParams = {
   bleed: 0,
   starve: 0,
   slur: 0,
+  blot: 0,
+  smear: 0,
+  seams: 0,
+  debris: 0,
   generations: 1,
   copyScale: 100,
   ghost: 20,
@@ -91,6 +104,37 @@ export const COPY_MACHINE_INK_BLEED: CopyMachineParams = {
   ghost: 15,
 }
 
+/**
+ * The Solvent transfer instrument: 1990s Ray Gun paste-up / tape-rub xerox —
+ * slim crisp letters hit by discrete localized ink pools, combed dry-brush
+ * rubbed toner streaks, razor-sharp tape & fold seams, and scanner debris,
+ * crushed into stark 1-bit black-and-white stipple.
+ */
+export const COPY_MACHINE_SOLVENT_TRANSFER: CopyMachineParams = {
+  ...COPY_MACHINE_DEFAULTS,
+  contrast: 92,
+  grain: 10,
+  voids: 0,
+  wobble: 6,
+  wobbleFreq: 35,
+  drag: 0,
+  dragAngle: 90,
+  bands: 0,
+  streaks: 0,
+  edge: 0,
+  bleed: 0,
+  starve: 0,
+  slur: 0,
+  blot: 72,
+  smear: 75,
+  seams: 78,
+  debris: 65,
+  generations: 1,
+  copyScale: 100,
+  ghost: 0,
+  ghostOffset: 2,
+}
+
 /** Intensity keys Tension multiplies; scan angle, generations and copy size stay put. */
 export const COPY_MACHINE_TENSION_KEYS = [
   'contrast',
@@ -105,6 +149,10 @@ export const COPY_MACHINE_TENSION_KEYS = [
   'bleed',
   'starve',
   'slur',
+  'blot',
+  'smear',
+  'seams',
+  'debris',
   'ghost',
   'ghostOffset',
 ] as const
@@ -144,6 +192,10 @@ export function scaleCopyMachineParams(params: CopyMachineParams, tensionScale =
     bleed: params.bleed * scale,
     starve: params.starve * scale,
     slur: params.slur * scale,
+    blot: params.blot * scale,
+    smear: params.smear * scale,
+    seams: params.seams * scale,
+    debris: params.debris * scale,
     ghost: params.ghost * scale,
     ghostOffset: params.ghostOffset * scale,
   }
@@ -418,6 +470,10 @@ export function copyMachineParamsFromRecord(params: Record<string, number>): Cop
     bleed: params.bleed ?? COPY_MACHINE_DEFAULTS.bleed,
     starve: params.starve ?? COPY_MACHINE_DEFAULTS.starve,
     slur: params.slur ?? COPY_MACHINE_DEFAULTS.slur,
+    blot: params.blot ?? COPY_MACHINE_DEFAULTS.blot,
+    smear: params.smear ?? COPY_MACHINE_DEFAULTS.smear,
+    seams: params.seams ?? COPY_MACHINE_DEFAULTS.seams,
+    debris: params.debris ?? COPY_MACHINE_DEFAULTS.debris,
     generations: params.generations ?? COPY_MACHINE_DEFAULTS.generations,
     copyScale: params.copyScale ?? COPY_MACHINE_DEFAULTS.copyScale,
     ghost: params.ghost ?? COPY_MACHINE_DEFAULTS.ghost,
@@ -430,10 +486,12 @@ export function copyMachineParamsToRecord(params: CopyMachineParams): Record<str
 }
 
 export type TonalParams = Pick<CopyMachineParams, 'contrast' | 'grain' | 'bands' | 'voids'> &
-  Partial<Pick<CopyMachineParams, 'streaks' | 'edge' | 'dragAngle' | 'bleed' | 'starve' | 'slur'>>
+  Partial<Pick<CopyMachineParams, 'streaks' | 'edge' | 'dragAngle' | 'bleed' | 'starve' | 'slur' | 'blot' | 'smear' | 'seams' | 'debris'>>
 
 /** Toner black — never quite #000 on a real copy. */
 const TONER = 18
+/** Deep stark black for high-contrast solvent-transfer xerox passes. */
+const SOLVENT_TONER = 5
 
 function smoothstep(edge0: number, edge1: number, value: number): number {
   const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(1e-6, edge1 - edge0)))
@@ -648,7 +706,32 @@ export function applyTonalPasses(
     dragAngle: params.dragAngle ?? COPY_MACHINE_DEFAULTS.dragAngle,
   }
   if (!inkLoadIsIdle(inkLoad)) ({ ink, wet } = applyInkLoad(ink, width, height, inkLoad, random, pixelScale, sheet))
-  const density = tonerDensity(ink, width, height, params, random, pixelScale, wet)
+
+  // Solvent & tape transfer: localized ink pools, combed rubbed smear, tape/fold
+  // seams, and organic debris, crushed into stark 1-bit paper-tooth stipple.
+  // Left at zero it draws no random numbers, so older copies render unchanged.
+  const solventParams = {
+    blot: params.blot ?? 0,
+    smear: params.smear ?? 0,
+    seams: params.seams ?? 0,
+    debris: params.debris ?? 0,
+    dragAngle: params.dragAngle ?? COPY_MACHINE_DEFAULTS.dragAngle,
+  }
+  const solventActive = !solventTransferIsIdle(solventParams)
+  if (solventActive) {
+    const res = applySolventTransfer(ink, width, height, solventParams, random, pixelScale, sheet)
+    ink = res.ink
+    if (wet) {
+      for (let i = 0; i < wet.length; i++) wet[i] = Math.max(wet[i], res.wet[i])
+    } else {
+      wet = res.wet
+    }
+  }
+
+  // Solvent transfer already resolves into razor-crisp 1-bit stipple; running
+  // dot-gain dilation + boxBlur + 45° halftone afterward would soften slim glyphs
+  // and combed filaments back into muddy gray. Keep its density directly.
+  const density = solventActive ? new Float32Array(ink) : tonerDensity(ink, width, height, params, random, pixelScale, wet)
 
   // Mottle: solids never lie down evenly.
   if (grain > 0.01) {
@@ -770,18 +853,19 @@ export function applyTonalPasses(
     }
   }
 
+  const tonerBlack = solventActive ? SOLVENT_TONER : TONER
   const { data } = out
   for (let p = 0, i = 0; p < density.length; p++, i += 4) {
     const d = Math.max(0, Math.min(1, density[p]))
     if (opaque) {
-      const value = Math.round(255 * (1 - d) + TONER * d)
+      const value = Math.round(255 * (1 - d) + tonerBlack * d)
       data[i] = value
       data[i + 1] = value
       data[i + 2] = value
     } else {
-      data[i] = TONER
-      data[i + 1] = TONER
-      data[i + 2] = TONER
+      data[i] = tonerBlack
+      data[i + 1] = tonerBlack
+      data[i + 2] = tonerBlack
       data[i + 3] = Math.round(255 * d)
     }
   }

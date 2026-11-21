@@ -40,7 +40,13 @@ import { hasMaskContent, layerMaskLabel, type LayerMask } from '../lib/layerMask
 import { hasWeave } from '../lib/weave'
 import { FOUND_PAPERS, type FoundPaperKind } from '../lib/foundPaper'
 import { LETTER_BREAK_DEFAULTS, MAX_BREAK_DEPTH } from '../lib/letterBreak'
-import { COPY_MACHINE_DEFAULTS, MAX_COPY_GENERATIONS } from '../lib/copyMachine'
+import {
+  COPY_MACHINE_DEFAULTS,
+  COPY_MACHINE_INK_BLEED,
+  COPY_MACHINE_SOLVENT_TRANSFER,
+  MAX_COPY_GENERATIONS,
+  copyMachineParamsToRecord,
+} from '../lib/copyMachine'
 import { PRESS_CHECK_DEFAULTS } from '../lib/pressCheck'
 import { defaultsForFx, formatFilterParam, paramDefsForFx } from '../lib/filterGallery'
 import type { Gesture } from '../lib/gestures'
@@ -738,6 +744,71 @@ export function InspectorPanel({
                     </span>
                     {treatment.type === 'copy-machine' ? (
                       <div className="treatment-params nested">
+                        <div className="preset-row" role="group" aria-label="Copy machine presets">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdateLayerTreatmentParams(treatment.id, copyMachineParamsToRecord(COPY_MACHINE_DEFAULTS))
+                            }
+                          >
+                            Copier
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdateLayerTreatmentParams(treatment.id, copyMachineParamsToRecord(COPY_MACHINE_INK_BLEED))
+                            }
+                          >
+                            Ink bleed
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdateLayerTreatmentParams(
+                                treatment.id,
+                                copyMachineParamsToRecord(COPY_MACHINE_SOLVENT_TRANSFER),
+                              )
+                            }
+                          >
+                            Solvent
+                          </button>
+                        </div>
+                        <Slider
+                          label="Ink blot"
+                          value={treatment.params.blot ?? COPY_MACHINE_DEFAULTS.blot}
+                          defaultValue={COPY_MACHINE_DEFAULTS.blot}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { blot: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Rub smear"
+                          value={treatment.params.smear ?? COPY_MACHINE_DEFAULTS.smear}
+                          defaultValue={COPY_MACHINE_DEFAULTS.smear}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { smear: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Paste seams"
+                          value={treatment.params.seams ?? COPY_MACHINE_DEFAULTS.seams}
+                          defaultValue={COPY_MACHINE_DEFAULTS.seams}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { seams: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
+                        <Slider
+                          label="Debris"
+                          value={treatment.params.debris ?? COPY_MACHINE_DEFAULTS.debris}
+                          defaultValue={COPY_MACHINE_DEFAULTS.debris}
+                          min={0}
+                          max={100}
+                          onChange={(value) => onPreviewLayerTreatmentParams(treatment.id, { debris: value })}
+                          onCommit={() => onUpdateLayerTreatmentParams(treatment.id, {})}
+                        />
                         <Slider
                           label="Wobble"
                           value={treatment.params.wobble ?? COPY_MACHINE_DEFAULTS.wobble}

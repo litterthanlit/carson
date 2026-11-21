@@ -16,6 +16,7 @@ import {
 } from './copyMachine'
 import { applyCopyMachineChainLatest } from './copyMachineWorkerClient'
 import { inkLoadIsIdle } from './inkBleed'
+import { copyMachineBleedPadding, solventTransferIsIdle } from './solventTransfer'
 import { canvasPress, pressRegistration, pressSignature, type Press, type SheetPatch } from './press'
 import { createSeededRandom } from './random'
 import { readTransformBaseline, readTreatments, type Treatment } from './treatments'
@@ -206,6 +207,22 @@ export async function rebakeCopyMachineTreatments(canvas: Canvas, exportScale = 
   }
 }
 
+function padImageData(imageData: ImageData, padPx: number): ImageData {
+  if (padPx <= 0) return imageData
+  const outW = imageData.width + padPx * 2
+  const outH = imageData.height + padPx * 2
+  const out = new ImageData(outW, outH)
+  const src = imageData.data
+  const dst = out.data
+  const rowBytes = imageData.width * 4
+  for (let y = 0; y < imageData.height; y++) {
+    const srcStart = y * rowBytes
+    const dstStart = ((y + padPx) * outW + padPx) * 4
+    dst.set(src.subarray(srcStart, srcStart + rowBytes), dstStart)
+  }
+  return out
+}
+
 function sourceToImageData(source: FabricObject, exportScale = 1): ImageData {
   const element = source.toCanvasElement({
     enableRetinaScaling: false,
@@ -242,6 +259,26 @@ export function copyMachineChainInks(chain: Pick<Treatment, 'enabled' | 'params'
   return chain.some((step) => step.enabled && !inkLoadIsIdle(copyMachineParamsFromRecord(step.params)))
 }
 
+/** True when any enabled pass in the chain runs the solvent / tape-transfer pass. */
+export function copyMachineChainHasSolvent(chain: Pick<Treatment, 'enabled' | 'params'>[]): boolean {
+  return chain.some((step) => step.enabled && !solventTransferIsIdle(copyMachineParamsFromRecord(step.params)))
+}
+
+/** Poster-px margin to reserve around a transparent layer so blotches, smears and debris aren't clipped. */
+export function copyMachineChainPadding(
+  chain: Pick<Treatment, 'enabled' | 'params'>[],
+  layerShortSide: number,
+  tensionScale = 1,
+): number {
+  let maxPad = 0
+  for (const step of chain) {
+    if (!step.enabled) continue
+    const scaled = scaleCopyMachineParams(copyMachineParamsFromRecord(step.params), tensionScale)
+    maxPad = Math.max(maxPad, copyMachineBleedPadding(scaled, layerShortSide))
+  }
+  return maxPad
+}
+
 /** Where a layer's raster lies on the press: its bounding box, in raster px per poster px. */
 export function copyMachineSheetPatch(
   press: Press,
@@ -272,8 +309,11 @@ export function copyMachineGhostInput(
   sourcePixels: ImageData,
   bakedPixels: ImageData | undefined,
 ): { source: ImageData; params: CopyMachineParams } {
-  if (!bakedPixels || inkLoadIsIdle(params)) return { source: sourcePixels, params }
-  return { source: bakedPixels, params: { ...params, bleed: 0, starve: 0, slur: 0 } }
+  if (!bakedPixels || (inkLoadIsIdle(params) && solventTransferIsIdle(params))) return { source: sourcePixels, params }
+  return {
+    source: bakedPixels,
+    params: { ...params, bleed: 0, starve: 0, slur: 0, blot: 0, smear: 0, seams: 0, debris: 0 },
+  }
 }
 
 /** Prefer the last enabled treatment — stacking is generational; ghost is the final drum echo. */
@@ -354,9 +394,11 @@ export async function renderCopyMachineTreatment(
 
   const chain = treatments.filter((item) => item.type === 'copy-machine')
   const bounds = source.getBoundingRect()
+  const hasSolvent = copyMachineChainHasSolvent(chain)
+  const rawPad = copyMachineChainPadding(chain, Math.min(bounds.width, bounds.height), tensionScale)
   // On a press, uneven ink depends on where the layer sits on the sheet.
   const press = canvasPress(canvas)
-  const inkPress = press && copyMachineChainInks(chain) ? press : null
+  const inkPress = press && (copyMachineChainInks(chain) || hasSolvent) ? press : null
   const cacheKey = copyMachineBakeCacheKey(
     sourceId,
     chain,
@@ -369,10 +411,24 @@ export async function renderCopyMachineTreatment(
   let dataUrl = cached?.dataUrl
   let bakedPixels = cached?.imageData
 
+  let pad: number
   if (!cached || !dataUrl) {
     revealSourceForRaster(source)
-    sourcePixels = sourceToImageData(source, exportScale)
-    const sheet = inkPress ? copyMachineSheetPatch(inkPress, bounds, sourcePixels.width) : undefined
+    const rawPixels = sourceToImageData(source, exportScale)
+    const opaque = isOpaqueSource(rawPixels)
+    pad = opaque ? 0 : rawPad
+    const padRaster = pad > 0 ? Math.max(1, Math.round(pad * (rawPixels.width / Math.max(1, bounds.width)))) : 0
+    sourcePixels = padRaster > 0 ? padImageData(rawPixels, padRaster) : rawPixels
+    const paddedBounds =
+      pad > 0
+        ? {
+            left: bounds.left - pad,
+            top: bounds.top - pad,
+            width: bounds.width + pad * 2,
+            height: bounds.height + pad * 2,
+          }
+        : bounds
+    const sheet = inkPress ? copyMachineSheetPatch(inkPress, paddedBounds, sourcePixels.width) : undefined
     const baked = await applyCopyMachineChainLatest(
       `${sourceId}@${exportScale}`,
       sourcePixels,
@@ -386,15 +442,27 @@ export async function renderCopyMachineTreatment(
     dataUrl = imageDataToDataUrl(bakedPixels)
     writeCopyMachineBakeCache(cacheKey, { imageData: bakedPixels, dataUrl, sourceImageData: sourcePixels })
     if (superseded()) return
+  } else {
+    pad = sourcePixels && !isOpaqueSource(sourcePixels) ? rawPad : 0
   }
 
-  const blend = sourcePixels && isOpaqueSource(sourcePixels) ? 'source-over' : 'multiply'
+  const opaque = Boolean(sourcePixels && isOpaqueSource(sourcePixels))
+  const blend = opaque ? 'source-over' : 'multiply'
+  const placeBounds =
+    pad > 0
+      ? {
+          left: bounds.left - pad,
+          top: bounds.top - pad,
+          width: bounds.width + pad * 2,
+          height: bounds.height + pad * 2,
+        }
+      : bounds
   const sourceIndex = canvas.getObjects().indexOf(source)
 
-  const main = await placeCompanionImage(canvas, dataUrl, blend, bounds, {
-    left: bounds.left,
-    top: bounds.top,
-    opacity: blend === 'source-over' ? 1 : 0.94,
+  const main = await placeCompanionImage(canvas, dataUrl, blend, placeBounds, {
+    left: placeBounds.left,
+    top: placeBounds.top,
+    opacity: blend === 'source-over' || hasSolvent ? 1 : 0.94,
     tagKey: COPY_MACHINE_SOURCE_ID_KEY,
     sourceId,
     insertIndex: sourceIndex,
@@ -418,9 +486,9 @@ export async function renderCopyMachineTreatment(
       const ghostPixels = renderCopyMachineGhostPass(ghostSource, ghostTonal, ghostRandom)
       const { dx, dy } = copyMachineGhostDelta(ghostParams.ghostOffset, press ? pressRegistration(press) : undefined)
       const mainIndex = canvas.getObjects().indexOf(main)
-      const ghost = await placeCompanionImage(canvas, imageDataToDataUrl(ghostPixels), 'multiply', bounds, {
-        left: bounds.left + dx,
-        top: bounds.top + dy,
+      const ghost = await placeCompanionImage(canvas, imageDataToDataUrl(ghostPixels), 'multiply', placeBounds, {
+        left: placeBounds.left + dx,
+        top: placeBounds.top + dy,
         opacity: ghostOpacity,
         tagKey: COPY_GHOST_SOURCE_ID_KEY,
         sourceId,
