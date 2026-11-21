@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { ChevronDown, GitFork, LayoutGrid } from 'lucide-react'
+import { ChevronDown, LayoutGrid } from 'lucide-react'
 import type { TrailFrame } from '../lib/explorationTrail'
 import { activeTrailFrame } from '../lib/explorationTrail'
+import { formatModKey } from '../lib/commands'
+import { VersionProofIcon } from './icons/StudioIcons'
 
 type ExplorationTrailProps = {
   frames: TrailFrame[]
@@ -82,12 +84,12 @@ export function ExplorationTrail({
           )}
         </div>
       )}
-      <button type="button" className="trail-fork" onClick={onFork} title="New version (Fork) — keep the current look (Cmd+B)">
-        <GitFork size={13} aria-hidden />
+      <button type="button" className="trail-fork" onClick={onFork} title={`New version (Fork) — keep the current look (${formatModKey('b')})`}>
+        <VersionProofIcon size={14} aria-hidden />
         New version
       </button>
-      <button type="button" className="trail-gallery" onClick={onOpenGallery} title="Versions (Comps) — compare and restore saved looks (Cmd+Shift+B)" aria-label={galleryLabel}>
-        <LayoutGrid size={13} aria-hidden />
+      <button type="button" className="trail-gallery" onClick={onOpenGallery} title={`Versions (Comps) — compare and restore saved looks (${formatModKey('b', true)})`} aria-label={galleryLabel}>
+        <LayoutGrid size={14} aria-hidden />
         Versions
       </button>
     </div>

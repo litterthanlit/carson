@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Copy, EyeOff, FlipHorizontal2, Scissors, SquareDashed, X } from 'lucide-react'
+import { formatModKey } from '../lib/commands'
 import {
   appendLassoPoint,
   ellipseSelectionPoints,
@@ -150,32 +151,32 @@ export function SelectionOverlay({
           onPointerDown={(event) => event.stopPropagation()}
         >
           <span className="selection-bar-target" title={targetName ? `Acts on ${targetName}` : undefined}>
-            <SquareDashed size={12} aria-hidden />
+            <SquareDashed size={14} aria-hidden />
             {targetName ?? 'Pick a layer'}
           </span>
           <button type="button" disabled={!targetName} title="Hide the selected area on the layer mask (Delete)" onClick={onMaskOut}>
-            <EyeOff size={13} aria-hidden />
+            <EyeOff size={14} aria-hidden />
             Mask out
           </button>
           <button type="button" disabled={!targetName} title="Hide everything outside the selection" onClick={onKeepOnly}>
             Keep only
           </button>
-          <button type="button" disabled={!targetName} title="Lift the selected area to a new layer (⌘J)" onClick={onLayerViaCopy}>
-            <Copy size={13} aria-hidden />
+          <button type="button" disabled={!targetName} title={`Lift the selected area to a new layer (${formatModKey('j')})`} onClick={onLayerViaCopy}>
+            <Copy size={14} aria-hidden />
             Layer via copy
           </button>
-          <button type="button" disabled={!targetName} title="Cut the selected area to a new layer (⇧⌘J)" onClick={onLayerViaCut}>
-            <Scissors size={13} aria-hidden />
+          <button type="button" disabled={!targetName} title={`Cut the selected area to a new layer (${formatModKey('j', true)})`} onClick={onLayerViaCut}>
+            <Scissors size={14} aria-hidden />
             Cut
           </button>
           <span className="selection-bar-rule" aria-hidden />
           <button
             type="button"
             aria-pressed={selection.inverted}
-            title="Invert selection (⇧⌘I)"
+            title={`Invert selection (${formatModKey('i', true)})`}
             onClick={() => onSelectionChange({ ...selection, inverted: !selection.inverted })}
           >
-            <FlipHorizontal2 size={13} aria-hidden />
+            <FlipHorizontal2 size={14} aria-hidden />
             Invert
           </button>
           <label className="selection-feather" title="Feather: soften the selection edge (poster px)">
@@ -189,7 +190,7 @@ export function SelectionOverlay({
             />
           </label>
           <button type="button" className="icon-button" aria-label="Deselect" title="Deselect (Esc)" onClick={() => onSelectionChange(null)}>
-            <X size={13} />
+            <X size={14} aria-hidden />
           </button>
         </div>
       ) : null}

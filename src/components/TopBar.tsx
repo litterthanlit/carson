@@ -13,17 +13,14 @@ import {
   Shuffle,
   Undo2,
 } from 'lucide-react'
+import { formatModKey, IS_MAC_PLATFORM } from '../lib/commands'
 import type { AgentBridgeStatus } from '../lib/agentBridge'
 import { BrandMark } from './BrandMark'
-import { TensionDial } from './TensionDial'
 import { ThemeToggle } from './ThemeToggle'
 
 type TopBarProps = {
   projectName: string
   onProjectNameChange: (name: string) => void
-  tension: number
-  onTensionChange: (value: number) => void
-  onTensionCommit: () => void
   onHome: () => void
   onNewPoster: () => void
   onOpenPoster: () => void
@@ -174,9 +171,6 @@ function FileMenu({ items }: { items: FileItem[] }) {
 export const TopBar = memo(function TopBar({
   projectName,
   onProjectNameChange,
-  tension,
-  onTensionChange,
-  onTensionCommit,
   onHome,
   onNewPoster,
   onOpenPoster,
@@ -195,9 +189,9 @@ export const TopBar = memo(function TopBar({
   onAgentDisconnect,
 }: TopBarProps) {
   const fileItems: FileItem[] = [
-    { label: 'New poster', shortcut: '⌘N', keys: 'Meta+N', icon: FilePlus2, run: onNewPoster },
-    { label: 'Open poster', shortcut: '⌘O', keys: 'Meta+O', icon: FolderOpen, run: onOpenPoster },
-    { label: 'Save as', shortcut: '⇧⌘S', keys: 'Meta+Shift+S', icon: Files, run: onSaveAs },
+    { label: 'New poster', shortcut: formatModKey('n'), keys: 'Meta+N', icon: FilePlus2, run: onNewPoster },
+    { label: 'Open poster', shortcut: formatModKey('o'), keys: 'Meta+O', icon: FolderOpen, run: onOpenPoster },
+    { label: 'Save as', shortcut: formatModKey('s', true), keys: 'Meta+Shift+S', icon: Files, run: onSaveAs },
     { label: 'Duplicate poster', icon: Copy, run: onDuplicatePoster },
     { label: 'Home', icon: House, run: onHome },
   ]
@@ -224,30 +218,29 @@ export const TopBar = memo(function TopBar({
             type="button"
             className={isDirty ? 'save-state dirty' : 'save-state'}
             aria-label="Save"
-            title="Save to this browser (⌘S)"
+            title={`Save to this browser (${formatModKey('s')})`}
             onClick={onSave}
           >
-            {isDirty ? <Save size={12} aria-hidden /> : <span className="save-dot" aria-hidden />}
+            {isDirty ? <Save size={14} aria-hidden /> : <span className="save-dot" aria-hidden />}
             <span aria-live="polite">{isDirty ? 'Save' : 'Saved'}</span>
           </button>
         </div>
       </div>
-      <TensionDial value={tension} onChange={onTensionChange} onCommit={onTensionCommit} />
       <div className="top-actions" aria-label="Poster actions">
         <div className="top-cluster" role="group" aria-label="Undo and redo">
-          <button type="button" className="icon-button" data-tour="undo" aria-label="Undo" title="Undo (⌘Z)" onClick={onUndo}>
-            <Undo2 size={15} />
+          <button type="button" className="icon-button" data-tour="undo" aria-label="Undo" title={`Undo (${formatModKey('z')})`} onClick={onUndo}>
+            <Undo2 size={16} aria-hidden />
           </button>
-          <button type="button" className="icon-button" aria-label="Redo" title="Redo (⇧⌘Z)" onClick={onRedo}>
-            <Redo2 size={15} />
+          <button type="button" className="icon-button" aria-label="Redo" title={`Redo (${formatModKey('z', true)})`} onClick={onRedo}>
+            <Redo2 size={16} aria-hidden />
           </button>
         </div>
         {agentStatus !== 'off' ? (
           <AgentChip status={agentStatus} onConnect={onAgentConnect} onDisconnect={onAgentDisconnect} />
         ) : null}
         <ThemeToggle />
-        <button type="button" className="command-button" title="Search every action (⌘K)" aria-label="Commands" onClick={onOpenCommands}>
-          <Command size={13} aria-hidden />
+        <button type="button" className="command-button" title={`Search every action (${formatModKey('k')})`} aria-label="Commands" onClick={onOpenCommands}>
+          {IS_MAC_PLATFORM ? <Command size={14} aria-hidden /> : <span>Ctrl+</span>}
           <span>K</span>
         </button>
         <span className="top-divider" aria-hidden />
@@ -259,11 +252,11 @@ export const TopBar = memo(function TopBar({
           disabled={scrambleDisabled}
           onClick={onScramble}
         >
-          <Shuffle size={14} />
+          <Shuffle size={14} aria-hidden />
           Shuffle layout
         </button>
-        <button type="button" className="primary-button" title="Export the poster (⌘E)" onClick={onExport}>
-          <Download size={14} />
+        <button type="button" className="primary-button" title={`Export the poster (${formatModKey('e')})`} onClick={onExport}>
+          <Download size={14} aria-hidden />
           Export
         </button>
       </div>

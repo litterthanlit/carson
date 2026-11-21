@@ -1,3 +1,5 @@
+import { formatModKey } from '../lib/commands'
+
 export function OnboardingModal({
   open,
   onStart,
@@ -20,7 +22,7 @@ export function OnboardingModal({
         <ol className="onboarding-steps">
           <li>Scatter the headline — watch the seed number</li>
           <li>Hit Xerox on the selection — text stays editable underneath</li>
-          <li>Press <kbd>R</kbd> to re-roll, <kbd>Cmd+Z</kbd> to walk it back</li>
+          <li>Press <kbd>R</kbd> to re-roll, <kbd>{formatModKey('z')}</kbd> to walk it back</li>
         </ol>
         <div className="button-row">
           <button type="button" className="primary-button" onClick={onStart}>

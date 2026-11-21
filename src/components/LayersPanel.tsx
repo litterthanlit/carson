@@ -8,12 +8,12 @@ import {
   Image as ImageIcon,
   Lock,
   LockOpen,
-  Puzzle,
   SlidersHorizontal,
   Square,
   Type,
   type LucideProps,
 } from 'lucide-react'
+import { FragmentLayerIcon, type StudioIconProps } from './icons/StudioIcons'
 import { effectiveCollapsedIds, groupIdsWithChildren, visibleLayerRows } from '../lib/layerTreeView'
 
 export type LayerRow = {
@@ -47,11 +47,11 @@ type LayersPanelProps = {
 
 const NO_COLLAPSED: ReadonlySet<string> = new Set()
 
-const KIND_ICONS: Record<string, ComponentType<LucideProps>> = {
+const KIND_ICONS: Record<string, ComponentType<LucideProps> | ComponentType<StudioIconProps>> = {
   text: Type,
   image: ImageIcon,
   shape: Square,
-  fragment: Puzzle,
+  fragment: FragmentLayerIcon,
   group: Folder,
   adjustment: SlidersHorizontal,
   paint: Brush,

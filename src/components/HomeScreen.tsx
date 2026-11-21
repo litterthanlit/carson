@@ -1,6 +1,7 @@
 import { useRef, useState, type DragEvent } from 'react'
 import { FolderOpen, ImagePlus, Plus } from 'lucide-react'
 import { BrandMark } from './BrandMark'
+import { formatModKey } from '../lib/commands'
 import { formatProjectTimestamp, posterAspectRatio } from '../lib/home'
 import type { StoredProject } from '../lib/storage'
 import { ThemeToggle } from './ThemeToggle'
@@ -203,12 +204,12 @@ export function HomeScreen({
         <div className="home-top-actions">
           <ThemeToggle className="home-ghost-button theme-toggle" />
           {onOpenPoster ? (
-            <button type="button" className="home-ghost-button" onClick={onOpenPoster} title="Open a saved poster (⌘O)">
+            <button type="button" className="home-ghost-button" onClick={onOpenPoster} title={`Open a saved poster (${formatModKey('o')})`}>
               <FolderOpen size={14} aria-hidden />
               <span className="home-button-label">Open poster</span>
             </button>
           ) : null}
-          <button type="button" className="primary-button" onClick={onNewPoster} title="Pick any size (⌘N)">
+          <button type="button" className="primary-button" onClick={onNewPoster} title={`Pick any size (${formatModKey('n')})`}>
             <Plus size={14} aria-hidden />
             New poster
           </button>

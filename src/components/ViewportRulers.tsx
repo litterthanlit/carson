@@ -63,7 +63,7 @@ export function ViewportRulers({ scrollRef, displayScale, posterWidth, posterHei
       tick: readCss('--ruler-tick', 'rgba(255,255,255,0.28)'),
       major: readCss('--ruler-major', 'rgba(255,255,255,0.5)'),
       label: readCss('--text-faint', '#a3a3a3'),
-      cursor: readCss('--accent', '#1473e6'),
+      cursor: readCss('--selection-blue', '#3b82f6'),
       edge: readCss('--ruler-edge', '#1f1f1f'),
     }
     const font = `500 10px ${readCss('--font', 'system-ui, sans-serif')}`

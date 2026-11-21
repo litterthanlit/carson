@@ -12,7 +12,7 @@ export function ThemeToggle({ className = 'icon-button theme-toggle' }: { classN
       aria-label={`Switch to ${next} mode`}
       onClick={toggleTheme}
     >
-      {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+      {theme === 'dark' ? <Sun size={16} aria-hidden /> : <Moon size={16} aria-hidden />}
     </button>
   )
 }
