@@ -77,20 +77,27 @@ export function TensionDial({ value, onChange, onCommit }: TensionDialProps) {
         }}
       >
         <svg viewBox="0 0 36 36" aria-hidden="true">
-          <circle cx="18" cy="18" r="14" className="tension-track" />
           <circle
             cx="18"
             cy="18"
-            r="14"
+            r="13"
+            className="tension-track"
+            strokeDasharray="61.3 82"
+            transform={`rotate(${START_DEG} 18 18)`}
+          />
+          <circle
+            cx="18"
+            cy="18"
+            r="13"
             className="tension-fill"
-            strokeDasharray={`${(clampTension(value) / 100) * 88} 88`}
+            strokeDasharray={`${(clampTension(value) / 100) * 61.3} 82`}
             transform={`rotate(${START_DEG} 18 18)`}
           />
           <line
             x1="18"
             y1="18"
-            x2={18 + Math.cos((angle * Math.PI) / 180) * 10}
-            y2={18 + Math.sin((angle * Math.PI) / 180) * 10}
+            x2={18 + Math.cos((angle * Math.PI) / 180) * 9}
+            y2={18 + Math.sin((angle * Math.PI) / 180) * 9}
             className="tension-needle"
           />
         </svg>

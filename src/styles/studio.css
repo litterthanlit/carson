@@ -1,0 +1,1224 @@
+/* ── Carson Photoshop-Docked Studio Layout & Neutral High-Contrast Ink ──────
+   Classic docked studio workspace (slim top bar, full-height left Tools rail,
+   unobstructed full-height canvas with bottom-left zoom/size/status pill,
+   and Photoshop-style right icon dock + collapsible inspector + Layers).
+   Selection blue (--selection-blue) is reserved strictly for canvas geometry. */
+
+/* ── Docked TopBar ──────────────────────────────────────────────────────── */
+.topbar {
+  height: 40px;
+  padding: 0 10px;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--chrome-bar);
+}
+
+.topbar .brand {
+  gap: 4px;
+  min-width: 0;
+}
+
+.topbar .top-actions {
+  gap: 4px;
+}
+
+.brand-home {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+}
+
+.project-name-input {
+  width: 184px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  font: 500 12.5px/1.2 var(--font);
+}
+
+.top-actions .primary-button,
+.top-actions .scramble-button,
+.top-actions .command-button {
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.top-actions .scramble-button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.top-actions .scramble-button:hover:not(:disabled) {
+  background: var(--wash-strong);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.top-actions .command-button {
+  border-color: var(--border);
+  background: var(--surface-sunken);
+  font-size: 11px;
+  padding: 0 8px;
+}
+
+.top-actions .icon-button {
+  width: 28px;
+  min-height: 28px;
+  border-radius: var(--radius-sm);
+}
+
+.top-divider {
+  height: 16px;
+  margin: 0 2px;
+  background: var(--divider);
+}
+
+/* ── Photoshop-Style Docked Workspace Grid ──────────────────────────────── */
+.workspace {
+  min-height: calc(100dvh - 40px);
+  height: calc(100dvh - 40px);
+  background: var(--canvas-bg);
+  grid-template-columns: 44px minmax(0, 1fr) calc(var(--inspector-width, 296px) + 40px);
+}
+
+.workspace.is-dock-collapsed {
+  grid-template-columns: 44px minmax(0, 1fr) 40px;
+}
+
+.workspace.is-zen {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.canvas-stage {
+  min-height: calc(100dvh - 40px);
+  max-height: calc(100dvh - 40px);
+  height: calc(100dvh - 40px);
+  background: var(--canvas-bg);
+}
+
+.canvas-stage.is-zen .canvas-viewport > .canvas-scroll {
+  margin: 0;
+}
+
+/* ── Docked Left Vertical ToolRail ──────────────────────────────────────── */
+.tool-rail {
+  width: 44px;
+  min-height: calc(100dvh - 40px);
+  max-height: calc(100dvh - 40px);
+  gap: 2px;
+  padding: 8px 5px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--chrome-bar);
+  box-shadow: none;
+}
+
+.tool-rail-rule {
+  width: 20px;
+  margin: 4px 0;
+  background: var(--divider);
+}
+
+.tool-rail > button,
+.tool-rail-flyout-wrap > button {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  transition: background-color 110ms ease, color 110ms ease;
+}
+
+.tool-rail > button:hover:not(:disabled),
+.tool-rail-flyout-wrap > button:hover:not(:disabled) {
+  background: var(--wash-strong);
+  color: var(--text);
+}
+
+.tool-rail > button.active,
+.tool-rail-flyout-wrap > button.active {
+  background: var(--tool-active);
+  color: var(--tool-active-fg);
+  box-shadow: var(--shadow-sm);
+}
+
+.tool-flyout-caret {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 110ms ease;
+}
+
+.tool-rail-flyout-wrap > button:hover .tool-flyout-caret,
+.tool-rail-flyout-wrap > button.active .tool-flyout-caret {
+  opacity: 0.92;
+}
+
+.tool-flyout {
+  left: 44px;
+  min-width: 186px;
+  padding: 5px;
+  gap: 2px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong);
+  background: var(--panel-raised);
+  box-shadow: var(--shadow-md);
+}
+
+.tool-flyout button {
+  min-height: 30px;
+  padding: 0 10px;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tool-flyout button[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* ── Docked Effects Drawer Anchored to Viewport Left ────────────────────── */
+.canvas-viewport > .instruments-palette {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 264px;
+  min-height: 0;
+  max-height: none;
+  z-index: 12;
+  border: 0;
+  border-right: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+}
+
+.instruments-palette .effect-button {
+  min-height: 30px;
+  padding: 0 8px;
+  gap: 7px;
+  font-size: 11.5px;
+  border-radius: var(--radius-sm);
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+
+.instruments-palette .effect-button.starter {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-color: var(--border-strong);
+}
+
+.instruments-palette .effect-button svg {
+  color: var(--text-muted);
+}
+
+.instruments-palette .effect-button:hover:not(:disabled) svg {
+  color: var(--text);
+}
+
+/* Archival monochrome SEL / ALL stamps */
+.scope-badge {
+  margin-left: auto;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-strong);
+  font: 600 9.5px/1.35 var(--font-mono);
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.scope-badge.scope-all {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+
+/* ── Photoshop-Style Right Dock (Icon Rail + Collapsible Panel + Layers) ── */
+.inspector-column {
+  position: relative;
+  margin: 0;
+  min-height: calc(100dvh - 40px);
+  height: calc(100dvh - 40px);
+  max-height: calc(100dvh - 40px);
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.ps-dock {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.ps-rail-column {
+  width: 40px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--chrome-strip);
+  border-right: 1px solid var(--border);
+}
+
+.ps-dock.is-collapsed .ps-rail-column {
+  border-right: 0;
+}
+
+.ps-dock-toggle {
+  width: 100%;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-faint);
+  transition: background-color 110ms ease, color 110ms ease;
+}
+
+.ps-dock-toggle:hover {
+  background: var(--wash);
+  color: var(--text);
+}
+
+.ps-icon-rail {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  overflow-y: auto;
+}
+
+.ps-icon-rail button {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  transition: background-color 110ms ease, color 110ms ease;
+}
+
+.ps-icon-rail button:hover:not(.active) {
+  background: var(--wash-strong);
+  color: var(--text);
+}
+
+.ps-icon-rail button.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: var(--shadow-sm);
+}
+
+.inspector-column .inspector {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ps-panel-header {
+  flex: none;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--chrome-strip);
+  border-bottom: 1px solid var(--border);
+}
+
+.ps-panel-tab-label {
+  font: 600 11px/1 var(--font);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.inspector-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  z-index: 25;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.inspector-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.inspector-resizer:hover::after,
+.inspector-resizer:active::after {
+  background: var(--accent);
+}
+
+/* ── Quiet Blended Rulers ───────────────────────────────────────────────── */
+.viewport-rulers .ruler-corner {
+  background: var(--canvas-bg);
+  border-color: var(--ruler-edge);
+}
+
+/* ── Bottom-Left Figma/Photoshop-Style Zoom, Size & Status Pill ─────────── */
+.artboard-bar {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--chrome-strip);
+}
+
+.canvas-stage-float {
+  position: absolute;
+  left: 26px;
+  bottom: 12px;
+  z-index: 8;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.canvas-viewport:has(.instruments-palette) .canvas-stage-float {
+  left: 276px;
+}
+
+.stage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 3px 8px;
+  pointer-events: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--float-bar);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.stage-pill .stage-size {
+  margin: 0;
+}
+
+.stage-pill .stage-size select {
+  width: auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  border-color: transparent;
+  background: var(--wash);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.stage-pill .stage-size select:hover {
+  background: var(--wash-strong);
+}
+
+.stage-dims {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-faint);
+}
+
+.stage-pill-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--divider);
+  flex: none;
+}
+
+.stage-pill-status {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.stage-pill .zoom-controls .icon-button {
+  width: 24px;
+  min-height: 24px;
+  border-radius: var(--radius-sm);
+}
+
+.stage-pill .zoom-controls .icon-button.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.stage-pill .zoom-readout {
+  min-width: 42px;
+  min-height: 24px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.stage-pill .zoom-readout:hover {
+  background: var(--wash-strong);
+}
+
+.stage-reroll-pill {
+  min-height: 32px;
+  padding: 0 10px;
+  pointer-events: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong);
+  background: var(--float-bar);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-sm);
+}
+
+.zen-restore-pill {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 20;
+  min-height: 32px;
+  padding: 0 14px;
+  gap: 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--float-bar);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* ── Vertical Photoshop-Style History Panel ─────────────────────────────── */
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-panel .panel-title {
+  margin-bottom: 0;
+  justify-content: space-between;
+}
+
+.history-actions {
+  gap: 6px;
+}
+
+.history-actions button {
+  flex: 1;
+  min-height: 28px;
+  font-size: 11.5px;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-row {
+  width: 100%;
+  min-height: 44px;
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transition: background-color 100ms ease;
+}
+
+.history-row:hover {
+  background: var(--wash);
+}
+
+.history-row.active {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.history-row.active:hover {
+  background: var(--accent-soft-hover);
+}
+
+.history-thumb {
+  width: 30px;
+  height: 38px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--thumb-outline);
+  background: var(--surface-sunken);
+}
+
+.history-thumb-placeholder {
+  display: inline-block;
+  background: repeating-conic-gradient(var(--checker-light) 0 25%, var(--checker-dark) 0 50%) 50% / 8px 8px;
+}
+
+.history-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.history-row-label {
+  font: 500 12px/1.3 var(--font);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-row-copy small {
+  font: 400 10.5px/1.2 var(--font-mono);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Inspector Sections, Controls & Splitters (Monochrome Ink) ──────────── */
+.panel-section {
+  padding: 10px 12px 12px;
+}
+
+.ps-properties-panel {
+  padding: 0 12px 12px;
+}
+
+/* Slim 1-line layer identity bar (replaces confusing Name form box) */
+.ps-layer-identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 -12px 2px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.ps-layer-identity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex: none;
+}
+
+.ps-layer-identity-name {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 5px;
+  margin-left: -5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  font: 600 12.5px/1.2 var(--font);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ps-layer-identity-name:hover {
+  background: var(--wash);
+}
+
+.ps-layer-identity-name:focus {
+  outline: none;
+  background: var(--field-bg);
+  border-color: var(--accent);
+}
+
+/* Font picker + upload icon button on one row */
+.ps-font-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ps-font-row .font-picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.ps-font-upload {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.ps-font-upload:hover {
+  background: var(--wash-strong);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+/* Photoshop 2-column scrubbable numeric field grid (Character & Transform) */
+.ps-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.ps-field-grid .dial-field {
+  margin: 0;
+}
+
+.ps-field-grid .dial-field .dial-head {
+  gap: 6px;
+  min-height: 25px;
+}
+
+.ps-field-grid .dial-field .dial-label {
+  font-size: 11.5px;
+}
+
+.ps-field-grid .dial-field .dial-value-input {
+  width: 58px;
+  height: 25px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  font-size: 11.5px;
+}
+
+.ps-xy-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0;
+}
+
+.ps-xy-field span {
+  font: 500 11.5px/1 var(--font);
+  color: var(--text-muted);
+}
+
+.ps-xy-field input {
+  width: 58px;
+  height: 25px;
+  padding: 0 6px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+  background: var(--field-bg);
+  font: 450 11.5px/1 var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+
+.ps-xy-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Compact inline Color swatch + hex + eyedropper row */
+.ps-color-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.ps-color-label {
+  font: 500 11.5px/1 var(--font);
+  color: var(--text-muted);
+}
+
+.ps-color-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ps-color-controls input[type='color'] {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.ps-color-controls input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.ps-color-controls input[type='color']::-webkit-color-swatch {
+  border: 0;
+  border-radius: 2px;
+}
+
+.ps-color-hex {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  min-width: 54px;
+}
+
+.ps-color-controls .icon-button {
+  width: 24px;
+  min-height: 24px;
+  border-radius: var(--radius-xs);
+}
+
+/* Compact Transform action bar (Distort / Warp + Z-order icons) */
+.ps-transform-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.ps-transform-actions > button:not(.icon-button) {
+  min-height: 25px;
+  padding: 0 9px;
+  font-size: 11.5px;
+  border-radius: var(--radius-xs);
+}
+
+.ps-transform-actions .icon-button {
+  width: 25px;
+  min-height: 25px;
+  border-radius: var(--radius-xs);
+}
+
+.ps-actions-spacer {
+  flex: 1;
+}
+
+/* Collapsed Type options sub-disclosure (Edit copy, OpenType, Styles, Path) */
+.ps-subdisclosure {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.ps-subdisclosure summary {
+  cursor: pointer;
+  font: 500 11.5px/1.3 var(--font);
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.ps-subdisclosure summary:hover {
+  color: var(--text);
+}
+
+.ps-subdisclosure-body {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.property-section {
+  margin: 0 -12px;
+}
+
+.property-section-toggle {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px 0 10px;
+  font-size: 12px;
+}
+
+.property-section-body {
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+/* Unify Layers panel header with the top PROPERTIES header */
+.layers-header {
+  height: 28px;
+  padding: 0 12px;
+  justify-content: space-between;
+  background: var(--chrome-strip);
+  border-bottom: 1px solid var(--border);
+}
+
+.layers-header h2 {
+  font: 600 11px/1 var(--font);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.layers-props {
+  padding: 7px 10px;
+}
+
+/* Segmented icon bars (Text alignment) */
+.field-group {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.field-group-label {
+  color: var(--text-muted);
+  font: 500 12px/1.3 var(--font);
+}
+
+.icon-segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+.icon-segmented button {
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.icon-segmented button:hover:not(:disabled) {
+  background: var(--wash);
+  color: var(--text);
+}
+
+.icon-segmented button[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Compact inline numeric presets (Columns / Rows in Layout tab) */
+.preset-row.preset-row-inline {
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.preset-row.preset-row-inline button {
+  justify-content: center;
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector .preset-row button.active,
+.inspector .button-row button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* Compact Align & Distribute icon bar in Layout tab */
+.align-icon-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 3px;
+  margin: 4px 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+.align-icon-bar .icon-button {
+  flex: 1;
+  width: auto;
+  min-width: 24px;
+  min-height: 26px;
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+}
+
+.align-icon-bar .icon-button:hover:not(:disabled) {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.align-bar-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--divider);
+  flex: none;
+}
+
+/* Collapsed Saved posters disclosure inside Project section */
+.saved-disclosure {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.saved-disclosure summary {
+  cursor: pointer;
+  font: 500 12px/1.3 var(--font);
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.saved-disclosure summary:hover {
+  color: var(--text);
+}
+
+/* Horizontal draggable splitter above Layers dock */
+.layers-splitter {
+  flex: none;
+  height: 6px;
+  margin: -3px 0;
+  position: relative;
+  z-index: 6;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.layers-splitter::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 2px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.layers-splitter:hover::after,
+.layers-splitter:active::after {
+  background: var(--accent);
+}
+
+/* Active layer row: neutral ink tint + crisp 2px ink rail */
+.layer-row.active {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.layer-row.active:hover {
+  background: var(--accent-soft-hover);
+}
+
+/* ── High-Contrast Ink Foreground Safety ──────────────────────────────────
+   Ensure every control filled with var(--accent) uses var(--accent-fg)
+   so dark mode (#f3f1eb fill -> #111110 ink) and light mode (#141412 -> #fff)
+   both keep maximum WCAG AAA contrast. */
+.file-menu-popover [role='menuitem']:hover,
+.file-menu-popover [role='menuitem']:focus-visible,
+.brush-mode button[aria-checked='true'],
+.brush-pressure button[aria-pressed='true'],
+.selection-bar button[aria-pressed='true'],
+.frame-segmented button[aria-checked='true'],
+.frame-extend button[aria-pressed='true'],
+.gallery-before-after[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.file-menu-popover [role='menuitem']:hover svg,
+.file-menu-popover [role='menuitem']:focus-visible svg {
+  color: var(--accent-fg);
+}
+
+.frame-size-badge {
+  background: var(--selection-blue);
+  color: #fff;
+}
+
+/* Keep canvas warp/selection geometry in selection-blue */
+.warp-grid {
+  stroke: var(--selection-blue);
+}
+
+.warp-handle {
+  border-color: var(--selection-blue);
+}
+
+.warp-handle:hover,
+.warp-handle:focus-visible {
+  background: var(--selection-blue);
+}
+
+/* Unified menu & popover corner radius */
+.canvas-context-menu {
+  border-radius: var(--radius-lg);
+}
+
+.canvas-context-menu button {
+  border-radius: var(--radius-sm);
+}
+
+.canvas-shell {
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.58), 0 2px 6px rgb(0 0 0 / 0.38);
+}
+
+:root[data-theme='light'] .canvas-shell {
+  box-shadow: 0 14px 40px rgb(20 20 18 / 0.14), 0 1px 4px rgb(20 20 18 / 0.08);
+}
+
+/* ── Responsive adjustments ─────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 44px minmax(0, 1fr) calc(var(--inspector-width, 272px) + 40px);
+  }
+
+  .stage-pill-status,
+  .stage-status-sep {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .topbar {
+    height: auto;
+    padding: 6px 10px;
+  }
+
+  .workspace,
+  .workspace.is-dock-collapsed,
+  .workspace.is-zen {
+    height: auto;
+    min-height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .tool-rail {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    min-height: auto;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .inspector-column {
+    height: auto;
+    min-height: auto;
+    max-height: none;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .ps-dock {
+    flex-direction: column;
+  }
+
+  .ps-rail-column {
+    width: 100%;
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ps-dock-toggle {
+    width: 36px;
+    height: 36px;
+    border-bottom: 0;
+    border-right: 1px solid var(--border);
+  }
+
+  .ps-icon-rail {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 4px 6px;
+  }
+
+  .inspector-resizer,
+  .layers-splitter {
+    display: none;
+  }
+
+  .canvas-viewport > .instruments-palette {
+    position: static;
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    max-height: 280px;
+  }
+
+  .canvas-stage-float,
+  .canvas-viewport:has(.instruments-palette) .canvas-stage-float {
+    left: 20px;
+    bottom: 10px;
+  }
+
+  .stage-dims {
+    display: none;
+  }
+}

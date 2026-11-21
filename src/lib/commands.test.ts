@@ -102,6 +102,8 @@ describe('formatShortcut', () => {
     expect(formatShortcut({ key: 'k', mod: true, shift: true }, true)).toBe('⇧⌘K')
     expect(formatShortcut({ key: 'k', mod: true, shift: true }, false)).toBe('Ctrl+Shift+K')
     expect(formatShortcut({ code: 'BracketRight', mod: true }, false)).toBe('Ctrl+]')
+    expect(formatShortcut({ code: 'Backslash', mod: true }, true)).toBe('⌘\\')
+    expect(formatShortcut({ code: 'Backslash', mod: true }, false)).toBe('Ctrl+\\')
     expect(formatShortcut({ key: 'Delete' }, true)).toBe('Del')
     expect(formatShortcut({ key: 'v' }, false)).toBe('V')
   })

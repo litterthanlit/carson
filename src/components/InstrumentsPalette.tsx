@@ -3,28 +3,38 @@ import {
   Aperture,
   ChevronDown,
   ChevronRight,
-  Circle,
   Columns3,
+  Contrast,
   Copy,
   Crop,
+  Disc,
   Droplet,
   Droplets,
   Eraser,
+  Flame,
   FlipHorizontal,
   Frame,
   Images,
   Layers,
+  Layers3,
+  Move,
   Printer,
   Repeat,
   Rows3,
+  Scan,
   ScanLine,
   Scissors,
+  ScissorsLineDashed,
   Shuffle,
+  Sliders,
+  Sparkles,
   Spline,
+  SplitSquareHorizontal,
+  Stamp,
   Timer,
   Type,
-  Wand2,
   Waves,
+  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import type { ExpressiveLegibility } from '../lib/editorModel'
@@ -190,7 +200,7 @@ function EffectButton({ effect, variant }: { effect: EffectDef; variant?: 'start
       disabled={effect.disabled}
       onClick={effect.onClick}
     >
-      <Icon size={16} aria-hidden /> <span className="effect-name">{effect.label}</span>
+      <Icon size={14} aria-hidden /> <span className="effect-name">{effect.label}</span>
       {variant === 'result' ? <span className="effect-context">{SECTION_TITLES[effect.section]}</span> : null}
       <ScopeTag scope={effect.scope} />
     </button>
@@ -324,23 +334,23 @@ export function InstrumentsPalette({
   // One definition per effect: the starters, the search results and the groups all render from here.
   const effects: EffectDef[] = [
     { id: 'scramble', section: 'play', label: 'Shuffle layout', title: 'Rearrange every layer into a new structure — Shift+R, then R to re-roll', icon: Shuffle, scope: 'all', keywords: ['scramble', 'rearrange', 'layout', 'structure', 'randomize'], onClick: onScramble, disabled: scrambleDisabled },
-    { id: 'scatter', section: 'play', label: 'Scatter', title: 'Scatter the selected layers — press R to re-roll', icon: Shuffle, scope: 'sel', keywords: ['chaos', 'jump', 'random', 'move'], onClick: onScatter, disabled: !selected, dataTour: 'scatter' },
-    { id: 'filters', section: 'play', label: 'Filters', title: 'Browse blur, stylize, color, and Carson print filters with live preview', icon: Wand2, scope: 'sel', keywords: ['filter gallery', 'blur', 'stylize', 'color', 'gallery'], onClick: onOpenFilterGallery, disabled: !selected },
+    { id: 'scatter', section: 'play', label: 'Scatter', title: 'Scatter the selected layers — press R to re-roll', icon: Sparkles, scope: 'sel', keywords: ['chaos', 'jump', 'random', 'move'], onClick: onScatter, disabled: !selected, dataTour: 'scatter' },
+    { id: 'filters', section: 'play', label: 'Filters', title: 'Browse blur, stylize, color, and Carson print filters with live preview', icon: Sliders, scope: 'sel', keywords: ['filter gallery', 'blur', 'stylize', 'color', 'gallery'], onClick: onOpenFilterGallery, disabled: !selected },
     { id: 'textures', section: 'play', label: 'Textures', title: 'Browse print, ink, paper, and grit textures', icon: Images, scope: 'all', keywords: ['texture gallery', 'paper', 'grit', 'gallery'], onClick: onOpenTextureGallery },
     { id: 'strips', section: 'play', label: 'Strips', title: 'Slice into horizontal strips', icon: Rows3, scope: 'sel', keywords: ['slice', 'horizontal', 'cut', 'rows'], onClick: onSliceHorizontal, disabled: !selected },
     { id: 'columns', section: 'play', label: 'Columns', title: 'Slice into vertical columns', icon: Columns3, scope: 'sel', keywords: ['slice', 'vertical', 'cut'], onClick: onSliceVertical, disabled: !selected },
 
-    { id: 'magazine-chaos', section: 'energy', label: 'Magazine chaos', title: 'Shift every layer into colliding blend chaos', icon: Shuffle, scope: 'all', keywords: ['poster style', 'blend', 'collide'], onClick: () => onApplyPosterStyle('magazine') },
+    { id: 'magazine-chaos', section: 'energy', label: 'Magazine chaos', title: 'Shift every layer into colliding blend chaos', icon: Zap, scope: 'all', keywords: ['poster style', 'blend', 'collide'], onClick: () => onApplyPosterStyle('magazine') },
     { id: 'oversized-type', section: 'energy', label: 'Oversized type', title: 'Rotate the layout toward oversized type', icon: Type, scope: 'all', keywords: ['poster style', 'big', 'headline', 'rotate'], onClick: () => onApplyPosterStyle('type') },
-    { id: 'image-fracture', section: 'energy', label: 'Image fracture', title: 'Fracture the layout around imagery', icon: Scissors, scope: 'all', keywords: ['poster style', 'break', 'photo'], onClick: () => onApplyPosterStyle('image') },
-    { id: 'bw-red', section: 'energy', label: 'B/W red', title: 'Reset to black/white/red minimalism', icon: Circle, scope: 'all', keywords: ['poster style', 'black', 'white', 'red', 'minimal', 'reset'], onClick: () => onApplyPosterStyle('minimal') },
+    { id: 'image-fracture', section: 'energy', label: 'Image fracture', title: 'Fracture the layout around imagery', icon: SplitSquareHorizontal, scope: 'all', keywords: ['poster style', 'break', 'photo'], onClick: () => onApplyPosterStyle('image') },
+    { id: 'bw-red', section: 'energy', label: 'B/W red', title: 'Reset to black/white/red minimalism', icon: Contrast, scope: 'all', keywords: ['poster style', 'black', 'white', 'red', 'minimal', 'reset'], onClick: () => onApplyPosterStyle('minimal') },
 
-    { id: 'type-strip', section: 'type', label: 'Type strip', title: 'Repeat the selected text as printed strips', icon: Type, scope: 'sel', keywords: ['text', 'repeat', 'strips'], onClick: onAddTypeStrip, disabled: !selectedIsText },
-    { id: 'break-copy', section: 'type', label: 'Break copy', title: 'Smash words together with erratic Ray Gun mid-word hyphenation — stays editable', icon: Type, scope: 'sel', keywords: ['text', 'ray gun', 'smash', 'hyphen', 'no space', 'tight', 'column', 'break'], onClick: () => onBreakCopy?.(), disabled: !selectedIsText },
+    { id: 'type-strip', section: 'type', label: 'Type strip', title: 'Repeat the selected text as printed strips', icon: Rows3, scope: 'sel', keywords: ['text', 'repeat', 'strips'], onClick: onAddTypeStrip, disabled: !selectedIsText },
+    { id: 'break-copy', section: 'type', label: 'Break copy', title: 'Smash words together with erratic Ray Gun mid-word hyphenation — stays editable', icon: SplitSquareHorizontal, scope: 'sel', keywords: ['text', 'ray gun', 'smash', 'hyphen', 'no space', 'tight', 'column', 'break'], onClick: () => onBreakCopy?.(), disabled: !selectedIsText },
     { id: 'break-letters', section: 'type', label: 'Break letters', title: 'Break the selected text into loose letters', icon: Spline, scope: 'sel', keywords: ['text', 'split', 'loose'], onClick: onBreakSelectedType, disabled: !selectedIsText },
-    { id: 'letter-break', section: 'type', label: 'Letter break', title: 'Cut each letter into its strokes and pull them apart', icon: Scissors, scope: 'sel', keywords: ['text', 'strokes', 'cut', 'fragment'], onClick: onLetterBreak, disabled: !selectedIsText },
-    { id: 'bury-type', section: 'type', label: 'Bury type', title: 'Bury a ghost copy of the selected text', icon: Layers, scope: 'sel', keywords: ['text', 'ghost', 'copy', 'texture'], onClick: onCloneTypeAsTexture, disabled: !selectedIsText },
-    { id: 'red-echo', section: 'type', label: 'Red echo type', title: 'Stamp three large red echo words across the poster', icon: Type, scope: 'all', keywords: ['text', 'red', 'echo', 'words'], onClick: onAddRedEchoType },
+    { id: 'letter-break', section: 'type', label: 'Letter break', title: 'Cut each letter into its strokes and pull them apart', icon: ScissorsLineDashed, scope: 'sel', keywords: ['text', 'strokes', 'cut', 'fragment'], onClick: onLetterBreak, disabled: !selectedIsText },
+    { id: 'bury-type', section: 'type', label: 'Bury type', title: 'Bury a ghost copy of the selected text', icon: Layers3, scope: 'sel', keywords: ['text', 'ghost', 'copy', 'texture'], onClick: onCloneTypeAsTexture, disabled: !selectedIsText },
+    { id: 'red-echo', section: 'type', label: 'Red echo type', title: 'Stamp three large red echo words across the poster', icon: Stamp, scope: 'all', keywords: ['text', 'red', 'echo', 'words'], onClick: onAddRedEchoType },
 
     { id: 'copy-machine', section: 'print', label: 'Copy machine', title: 'Photocopy warp — source stays editable', icon: Printer, scope: 'sel', keywords: ['copy', 'copier', 'photocopy', 'xerox', 'warp'], onClick: onApplyCopyMachine, disabled: !selected },
     { id: 'solvent-transfer', section: 'print', label: 'Solvent transfer', title: 'Tape-rub & solvent xerox — localized ink pools, combed dry-brush smears, paste seams and debris', icon: Droplets, scope: 'sel', keywords: ['solvent', 'transfer', 'tape', 'smudge', 'blot', 'rub', 'ray gun', 'xerox', 'paste', 'grunge'], onClick: () => onApplySolventTransfer?.(), disabled: !selected },
@@ -354,17 +364,17 @@ export function InstrumentsPalette({
     { id: 'crop-marks', section: 'print', label: 'Crop marks/grid', title: 'Stamp decorative crop marks onto the artwork', icon: Frame, scope: 'all', keywords: ['trim', 'marks', 'grid', 'registration'], onClick: onAddCropMarks },
 
     { id: 'age-selected', section: 'decay', label: 'Age selected', title: 'Age the selected layer', icon: Timer, scope: 'sel', keywords: ['wear', 'old', 'aged'], onClick: onApplyLayerDecay, disabled: !selected },
-    { id: 'distress', section: 'decay', label: 'Distress', title: 'Convert the selected layer into harsh grit', icon: Aperture, scope: 'sel', keywords: ['grunge', 'grit', 'rough'], onClick: onDistressSelected, disabled: !selected },
-    { id: 'ink-loss', section: 'decay', label: 'Ink loss', title: 'Chip ink away from the selected layer', icon: Droplets, scope: 'sel', keywords: ['chip', 'wear', 'faded'], onClick: () => onAddLayerDecayMarks('ink-loss'), disabled: !selected },
+    { id: 'distress', section: 'decay', label: 'Distress', title: 'Convert the selected layer into harsh grit', icon: Flame, scope: 'sel', keywords: ['grunge', 'grit', 'rough'], onClick: onDistressSelected, disabled: !selected },
+    { id: 'ink-loss', section: 'decay', label: 'Ink loss', title: 'Chip ink away from the selected layer', icon: Droplet, scope: 'sel', keywords: ['chip', 'wear', 'faded'], onClick: () => onAddLayerDecayMarks('ink-loss'), disabled: !selected },
     { id: 'fold-marks', section: 'decay', label: 'Fold marks', title: 'Add fold creases', icon: Rows3, scope: 'sel', keywords: ['crease', 'wear', 'paper'], onClick: () => onAddLayerDecayMarks('fold'), disabled: !selected },
-    { id: 'wear-overlay', section: 'decay', label: 'Wear overlay', title: 'Add the full wear treatment', icon: Layers, scope: 'sel', keywords: ['wear', 'ink loss', 'fold'], onClick: () => onAddLayerDecayMarks('all'), disabled: !selected },
+    { id: 'wear-overlay', section: 'decay', label: 'Wear overlay', title: 'Add the full wear treatment', icon: Layers3, scope: 'sel', keywords: ['wear', 'ink loss', 'fold'], onClick: () => onAddLayerDecayMarks('all'), disabled: !selected },
     { id: 'decay-offset', section: 'decay', label: 'Decay offset', title: 'Add a faint decayed echo', icon: Copy, scope: 'sel', keywords: ['echo', 'ghost', 'copy', 'offset'], onClick: onAddLayerDecayOffset, disabled: !selected },
 
     { id: 'duplicate-drift', section: 'accident', label: 'Duplicate drift', title: 'Clone the selection with accidental drift', icon: Copy, scope: 'sel', keywords: ['copy', 'clone', 'duplicate', 'mistake'], onClick: onDuplicateDriftAccident, disabled: !selected },
     { id: 'bad-crop', section: 'accident', label: 'Bad crop', title: 'Crop badly on purpose', icon: Crop, scope: 'sel', keywords: ['mistake', 'cut'], onClick: onBadCropAccident, disabled: !selected },
     { id: 'flip-mistake', section: 'accident', label: 'Flip mistake', title: 'Add a flipped ghost', icon: FlipHorizontal, scope: 'sel', keywords: ['mirror', 'ghost', 'reverse'], onClick: onFlipMistakeAccident, disabled: !selected },
     { id: 'collide', section: 'accident', label: 'Collide selection', title: 'Pile selected layers into a collision', icon: Layers, scope: 'sel', keywords: ['pile', 'overlap', 'crash'], onClick: onCollideSelectionAccident, disabled: !selected },
-    { id: 'nudge-layout', section: 'accident', label: 'Nudge layout', title: 'Nudge every layer with accidental drift', icon: Shuffle, scope: 'all', keywords: ['drift', 'move', 'shift'], onClick: onNudgeLayoutAccident },
+    { id: 'nudge-layout', section: 'accident', label: 'Nudge layout', title: 'Nudge every layer with accidental drift', icon: Move, scope: 'all', keywords: ['drift', 'move', 'shift'], onClick: onNudgeLayoutAccident },
     { id: 'tear-collage', section: 'accident', label: 'Tear collage', title: 'Tear into shifted scraps', icon: Scissors, scope: 'sel', keywords: ['rip', 'scraps', 'paper'], onClick: onTearCollage, disabled: !selected },
 
     { id: 'press-check', section: 'press', label: 'Press Check', title: 'Keep ink spread, misregistration, and paper tooth as the print look', icon: Printer, scope: 'all', keywords: ['print', 'ink spread', 'misregistration', 'paper tooth', 'proof'], onClick: onTogglePressCheck, ariaLabel: pressCheckActive ? 'Turn off Press Check' : 'Press Check', pressed: pressCheckActive },
@@ -373,10 +383,10 @@ export function InstrumentsPalette({
     { id: 'diagonal-texture', section: 'texture', label: 'Diagonal texture', title: 'Lay diagonal print texture lines', icon: ScanLine, scope: 'all', keywords: ['lines', 'stripes', 'hatch'], onClick: onAddDiagonalTexture },
     { id: 'white-scrapes', section: 'texture', label: 'White scrapes', title: 'Scrape white bands across the poster', icon: Eraser, scope: 'all', keywords: ['bands', 'erase', 'scratch'], onClick: onAddWhiteScrapes },
 
-    { id: 'close-crop', section: 'crop', label: 'Close crop', title: 'Crop tight into the center', icon: Crop, scope: 'sel', keywords: ['tight', 'zoom'], onClick: () => onAggressiveCrop('close'), disabled: !selected },
+    { id: 'close-crop', section: 'crop', label: 'Close crop', title: 'Crop tight into the center', icon: Scan, scope: 'sel', keywords: ['tight', 'zoom'], onClick: () => onAggressiveCrop('close'), disabled: !selected },
     { id: 'off-center-crop', section: 'crop', label: 'Off-center crop', title: 'Crop off-center — press R to re-roll', icon: Crop, scope: 'sel', keywords: ['offset'], onClick: () => onAggressiveCrop('off-center'), disabled: !selected },
-    { id: 'edge-crop', section: 'crop', label: 'Edge crop', title: 'Crop hard to one edge', icon: Crop, scope: 'sel', keywords: ['border'], onClick: () => onAggressiveCrop('edge'), disabled: !selected },
-    { id: 'throw-to-edge', section: 'crop', label: 'Throw to edge', title: 'Throw the fragment to the poster border', icon: Scissors, scope: 'sel', keywords: ['crop', 'border', 'fragment'], onClick: onCropToPosterEdge, disabled: !selected },
+    { id: 'edge-crop', section: 'crop', label: 'Edge crop', title: 'Crop hard to one edge', icon: Frame, scope: 'sel', keywords: ['border'], onClick: () => onAggressiveCrop('edge'), disabled: !selected },
+    { id: 'throw-to-edge', section: 'crop', label: 'Throw to edge', title: 'Throw the fragment to the poster border', icon: ScissorsLineDashed, scope: 'sel', keywords: ['crop', 'border', 'fragment'], onClick: onCropToPosterEdge, disabled: !selected },
   ]
 
   const starters = STARTER_IDS.map((id) => effects.find((effect) => effect.id === id)).filter((effect): effect is EffectDef => Boolean(effect))
@@ -498,7 +508,7 @@ export function InstrumentsPalette({
                   title={recording ? 'Stop capturing instrument plays' : 'Record a chain of instrument plays'}
                   onClick={onToggleRecording}
                 >
-                  <Circle size={16} /> {recording ? 'Stop' : 'Record'}
+                  <Disc size={14} aria-hidden /> {recording ? 'Stop' : 'Record'}
                 </button>
                 <button
                   type="button"

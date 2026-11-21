@@ -1,29 +1,31 @@
 import { memo, useEffect, useRef, useState, type RefObject } from 'react'
 import {
-  Brush,
-  Eraser as EraserIcon,
-  Paintbrush,
   Circle,
   CircleDashed,
-  Lasso,
-  SquareDashed,
   Crop,
-  Layers2,
-  Scissors,
   Eraser,
   ImagePlus,
+  Lasso,
+  Layers2,
   Minus,
   MousePointer2,
+  Paintbrush,
   PenLine,
   Pencil,
+  Scissors,
   Square,
+  SquareDashed,
   Star,
   Type,
-  VectorSquare,
-  Wand2,
 } from 'lucide-react'
 import type { EditorTool, PenKind } from '../types/editor'
 import type { SelectionMode } from '../lib/selection'
+import {
+  EffectsPressIcon,
+  FlyoutCornerCaret,
+  FrameHandlesIcon,
+  MaskIcon,
+} from './icons/StudioIcons'
 
 type Flyout = 'shape' | 'select' | 'brush' | 'mask' | null
 
@@ -102,7 +104,7 @@ export const ToolRail = memo(function ToolRail({
         aria-pressed={tool === 'move'}
         onClick={() => selectTool('move')}
       >
-        <MousePointer2 size={16} />
+        <MousePointer2 size={18} aria-hidden />
       </button>
       <span className="tool-rail-rule" aria-hidden="true" />
       <button
@@ -113,12 +115,12 @@ export const ToolRail = memo(function ToolRail({
         aria-pressed={tool === 'text'}
         onClick={() => selectTool('text')}
       >
-        <Type size={16} />
+        <Type size={18} aria-hidden />
       </button>
       <div className="tool-rail-flyout-wrap">
         <button
           type="button"
-          className={tool === 'shape' ? 'active' : undefined}
+          className={tool === 'shape' ? 'has-flyout active' : 'has-flyout'}
           title="Shape (S) — Block, ellipse, line, star, pen"
           aria-label="Shape tool"
           aria-pressed={tool === 'shape'}
@@ -128,21 +130,22 @@ export const ToolRail = memo(function ToolRail({
             setFlyout((current) => (current === 'shape' ? null : 'shape'))
           }}
         >
-          <Square size={16} />
+          <Square size={18} aria-hidden />
+          <FlyoutCornerCaret />
         </button>
         {flyout === 'shape' ? (
           <div className="tool-flyout" role="menu" aria-label="Shape tools">
             <button type="button" role="menuitem" title="Add a solid block" onClick={() => { onAddShape(); setFlyout(null) }}>
-              <Square size={14} /> Block
+              <Square size={14} aria-hidden /> Block
             </button>
             <button type="button" role="menuitem" title="Add an ellipse" onClick={() => { onAddEllipse(); setFlyout(null) }}>
-              <Circle size={14} /> Ellipse
+              <Circle size={14} aria-hidden /> Ellipse
             </button>
             <button type="button" role="menuitem" title="Add a line" onClick={() => { onAddLine(); setFlyout(null) }}>
-              <Minus size={14} /> Line
+              <Minus size={14} aria-hidden /> Line
             </button>
             <button type="button" role="menuitem" title="Add a star" onClick={() => { onAddStar(); setFlyout(null) }}>
-              <Star size={14} /> Star
+              <Star size={14} aria-hidden /> Star
             </button>
             <button
               type="button"
@@ -156,7 +159,7 @@ export const ToolRail = memo(function ToolRail({
                 setFlyout(null)
               }}
             >
-              <PenLine size={14} /> Pen
+              <PenLine size={14} aria-hidden /> Pen
             </button>
             <button
               type="button"
@@ -170,7 +173,7 @@ export const ToolRail = memo(function ToolRail({
                 setFlyout(null)
               }}
             >
-              <Pencil size={14} /> Pencil
+              <Pencil size={14} aria-hidden /> Pencil
             </button>
           </div>
         ) : null}
@@ -183,7 +186,7 @@ export const ToolRail = memo(function ToolRail({
         aria-pressed={tool === 'frame'}
         onClick={() => selectTool(tool === 'frame' ? 'move' : 'frame')}
       >
-        <VectorSquare size={16} />
+        <FrameHandlesIcon size={18} aria-hidden />
       </button>
       <button
         type="button"
@@ -196,14 +199,14 @@ export const ToolRail = memo(function ToolRail({
           fileInputRef.current?.click()
         }}
       >
-        <ImagePlus size={16} />
+        <ImagePlus size={18} aria-hidden />
       </button>
       <span className="tool-rail-rule" aria-hidden="true" />
       {onSelectModeChange ? (
         <div className="tool-rail-flyout-wrap">
           <button
             type="button"
-            className={tool === 'select' ? 'active' : undefined}
+            className={tool === 'select' ? 'has-flyout active' : 'has-flyout'}
             title="Select (L) — marquee or lasso a region, then mask it or lift it to a new layer"
             aria-label="Select tool"
             aria-pressed={tool === 'select'}
@@ -213,7 +216,8 @@ export const ToolRail = memo(function ToolRail({
               setFlyout((current) => (current === 'select' ? null : 'select'))
             }}
           >
-            <SelectIcon size={16} />
+            <SelectIcon size={18} aria-hidden />
+            <FlyoutCornerCaret />
           </button>
           {flyout === 'select' ? (
             <div className="tool-flyout" role="menu" aria-label="Selection tools">
@@ -234,7 +238,7 @@ export const ToolRail = memo(function ToolRail({
                     selectTool('select')
                   }}
                 >
-                  <Icon size={14} /> {label}
+                  <Icon size={14} aria-hidden /> {label}
                 </button>
               ))}
             </div>
@@ -245,7 +249,7 @@ export const ToolRail = memo(function ToolRail({
         <div className="tool-rail-flyout-wrap">
           <button
             type="button"
-            className={tool === 'brush' ? 'active' : undefined}
+            className={tool === 'brush' ? 'has-flyout active' : 'has-flyout'}
             title="Brush (B) · Eraser (E) — pressure-sensitive paint on its own layer"
             aria-label="Brush tool"
             aria-pressed={tool === 'brush'}
@@ -255,15 +259,16 @@ export const ToolRail = memo(function ToolRail({
               setFlyout((current) => (current === 'brush' ? null : 'brush'))
             }}
           >
-            {brushErase ? <EraserIcon size={16} /> : <Paintbrush size={16} />}
+            {brushErase ? <Eraser size={18} aria-hidden /> : <Paintbrush size={18} aria-hidden />}
+            <FlyoutCornerCaret />
           </button>
           {flyout === 'brush' ? (
             <div className="tool-flyout" role="menu" aria-label="Brush tools">
               <button type="button" role="menuitemradio" aria-checked={!brushErase} onClick={() => { onBrushModeChange(false); selectTool('brush') }}>
-                <Paintbrush size={14} /> Brush
+                <Paintbrush size={14} aria-hidden /> Brush
               </button>
               <button type="button" role="menuitemradio" aria-checked={brushErase} onClick={() => { onBrushModeChange(true); selectTool('brush') }}>
-                <EraserIcon size={14} /> Eraser
+                <Eraser size={14} aria-hidden /> Eraser
               </button>
             </div>
           ) : null}
@@ -272,7 +277,7 @@ export const ToolRail = memo(function ToolRail({
       <div className="tool-rail-flyout-wrap">
         <button
           type="button"
-          className={tool === 'mask' ? 'active' : undefined}
+          className={tool === 'mask' ? 'has-flyout active' : 'has-flyout'}
           title="Mask (M) — paint alpha, clip to shape, scrapes"
           aria-label="Mask tool"
           aria-pressed={tool === 'mask'}
@@ -282,24 +287,25 @@ export const ToolRail = memo(function ToolRail({
             setFlyout((current) => (current === 'mask' ? null : 'mask'))
           }}
         >
-          <Brush size={16} />
+          <MaskIcon size={18} aria-hidden />
+          <FlyoutCornerCaret />
         </button>
         {flyout === 'mask' ? (
           <div className="tool-flyout" role="menu" aria-label="Mask tools">
             <button type="button" role="menuitem" title="Clip the selection to a shape" onClick={() => { onClipToShape(); setFlyout(null) }}>
-              <Crop size={14} /> Clip to shape
+              <Crop size={14} aria-hidden /> Clip to shape
             </button>
             <button type="button" role="menuitem" title="Thread the selected word over and under the scraps it crosses" onClick={() => { onWeave(); setFlyout(null) }}>
-              <Layers2 size={14} /> Weave through
+              <Layers2 size={14} aria-hidden /> Weave through
             </button>
             <button type="button" role="menuitem" title="Rip the edges of the selected layer like torn paper" onClick={() => { onTearEdges(); setFlyout(null) }}>
-              <Scissors size={14} /> Tear edges
+              <Scissors size={14} aria-hidden /> Tear edges
             </button>
             <button type="button" role="menuitem" title="Paint a soft alpha mask on the selected layer" onClick={() => { onBrushMask(); setFlyout(null) }}>
-              <Circle size={14} /> Paint mask
+              <MaskIcon size={14} aria-hidden /> Paint mask
             </button>
             <button type="button" role="menuitem" title="Scrape white bands across the poster" onClick={() => { onWhiteScrapes(); setFlyout(null) }}>
-              <Eraser size={14} /> White scrapes
+              <Eraser size={14} aria-hidden /> White scrapes
             </button>
           </div>
         ) : null}
@@ -313,7 +319,7 @@ export const ToolRail = memo(function ToolRail({
         aria-pressed={tool === 'instruments'}
         onClick={() => selectTool(tool === 'instruments' ? 'move' : 'instruments')}
       >
-        <Wand2 size={16} />
+        <EffectsPressIcon size={18} aria-hidden />
       </button>
       <input
         ref={fileInputRef}

@@ -23,8 +23,8 @@ installTextTypographyRenderPatch()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {/* Thin 1.5px outline icons across the UI; quieter than lucide's 2px default. */}
-    <LucideProvider strokeWidth={1.5}>
+    {/* Tactile 1.75px outline icons across the studio; clear at 14–18px. */}
+    <LucideProvider strokeWidth={1.75}>
       <App />
     </LucideProvider>
   </StrictMode>,
