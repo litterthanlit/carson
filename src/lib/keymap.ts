@@ -71,6 +71,7 @@ export const DEFAULT_KEYMAP: Keymap = {
 
   // View
   grid: [{ key: 'g' }],
+  'toggle-chrome': [{ code: 'Backslash', mod: true, whileTyping: true }],
   'zoom-fit': [{ key: '0', mod: true, whileTyping: true }],
   'zoom-100': [{ key: '1', mod: true, whileTyping: true }],
   'zoom-in': [
@@ -100,7 +101,7 @@ export const SHORTCUT_SECTIONS: { title: string; ids: string[] }[] = [
   },
   {
     title: 'View',
-    ids: ['grid', 'zoom-fit', 'zoom-100', 'zoom-in', 'zoom-out', 'command-palette'],
+    ids: ['grid', 'toggle-chrome', 'zoom-fit', 'zoom-100', 'zoom-in', 'zoom-out', 'command-palette'],
   },
   {
     title: 'File',

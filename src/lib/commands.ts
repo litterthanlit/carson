@@ -88,6 +88,15 @@ const KEY_NAMES: Record<string, string> = {
   Escape: 'Esc',
   BracketLeft: '[',
   BracketRight: ']',
+  Backslash: '\\',
+}
+
+export const IS_MAC_PLATFORM =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
+
+/** Format a human-readable mod shortcut for tooltips using the current platform. */
+export function formatModKey(key: string, shift = false, mac = IS_MAC_PLATFORM): string {
+  return formatShortcut({ key, mod: true, shift }, mac)
 }
 
 /** "⇧⌘K" on macOS, "Ctrl+Shift+K" elsewhere. */

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   ActiveSelection,
   Canvas,
@@ -325,6 +325,7 @@ import type {
   TextSelectionRange,
 } from './types/editor'
 import './App.css'
+import './styles/studio.css'
 
 const CommandPalette = lazy(() =>
   import('./components/CommandPalette').then((module) => ({ default: module.CommandPalette })),
@@ -466,6 +467,48 @@ function App() {
   const [dragLayerId, setDragLayerId] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect')
   const [commandOpen, setCommandOpen] = useState(false)
+  const [chromeHidden, setChromeHidden] = useState(false)
+  const [inspectorWidth, setInspectorWidth] = useState<number>(() => {
+    try {
+      const stored = Number(localStorage.getItem('carson.inspectorWidth.v1'))
+      return Number.isFinite(stored) && stored >= 260 && stored <= 380 ? stored : 296
+    } catch {
+      return 296
+    }
+  })
+  const inspectorResizeRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const handleInspectorResizeDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    inspectorResizeRef.current = { startX: event.clientX, startWidth: inspectorWidth }
+  }
+  const handleInspectorResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = inspectorResizeRef.current
+    if (!drag) return
+    const next = Math.round(Math.min(380, Math.max(260, drag.startWidth + (drag.startX - event.clientX))))
+    setInspectorWidth(next)
+  }
+  const handleInspectorResizeEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!inspectorResizeRef.current) return
+    inspectorResizeRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    try {
+      localStorage.setItem('carson.inspectorWidth.v1', String(inspectorWidth))
+    } catch {
+      // Ignore storage errors in private mode.
+    }
+  }
+  const resetInspectorWidth = () => {
+    setInspectorWidth(296)
+    try {
+      localStorage.removeItem('carson.inspectorWidth.v1')
+    } catch {
+      // Ignore storage errors.
+    }
+  }
   // Effects palette: groups stay as the user left them for the session; the search field takes focus only when
   // the palette was opened from the tool rail (the I key must keep working as a shortcut).
   const [paletteOpenGroups, setPaletteOpenGroups] = useState<ReadonlySet<string>>(() => new Set())
@@ -544,7 +587,7 @@ function App() {
   const [trailFrames, setTrailFrames] = useState<TrailFrame[]>([])
   const [trailOpIds, setTrailOpIds] = useState<string[]>([])
   const [trailCursor, setTrailCursor] = useState(-1)
-  const [trailCollapsed, setTrailCollapsed] = useState(false)
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [compsGalleryOpen, setCompsGalleryOpen] = useState(false)
   const fontInputRef = useRef<HTMLInputElement | null>(null)
   const commitHistoryRef = useRef<(message: string) => void>(() => {})
@@ -5998,7 +6041,20 @@ function App() {
     { id: 'distort', label: 'Distort / perspective', keywords: ['perspective', 'distort', 'transform', 'corner', 'skew', 'free transform'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('distort') },
     { id: 'warp', label: 'Warp', keywords: ['warp', 'mesh', 'bend', 'transform', 'puppet'], scope: 'selection', disabled: !selected || selectedLayerIds.length > 1, run: () => startWarpEdit('mesh') },
     { id: 'effects-palette', label: 'Effects palette', keywords: ['effects', 'instruments', 'wand', 'palette', 'tool'], scope: 'any', run: () => keyActionsRef.current.instrumentsTool() },
-    { id: 'history-strip', label: 'Toggle History', keywords: ['history', 'trail', 'filmstrip', 'strip', 'steps', 'spatial undo'], scope: 'any', run: () => setTrailCollapsed((value) => !value) },
+    {
+      id: 'history-strip',
+      label: 'Toggle History',
+      keywords: ['history', 'trail', 'filmstrip', 'strip', 'steps', 'spatial undo'],
+      scope: 'any',
+      run: () => {
+        if (inspectorTab === 'history' && !panelCollapsed) {
+          setPanelCollapsed(true)
+        } else {
+          setInspectorTab('history')
+          setPanelCollapsed(false)
+        }
+      },
+    },
     { id: 'filter-gallery', label: 'Open filter gallery', keywords: ['filter', 'gallery', 'effects', 'xerox', 'blur', 'motion', 'gaussian', 'photoshop'], scope: 'selection', disabled: !selected, run: openFilterGallery },
     { id: 'texture-gallery', label: 'Open texture gallery', keywords: ['texture', 'gallery', 'grunge', 'paper', 'ink', 'overlay'], scope: 'canvas', run: openTextureGallery },
     { id: 'xerox', label: 'Xerox copy', keywords: ['xerox', 'photocopy', 'print'], scope: 'selection', disabled: !selected, run: () => applyXeroxToSelected() },
@@ -6265,6 +6321,19 @@ function App() {
     },
     { id: 'grid', label: 'Toggle layout grid', keywords: ['grid', 'columns', 'layout'], scope: 'canvas', run: () => keyActionsRef.current.toggleLayoutGrid() },
     {
+      id: 'toggle-chrome',
+      label: chromeHidden ? 'Show interface' : 'Hide interface (Zen mode)',
+      keywords: ['zen', 'hide', 'ui', 'chrome', 'panels', 'focus', 'clean', 'interface'],
+      scope: 'any',
+      run: () => {
+        setChromeHidden((value) => {
+          const next = !value
+          setStatus(next ? 'Interface hidden — press ⌘\\ to restore' : 'Interface shown')
+          return next
+        })
+      },
+    },
+    {
       id: 'group-layers',
       label: 'Group layers',
       keywords: ['group', 'folder', 'nest'],
@@ -6527,9 +6596,6 @@ function App() {
       <TopBar
         projectName={projectName}
         onProjectNameChange={setProjectName}
-        tension={gridOverlay.tension}
-        onTensionChange={handleTensionChange}
-        onTensionCommit={commitTension}
         onHome={() => {
           void goHome()
         }}
@@ -6555,112 +6621,39 @@ function App() {
         onAgentDisconnect={agentBridge.disconnect}
       />
 
-      <section className="workspace">
-        <ToolRail
-          tool={editorTool}
-          penMode={penMode}
-          penKind={penKind}
-          fileInputRef={fileInputRef}
-          onToolChange={handleToolChange}
-          onAddShape={addShape}
-          onAddEllipse={addEllipse}
-          onAddLine={addLine}
-          onAddStar={addStarShape}
-          onTogglePenMode={handleTogglePenMode}
-          onTogglePencilMode={handleTogglePencilMode}
-          onImageInputChange={(file) => void handleImageFile(file)}
-          onClipToShape={() => void clipSelectionToShape()}
-          onWeave={() => void weaveSelection()}
-          onTearEdges={() => void tearSelectedEdges()}
-          onBrushMask={() => void paintBrushMask()}
-          onWhiteScrapes={() => addWhiteScrapes()}
-          selectMode={selectMode}
-          onSelectModeChange={setSelectMode}
-          brushErase={brush.erase}
-          onBrushModeChange={(erase) => setBrush((current) => ({ ...current, erase }))}
-        />
-        {editorTool === 'instruments' ? (
-          <InstrumentsPalette
-            selected={Boolean(selected)}
-            selectedIsImage={selectedIsImage}
-            selectedIsText={selectedIsText}
-            recording={performance.recording}
-            performanceLabel={
-              performance.plays.length > 0
-                ? gestureLabel({ id: '', name: '', steps: performance.plays })
-                : performance.recording
-                  ? 'Play an instrument'
-                  : 'Record a chain of plays'
-            }
-            canSavePerformance={performance.plays.length > 0}
-            savedInstruments={documentMeta?.instruments ?? []}
-            savedGestures={documentMeta?.gestures ?? []}
-            onToggleRecording={toggleGestureRecording}
-            onSavePerformance={saveRecordedPerformance}
-            onClearPerformance={clearRecordedPerformance}
-            onApplySavedInstrument={(asset) => void playSavedInstrument(asset)}
-            onApplySavedGesture={(gesture) => void applyGestureToSelection(gesture)}
-            typeLegibility={typeLegibility}
-            typeIntensity={typeIntensity}
-            xeroxGeneration={xeroxGeneration}
-            accidentIntensity={accidentIntensity}
-            decayAmount={decayAmount}
-            layerCount={layers.length}
-            onSliceHorizontal={() => void sliceSelected('horizontal')}
-            onSliceVertical={() => void sliceSelected('vertical')}
-            onScatter={() => scatterSelected()}
-            onScramble={() => void scrambleCanvas()}
-            scrambleDisabled={scrambleSourceObjects().length === 0}
-            autoFocusSearch={paletteSearchFocus}
-            openGroups={paletteOpenGroups}
-            onToggleGroup={togglePaletteGroup}
-            forceOpenGroups={walkthroughStep === 'xerox' ? ['print'] : undefined}
-            onClose={() => setEditorTool('move')}
-            onApplyPosterStyle={applyPosterStyle}
-            onTypeLegibilityChange={setTypeLegibility}
-            onTypeIntensityChange={setTypeIntensity}
-            onTypeIntensityCommit={() => setStatus('Updated type intensity')}
-            onXeroxGenerationChange={setXeroxGeneration}
-            onXeroxGenerationCommit={() => setStatus('Updated xerox generation')}
-            onAccidentIntensityChange={setAccidentIntensity}
-            onAccidentIntensityCommit={() => setStatus('Updated accident intensity')}
-            onDecayAmountChange={setDecayAmount}
-            onDecayAmountCommit={() => setStatus('Updated layer decay amount')}
-            onAddTypeStrip={() => addTypeStrip()}
-            onDistressSelected={() => void distressSelected()}
-            onAddPhotocopyNoise={() => addPhotocopyNoise()}
-            onTearCollage={() => void tearCollageSelected()}
-            onAddCropMarks={addCropMarks}
-            onBreakSelectedType={() => breakSelectedType()}
-            onBreakCopy={() => void breakSelectedCopy()}
-            onLetterBreak={() => letterBreakSelected()}
-            onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
-            onApplyXerox={() => void applyXeroxToSelected()}
-            onApplyCopyMachine={() => void applyCopyMachineToSelected()}
-            onApplyInkBleed={() => void applyInkBleedToSelected()}
-            onApplySolventTransfer={() => void applySolventTransferToSelected()}
-            onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
-            onApplyCopyScatterCopyGesture={() => void applyCopyScatterCopyGesture()}
-            onAddMisprintDuplicate={() => void addMisprintDuplicate()}
-            onAddPrintScanSurface={() => addPrintScanSurface()}
-            onApplyLayerDecay={() => void applyLayerDecayToSelected()}
-            onAddLayerDecayMarks={(kind) => addLayerDecayMarks(kind)}
-            onAddLayerDecayOffset={() => void addLayerDecayOffset()}
-            onDuplicateDriftAccident={() => void duplicateDriftAccident()}
-            onBadCropAccident={() => void badCropAccident()}
-            onFlipMistakeAccident={() => void flipMistakeAccident()}
-            onCollideSelectionAccident={collideSelectionAccident}
-            onNudgeLayoutAccident={() => nudgeLayoutAccident()}
-            onApplyColdWashImage={applyColdWashImage}
-            onAddDiagonalTexture={addDiagonalTexture}
-            onAddWhiteScrapes={() => addWhiteScrapes()}
-            pressCheckActive={isPressCheckOn(posterTreatments)}
-            onTogglePressCheck={() => void togglePressCheck()}
-            onAddRedEchoType={addRedEchoType}
-            onAggressiveCrop={(mode) => void aggressiveCropSelected(mode)}
-            onCropToPosterEdge={() => void cropToPosterEdge()}
-            onOpenFilterGallery={openFilterGallery}
-            onOpenTextureGallery={openTextureGallery}
+      <section
+        className={[
+          'workspace',
+          chromeHidden ? 'is-zen' : '',
+          panelCollapsed && !chromeHidden ? 'is-dock-collapsed' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        style={{ '--inspector-width': `${inspectorWidth}px` } as CSSProperties}
+      >
+        {!chromeHidden ? (
+          <ToolRail
+            tool={editorTool}
+            penMode={penMode}
+            penKind={penKind}
+            fileInputRef={fileInputRef}
+            onToolChange={handleToolChange}
+            onAddShape={addShape}
+            onAddEllipse={addEllipse}
+            onAddLine={addLine}
+            onAddStar={addStarShape}
+            onTogglePenMode={handleTogglePenMode}
+            onTogglePencilMode={handleTogglePencilMode}
+            onImageInputChange={(file) => void handleImageFile(file)}
+            onClipToShape={() => void clipSelectionToShape()}
+            onWeave={() => void weaveSelection()}
+            onTearEdges={() => void tearSelectedEdges()}
+            onBrushMask={() => void paintBrushMask()}
+            onWhiteScrapes={() => addWhiteScrapes()}
+            selectMode={selectMode}
+            onSelectModeChange={setSelectMode}
+            brushErase={brush.erase}
+            onBrushModeChange={(erase) => setBrush((current) => ({ ...current, erase }))}
           />
         ) : null}
 
@@ -6676,6 +6669,94 @@ function App() {
           customSize={customSize}
           canvasEl={canvasEl}
           scrollRef={scrollRef}
+          chromeHidden={chromeHidden}
+          onRestoreChrome={() => setChromeHidden(false)}
+          palette={
+            editorTool === 'instruments' ? (
+              <InstrumentsPalette
+                selected={Boolean(selected)}
+                selectedIsImage={selectedIsImage}
+                selectedIsText={selectedIsText}
+                recording={performance.recording}
+                performanceLabel={
+                  performance.plays.length > 0
+                    ? gestureLabel({ id: '', name: '', steps: performance.plays })
+                    : performance.recording
+                      ? 'Play an instrument'
+                      : 'Record a chain of plays'
+                }
+                canSavePerformance={performance.plays.length > 0}
+                savedInstruments={documentMeta?.instruments ?? []}
+                savedGestures={documentMeta?.gestures ?? []}
+                onToggleRecording={toggleGestureRecording}
+                onSavePerformance={saveRecordedPerformance}
+                onClearPerformance={clearRecordedPerformance}
+                onApplySavedInstrument={(asset) => void playSavedInstrument(asset)}
+                onApplySavedGesture={(gesture) => void applyGestureToSelection(gesture)}
+                typeLegibility={typeLegibility}
+                typeIntensity={typeIntensity}
+                xeroxGeneration={xeroxGeneration}
+                accidentIntensity={accidentIntensity}
+                decayAmount={decayAmount}
+                layerCount={layers.length}
+                onSliceHorizontal={() => void sliceSelected('horizontal')}
+                onSliceVertical={() => void sliceSelected('vertical')}
+                onScatter={() => scatterSelected()}
+                onScramble={() => void scrambleCanvas()}
+                scrambleDisabled={scrambleSourceObjects().length === 0}
+                autoFocusSearch={paletteSearchFocus}
+                openGroups={paletteOpenGroups}
+                onToggleGroup={togglePaletteGroup}
+                forceOpenGroups={walkthroughStep === 'xerox' ? ['print'] : undefined}
+                onClose={() => setEditorTool('move')}
+                onApplyPosterStyle={applyPosterStyle}
+                onTypeLegibilityChange={setTypeLegibility}
+                onTypeIntensityChange={setTypeIntensity}
+                onTypeIntensityCommit={() => setStatus('Updated type intensity')}
+                onXeroxGenerationChange={setXeroxGeneration}
+                onXeroxGenerationCommit={() => setStatus('Updated xerox generation')}
+                onAccidentIntensityChange={setAccidentIntensity}
+                onAccidentIntensityCommit={() => setStatus('Updated accident intensity')}
+                onDecayAmountChange={setDecayAmount}
+                onDecayAmountCommit={() => setStatus('Updated layer decay amount')}
+                onAddTypeStrip={() => addTypeStrip()}
+                onDistressSelected={() => void distressSelected()}
+                onAddPhotocopyNoise={() => addPhotocopyNoise()}
+                onTearCollage={() => void tearCollageSelected()}
+                onAddCropMarks={addCropMarks}
+                onBreakSelectedType={() => breakSelectedType()}
+                onBreakCopy={() => void breakSelectedCopy()}
+                onLetterBreak={() => letterBreakSelected()}
+                onCloneTypeAsTexture={() => void cloneTypeAsTexture()}
+                onApplyXerox={() => void applyXeroxToSelected()}
+                onApplyCopyMachine={() => void applyCopyMachineToSelected()}
+                onApplyInkBleed={() => void applyInkBleedToSelected()}
+                onApplySolventTransfer={() => void applySolventTransferToSelected()}
+                onApplyCopyMachineToPoster={() => void applyCopyMachineToPoster()}
+                onApplyCopyScatterCopyGesture={() => void applyCopyScatterCopyGesture()}
+                onAddMisprintDuplicate={() => void addMisprintDuplicate()}
+                onAddPrintScanSurface={() => addPrintScanSurface()}
+                onApplyLayerDecay={() => void applyLayerDecayToSelected()}
+                onAddLayerDecayMarks={(kind) => addLayerDecayMarks(kind)}
+                onAddLayerDecayOffset={() => void addLayerDecayOffset()}
+                onDuplicateDriftAccident={() => void duplicateDriftAccident()}
+                onBadCropAccident={() => void badCropAccident()}
+                onFlipMistakeAccident={() => void flipMistakeAccident()}
+                onCollideSelectionAccident={collideSelectionAccident}
+                onNudgeLayoutAccident={() => nudgeLayoutAccident()}
+                onApplyColdWashImage={applyColdWashImage}
+                onAddDiagonalTexture={addDiagonalTexture}
+                onAddWhiteScrapes={() => addWhiteScrapes()}
+                pressCheckActive={isPressCheckOn(posterTreatments)}
+                onTogglePressCheck={() => void togglePressCheck()}
+                onAddRedEchoType={addRedEchoType}
+                onAggressiveCrop={(mode) => void aggressiveCropSelected(mode)}
+                onCropToPosterEdge={() => void cropToPosterEdge()}
+                onOpenFilterGallery={openFilterGallery}
+                onOpenTextureGallery={openTextureGallery}
+              />
+            ) : null
+          }
           stackBar={
             <TreatmentChips
               compact
@@ -6784,7 +6865,7 @@ function App() {
               onLayerViaCopy={() => void liftSelectionToLayer(false)}
               onLayerViaCut={() => void liftSelectionToLayer(true)}
             />
-            {selected && editorTool !== 'select' && editorTool !== 'brush' && editorTool !== 'frame' && !warpEdit ? (
+            {selected && editorTool !== 'select' && editorTool !== 'brush' && editorTool !== 'frame' && !warpEdit && !chromeHidden ? (
               <LiveSelectionHud
                 canvasRef={canvasRef}
                 selected={selected}
@@ -6818,21 +6899,14 @@ function App() {
             if (asset) void insertAsset(asset)
           }}
           onComponentDrop={(componentId) => void placeComponentInstance(componentId)}
-          trailFrames={trailFrames}
-          trailOpIds={trailOpIds}
-          trailCursor={trailCursor}
-          trailCollapsed={trailCollapsed}
-          onToggleTrailCollapsed={() => setTrailCollapsed((value) => !value)}
-          onJumpTrail={(opId) => {
-            void jumpToOpId(opId)
-          }}
-          onForkVariant={() => void forkVariation()}
-          onOpenCompsGallery={() => setCompsGalleryOpen(true)}
           showLayoutGrid={showLayoutGrid}
           onToggleLayoutGrid={() => {
             setShowLayoutGrid((value) => {
               const next = !value
-              if (next) setInspectorTab('layout')
+              if (next) {
+                setInspectorTab('layout')
+                setPanelCollapsed(false)
+              }
               return next
             })
           }}
@@ -6842,27 +6916,34 @@ function App() {
           onRemoveLayoutGuide={removeLayoutGuide}
         />
 
-        <div className="inspector-column">
-          <TreatmentChips
-            posterTreatments={posterTreatments}
-            selectedTreatments={selectedTreatments}
-            selectedObject={selectedObject}
-            layerMask={selectedLayerMask}
-            onToggleLayerMask={() => void toggleSelectedMask()}
-            onInvertLayerMask={() => void invertSelectedMask()}
-            onRemoveLayerMask={() => void clearSelectedMask()}
-            onReorderPosterTreatment={reorderPosterTreatmentAction}
-            onRerollPosterTreatment={rerollPosterTreatment}
-            onTogglePosterTreatment={togglePosterTreatment}
-            onRemovePosterTreatment={removePosterTreatmentAction}
-            onReorderLayerTreatment={reorderLayerTreatment}
-            onRerollLayerTreatment={rerollTreatment}
-            onToggleLayerTreatment={toggleTreatment}
-            onRemoveLayerTreatment={removeLayerTreatment}
-          />
+        {!chromeHidden ? (
+        <div className={panelCollapsed ? 'inspector-column is-collapsed' : 'inspector-column'}>
+          {!panelCollapsed ? (
+            <div
+              className="inspector-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize inspector panel"
+              title="Drag to resize · double-click to reset"
+              onPointerDown={handleInspectorResizeDown}
+              onPointerMove={handleInspectorResizeMove}
+              onPointerUp={handleInspectorResizeEnd}
+              onPointerCancel={handleInspectorResizeEnd}
+              onDoubleClick={resetInspectorWidth}
+            />
+          ) : null}
         <InspectorPanel
           inspectorTab={inspectorTab}
           onInspectorTabChange={setInspectorTab}
+          panelCollapsed={panelCollapsed}
+          onTogglePanelCollapsed={() => setPanelCollapsed((value) => !value)}
+          trailFrames={trailFrames}
+          trailOpIds={trailOpIds}
+          trailCursor={trailCursor}
+          onJumpTrail={(opId) => {
+            void jumpToOpId(opId)
+          }}
+          onForkVariant={() => void forkVariation()}
           projectName={projectName}
           onProjectNameChange={setProjectName}
           exportFormat={exportFormat}
@@ -7024,7 +7105,7 @@ function App() {
           onTearEdges={() => void tearSelectedEdges()}
           gridOverlay={gridOverlay}
           onGridOverlayChange={patchGridOverlay}
-          onGridTensionChange={(value) => setGridOverlay((current) => ({ ...current, tension: value }))}
+          onGridTensionChange={handleTensionChange}
           onGridTensionCommit={commitTension}
           showLayoutGrid={showLayoutGrid}
           onToggleLayoutGrid={() => setShowLayoutGrid((value) => !value)}
@@ -7066,6 +7147,7 @@ function App() {
           onExportAllArtboards={() => void exportAllArtboards()}
         />
         </div>
+        ) : null}
       </section>
         </>
       )}

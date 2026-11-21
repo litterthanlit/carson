@@ -25,15 +25,15 @@ export function WarpBar({ warp, onMode, onReset, onDone, onCancel }: WarpBarProp
       </div>
       <span className="brush-target">Drag handles · arrow keys nudge a focused handle</span>
       <button type="button" onClick={onReset} title="Back to the unwarped shape">
-        <RotateCcw size={13} aria-hidden />
+        <RotateCcw size={14} aria-hidden />
         Reset
       </button>
       <button type="button" onClick={onCancel} title="Discard changes (Esc)">
-        <X size={13} aria-hidden />
+        <X size={14} aria-hidden />
         Cancel
       </button>
       <button type="button" className="primary-button" onClick={onDone} title="Apply (Enter)">
-        <Check size={13} aria-hidden />
+        <Check size={14} aria-hidden />
         Done
       </button>
     </div>

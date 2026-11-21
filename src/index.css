@@ -1,100 +1,106 @@
 :root {
-  --canvas-bg: #4a4a4a;
-  --canvas-dot: #4a4a4a;
-  --panel: #323232;
-  --panel-raised: #3a3a3a;
-  --glass-bg: #323232;
-  --glass-bg-strong: #3a3a3a;
-  --glass-border: #1f1f1f;
-  --glass-edge: #1f1f1f;
-  --glass-shadow: none;
-  --bg: #323232;
-  --bg-subtle: #2c2c2c;
-  --bg-muted: #3a3a3a;
-  --bg-hover: #3e3e3e;
-  --border: #1f1f1f;
-  --border-strong: #4c4c4c;
-  --text: #e6e6e6;
-  --text-muted: #b3b3b3;
-  --text-faint: #a3a3a3;
-  --accent: #1473e6;
-  --accent-hover: #2680eb;
-  --accent-soft: rgb(20 115 230 / 0.22);
-  --dial-track: #5c5c5c;
-  --dial-fill: #1473e6;
-  --dial-thumb: #d6d6d6;
-  --dial-label: #b3b3b3;
-  --dial-value: #e6e6e6;
-  --surface: #3a3a3a;
-  --surface-muted: #2c2c2c;
-  /* Chrome layers, darkest to lightest: inset fields, sunken wells, bars, tab strips. */
-  --field-bg: #1e1e1e;
-  --field-border: #1a1a1a;
-  --surface-sunken: #252525;
-  --chrome-strip: #2a2a2a;
-  --chrome-bar: #2d2d2d;
-  --tool-active: #454545;
-  --divider: #4a4a4a;
-  --border-subtle: #3f3f3f;
-  --border-hover: #5a5a5a;
-  --accent-border: #0e63c7;
-  --accent-border-hover: #1f74d4;
-  --accent-text: #cfe3ff;
-  /* Hover washes and hairlines that sit on top of any chrome colour. */
+  /* Neutral high-contrast archival studio (dark): deep quiet pasteboard,
+     floating charcoal islands, crisp paper-white ink for active controls.
+     Selection blue is reserved strictly for canvas geometry. */
+  --canvas-bg: #111110;
+  --panel: #1c1c1a;
+  --panel-raised: #262623;
+  --bg: #1c1c1a;
+  --bg-subtle: #161614;
+  --bg-muted: #242421;
+  --bg-hover: #2d2d29;
+  --border: rgb(255 255 255 / 0.08);
+  --border-subtle: rgb(255 255 255 / 0.055);
+  --border-strong: rgb(255 255 255 / 0.14);
+  --border-hover: rgb(255 255 255 / 0.24);
+  --divider: rgb(255 255 255 / 0.1);
+  --text: #f3f1eb;
+  --text-muted: #a3a097;
+  --text-faint: #78756e;
+  /* Neutral high-contrast ink accent for all UI chrome */
+  --accent: #f3f1eb;
+  --accent-fg: #111110;
+  --accent-hover: #ffffff;
+  --accent-soft: rgb(243 241 235 / 0.12);
+  --accent-soft-hover: rgb(243 241 235 / 0.18);
+  --accent-border: rgb(243 241 235 / 0.36);
+  --accent-border-hover: rgb(243 241 235 / 0.55);
+  --accent-text: #f3f1eb;
+  /* Canvas selection geometry only (handles, warp grid, ruler cursor) */
+  --selection-blue: #3b82f6;
+  --dial-track: rgb(255 255 255 / 0.16);
+  --surface: #242421;
+  --surface-muted: #171715;
+  /* Chrome layers */
+  --field-bg: #131311;
+  --field-border: rgb(255 255 255 / 0.1);
+  --surface-sunken: #151513;
+  --chrome-strip: #181816;
+  --chrome-bar: #1c1c1a;
+  --tool-active: #f3f1eb;
+  --tool-active-fg: #111110;
+  /* Hover washes and hairlines */
   --wash-faint: rgb(255 255 255 / 0.03);
-  --wash: rgb(255 255 255 / 0.05);
-  --wash-strong: rgb(255 255 255 / 0.08);
-  --hairline-dark: rgb(0 0 0 / 0.2);
-  /* Transparency checkerboard behind thumbnails. */
-  --checker-light: #4a4a4a;
-  --checker-dark: #3a3a3a;
-  /* Rectangle sliders: a solid fill block over a dark well; text flips colour over the fill. */
-  --slider-track: #2a2a2a;
-  --slider-fill: #474747;
-  --slider-fill-hover: #525252;
-  --slider-text: #bdbdbd;
-  --slider-text-on-fill: #f2f2f2;
-  --slider-tick: rgb(255 255 255 / 0.06);
-  /* Rectangle switches. */
-  --switch-off: #3a3a3a;
-  --switch-on: #e6e6e6;
-  --switch-knob-off: #8a8a8a;
-  --switch-knob-on: #1a1a1a;
-  /* Primary action: neutral ink, not brand blue — blue is kept for focus/selection. */
-  --primary-bg: #e6e6e6;
+  --wash: rgb(255 255 255 / 0.055);
+  --wash-strong: rgb(255 255 255 / 0.095);
+  --hairline-dark: rgb(0 0 0 / 0.28);
+  --guide-nested: rgb(255 255 255 / 0.13);
+  --thumb-ring: rgb(243 241 235 / 0.72);
+  --thumb-outline: rgb(255 255 255 / 0.15);
+  --danger: #f05252;
+  /* Transparency checkerboard behind thumbnails */
+  --checker-light: #353531;
+  --checker-dark: #272724;
+  /* Rectangle sliders */
+  --slider-track: #141412;
+  --slider-fill: #34342f;
+  --slider-fill-hover: #40403a;
+  --slider-text: #a3a097;
+  --slider-text-on-fill: #f5f3ee;
+  --slider-tick: rgb(255 255 255 / 0.07);
+  /* Rectangle switches */
+  --switch-off: #30302b;
+  --switch-on: #f3f1eb;
+  --switch-knob-off: #8a877f;
+  --switch-knob-on: #111110;
+  /* Primary action: neutral high-contrast ink */
+  --primary-bg: #f3f1eb;
   --primary-bg-hover: #ffffff;
-  --primary-text: #161616;
-  /* Canvas-drawn rulers (ViewportRulers reads these). */
-  --ruler-bg: #2a2a2a;
-  --ruler-poster: #343434;
-  --ruler-tick: rgb(255 255 255 / 0.28);
-  --ruler-major: rgb(255 255 255 / 0.5);
-  --ruler-edge: #1f1f1f;
-  --scrim: rgb(0 0 0 / 0.5);
-  /* Floating toolbars over the canvas (brush bar, treatment chips). */
-  --float-bar: rgb(42 42 42 / 0.94);
-  /* Home screen surfaces. */
-  --home-bg: #1f1f1f;
-  --home-bar: rgb(45 45 45 / 0.85);
-  --home-card: #262626;
-  --home-card-hover: #2b2b2b;
-  --home-card-soft: rgb(50 50 50 / 0.4);
+  --primary-text: #111110;
+  /* Canvas-drawn rulers: blended quietly into the pasteboard */
+  --ruler-bg: #111110;
+  --ruler-poster: #1b1b18;
+  --ruler-tick: rgb(255 255 255 / 0.16);
+  --ruler-major: rgb(255 255 255 / 0.34);
+  --ruler-edge: rgb(255 255 255 / 0.06);
+  --scrim: rgb(0 0 0 / 0.6);
+  /* Floating islands & pills over the canvas */
+  --float-bar: rgb(28 28 26 / 0.92);
+  /* Home screen surfaces */
+  --home-bg: #121210;
+  --home-bar: rgb(18 18 16 / 0.88);
+  --home-card: #1c1c1a;
+  --home-card-hover: #242421;
+  --home-card-soft: rgb(28 28 26 / 0.5);
   --home-card-border: rgb(255 255 255 / 0.08);
   --home-dashed: rgb(255 255 255 / 0.16);
-  --home-hairline: rgb(255 255 255 / 0.06);
+  --home-hairline: rgb(255 255 255 / 0.07);
   --home-display: #f4f1ea;
-  --home-frame: rgb(244 241 234 / 0.7);
-  --home-frame-fill: rgb(244 241 234 / 0.06);
+  --home-frame: rgb(244 241 234 / 0.65);
+  --home-frame-fill: rgb(244 241 234 / 0.05);
   --color-scheme: dark;
-  --radius: 6px;
-  --radius-lg: 8px;
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius: 7px;
+  --radius-lg: 9px;
   --radius-xl: 12px;
+  --radius-island: 14px;
   --radius-pill: 999px;
-  --shadow-sm: none;
-  --shadow-md: 0 8px 24px rgb(0 0 0 / 0.45);
+  --shadow-sm: 0 2px 8px rgb(0 0 0 / 0.32);
+  --shadow-md: 0 10px 30px rgb(0 0 0 / 0.48), 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-island: 0 12px 36px rgb(0 0 0 / 0.44), 0 1px 2px rgb(0 0 0 / 0.32);
   --font: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --blur: none;
 
   font-family: var(--font);
   font-optical-sizing: auto;
@@ -121,91 +127,90 @@ body {
 }
 
 /* ── Light theme ───────────────────────────────────────────────────────────
-   Basement-style light grey: a mid-grey pasteboard (#b3b3b3) framing the
-   poster, pale grey panels, near-black ink and solid black controls. */
+   Neutral high-contrast drafting table: warm stone pasteboard (#e6e3dc)
+   with crisp floating white studio islands and deep archival black ink. */
 :root[data-theme='light'] {
-  /* Quiet near-white: white panels on an off-white shell, hairline borders,
-     soft grey fills, near-black ink. The pasteboard stays a touch darker so
-     the cream poster still reads as paper. */
-  --canvas-bg: #e9e9e9;
-  --canvas-dot: #e9e9e9;
-  --panel: #fbfbfb;
+  --canvas-bg: #e5e2da;
+  --panel: #fcfbf8;
   --panel-raised: #ffffff;
-  --glass-bg: #fbfbfb;
-  --glass-bg-strong: #ffffff;
-  --glass-border: #e6e6e6;
-  --glass-edge: #e6e6e6;
-  --bg: #fbfbfb;
-  --bg-subtle: #f4f4f4;
-  --bg-muted: #f0f0f0;
-  --bg-hover: #ebebeb;
-  --border: #e6e6e6;
-  --border-strong: #dcdcdc;
-  --text: #1a1a1a;
-  --text-muted: #5c5c5c;
-  --text-faint: #707070;
-  --accent: #1466d6;
-  --accent-hover: #0f58bb;
-  --accent-soft: rgb(20 102 214 / 0.1);
-  --dial-track: #e0e0e0;
-  --dial-fill: #1a1a1a;
-  --dial-thumb: #1a1a1a;
-  --dial-label: #5c5c5c;
-  --dial-value: #1a1a1a;
+  --bg: #fcfbf8;
+  --bg-subtle: #f4f2ec;
+  --bg-muted: #eeece5;
+  --bg-hover: #e6e3db;
+  --border: rgb(20 20 18 / 0.085);
+  --border-subtle: rgb(20 20 18 / 0.055);
+  --border-strong: rgb(20 20 18 / 0.14);
+  --border-hover: rgb(20 20 18 / 0.26);
+  --divider: rgb(20 20 18 / 0.1);
+  --text: #141412;
+  --text-muted: #5a5750;
+  --text-faint: #78746c;
+  /* Neutral high-contrast black ink accent */
+  --accent: #141412;
+  --accent-fg: #ffffff;
+  --accent-hover: #2c2b28;
+  --accent-soft: rgb(20 20 18 / 0.08);
+  --accent-soft-hover: rgb(20 20 18 / 0.13);
+  --accent-border: rgb(20 20 18 / 0.32);
+  --accent-border-hover: rgb(20 20 18 / 0.5);
+  --accent-text: #141412;
+  --selection-blue: #1d63d8;
+  --dial-track: rgb(20 20 18 / 0.14);
   --surface: #ffffff;
-  --surface-muted: #f4f4f4;
-  --shadow-md: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.08);
+  --surface-muted: #f3f1eb;
+  --shadow-sm: 0 1px 3px rgb(20 20 18 / 0.08);
+  --shadow-md: 0 4px 12px rgb(20 20 18 / 0.08), 0 12px 32px rgb(20 20 18 / 0.1);
+  --shadow-island: 0 4px 16px rgb(20 20 18 / 0.07), 0 1px 3px rgb(20 20 18 / 0.06);
 
   --field-bg: #ffffff;
-  --field-border: #e0e0e0;
-  --surface-sunken: #f2f2f2;
-  --chrome-strip: #f6f6f6;
-  --chrome-bar: #fbfbfb;
-  --tool-active: #ededed;
-  --divider: #e3e3e3;
-  --border-subtle: #ececec;
-  --border-hover: #cfcfcf;
-  --accent-border: #0f58bb;
-  --accent-border-hover: #0b4a9e;
-  --accent-text: #0b3d7a;
-  --wash-faint: rgb(0 0 0 / 0.02);
-  --wash: rgb(0 0 0 / 0.035);
-  --wash-strong: rgb(0 0 0 / 0.06);
-  --hairline-dark: rgb(0 0 0 / 0.06);
+  --field-border: rgb(20 20 18 / 0.13);
+  --surface-sunken: #f0eee8;
+  --chrome-strip: #f5f3ed;
+  --chrome-bar: #fcfbf8;
+  --tool-active: #141412;
+  --tool-active-fg: #ffffff;
+  --wash-faint: rgb(20 20 18 / 0.025);
+  --wash: rgb(20 20 18 / 0.045);
+  --wash-strong: rgb(20 20 18 / 0.08);
+  --hairline-dark: rgb(20 20 18 / 0.07);
+  --guide-nested: rgb(20 20 18 / 0.14);
+  --thumb-ring: rgb(20 20 18 / 0.6);
+  --thumb-outline: rgb(20 20 18 / 0.14);
+  --danger: #c81e1e;
   --checker-light: #ffffff;
-  --checker-dark: #f0f0f0;
+  --checker-dark: #eae7e0;
 
-  --slider-track: #f0f0f0;
-  --slider-fill: #e0e0e0;
-  --slider-fill-hover: #d6d6d6;
-  --slider-text: #5c5c5c;
-  --slider-text-on-fill: #1a1a1a;
-  --slider-tick: rgb(0 0 0 / 0.07);
-  --switch-off: #e6e6e6;
-  --switch-on: #1a1a1a;
+  --slider-track: #eeece5;
+  --slider-fill: #dbd8cf;
+  --slider-fill-hover: #cfcbc0;
+  --slider-text: #5a5750;
+  --slider-text-on-fill: #141412;
+  --slider-tick: rgb(20 20 18 / 0.08);
+  --switch-off: #e0ddd5;
+  --switch-on: #141412;
   --switch-knob-off: #ffffff;
   --switch-knob-on: #ffffff;
-  --primary-bg: #1a1a1a;
-  --primary-bg-hover: #333333;
+  --primary-bg: #141412;
+  --primary-bg-hover: #2e2d2a;
   --primary-text: #ffffff;
 
-  --ruler-bg: #f6f6f6;
-  --ruler-poster: #ececec;
-  --ruler-tick: rgb(0 0 0 / 0.18);
-  --ruler-major: rgb(0 0 0 / 0.4);
-  --ruler-edge: #e6e6e6;
-  --scrim: rgb(20 20 20 / 0.25);
-  --float-bar: rgb(255 255 255 / 0.94);
-  --home-bg: #f7f7f7;
-  --home-bar: rgb(251 251 251 / 0.88);
+  --ruler-bg: #e5e2da;
+  --ruler-poster: #dcd8ce;
+  --ruler-tick: rgb(20 20 18 / 0.16);
+  --ruler-major: rgb(20 20 18 / 0.36);
+  --ruler-edge: rgb(20 20 18 / 0.08);
+  --scrim: rgb(20 19 17 / 0.28);
+  --float-bar: rgb(252 251 248 / 0.94);
+  --home-bg: #f4f2ec;
+  --home-bar: rgb(244 242 236 / 0.9);
   --home-card: #ffffff;
   --home-card-hover: #ffffff;
-  --home-card-soft: rgb(255 255 255 / 0.6);
-  --home-card-border: #e6e6e6;
-  --home-dashed: #d4d4d4;
-  --home-hairline: #e6e6e6;
-  --home-display: #1a1a1a;
-  --home-frame: rgb(26 26 26 / 0.45);
-  --home-frame-fill: rgb(26 26 26 / 0.03);
+  --home-card-soft: rgb(255 255 255 / 0.65);
+  --home-card-border: rgb(20 20 18 / 0.09);
+  --home-dashed: rgb(20 20 18 / 0.18);
+  --home-hairline: rgb(20 20 18 / 0.08);
+  --home-display: #141412;
+  --home-frame: rgb(20 20 18 / 0.42);
+  --home-frame-fill: rgb(20 20 18 / 0.03);
   --color-scheme: light;
 }

@@ -1785,7 +1785,7 @@ input[type='color'] {
 .export-box {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--glass-edge);
+  border-top: 1px solid var(--border);
 }
 
 .export-box h3 {
@@ -3671,7 +3671,7 @@ label:has(> input[type='radio']) {
   display: grid;
   gap: 6px;
   padding: 4px 0;
-  border-top: 1px solid rgb(255 255 255 / 0.04);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .layer-style-row:first-of-type {
@@ -4449,7 +4449,7 @@ label:has(> input[type='radio']) {
 .layer-row.nested .layer-indent {
   /* A faint guide ties children to their group. */
   align-self: stretch;
-  background: linear-gradient(to right, transparent calc(100% - 7px), rgb(255 255 255 / 0.1) calc(100% - 7px) calc(100% - 6px), transparent calc(100% - 6px));
+  background: linear-gradient(to right, transparent calc(100% - 7px), var(--guide-nested) calc(100% - 7px) calc(100% - 6px), transparent calc(100% - 6px));
 }
 
 .layer-thumb-wrap {
@@ -4478,7 +4478,7 @@ label:has(> input[type='radio']) {
 }
 
 .layer-row.active .layer-thumb {
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45), 0 0 0 2px rgb(255 255 255 / 0.55);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45), 0 0 0 2px var(--thumb-ring);
 }
 
 .layer-kind {
@@ -4491,7 +4491,7 @@ label:has(> input[type='radio']) {
   height: 14px;
   border-radius: 3px;
   background: var(--field-bg);
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
+  box-shadow: 0 0 0 1px var(--thumb-outline);
   color: var(--text-muted);
 }
 
